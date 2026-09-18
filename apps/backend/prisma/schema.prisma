@@ -1,0 +1,305 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum ProfileStartsWhen {
+  LOGON
+  CREATION
+}
+
+enum PlanStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum CustomerStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum VoucherStatus {
+  CREATED
+  SOLD
+  ACTIVE
+  EXPIRED
+  DISABLED
+  CANCELLED
+}
+
+enum VoucherBatchStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum PaymentMethod {
+  CASH
+  ORANGE_MONEY
+  MVOLA
+  AIRTEL_MONEY
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  CANCELLED
+  REFUNDED
+}
+
+enum AuditResult {
+  SUCCESS
+  FAILURE
+}
+
+model AdminUser {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         AdminRole @default(OPERATOR)
+  mfaEnabled   Boolean   @default(false)
+  mfaSecret    String?   @map("mfa_secret")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  auditLogs      AuditLog[]
+  createdBatches VoucherBatch[]
+  verifiedPayments Payment[]
+
+  @@map("admin_users")
+}
+
+model Router {
+  id                   String    @id @default(uuid())
+  label                String
+  host                 String
+  restPort             Int       @default(443) @map("rest_port")
+  apiPort              Int       @default(8729) @map("api_port")
+  credentialsEncrypted String    @map("credentials_encrypted")
+  tlsFingerprint       String?   @map("tls_fingerprint")
+  status               String    @default("unknown")
+  lastSeenAt           DateTime? @map("last_seen_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  voucherBatches       VoucherBatch[]
+  userCache            UserCacheEntry[]
+  sessionCache         SessionCacheEntry[]
+  statsCache           StatsCacheEntry[]
+  auditLogs            AuditLog[]
+
+  @@map("routers")
+}
+
+/// Offre commerciale (Sections 4, 14, 15). Le prix et les paramètres réseau
+/// vivent ici, jamais codés en dur dans l'application.
+model Plan {
+  id                       String     @id @default(uuid())
+  name                     String     @unique
+  description              String?
+  priceAr                  Decimal    @map("price_ar") @db.Decimal(12, 2)
+  validityDurationSeconds  Int        @map("validity_duration_seconds")
+  startsWhen               ProfileStartsWhen @default(LOGON) @map("starts_when")
+  rateLimitRxBps           Int?       @map("rate_limit_rx_bps")
+  rateLimitTxBps           Int?       @map("rate_limit_tx_bps")
+  transferLimitBytes       BigInt?    @map("transfer_limit_bytes")
+  maxSharedUsers           Int?       @map("max_shared_users")
+  mikrotikProfileName      String     @unique @map("mikrotik_profile_name")
+  status                   PlanStatus @default(ACTIVE)
+  createdAt                DateTime   @default(now()) @map("created_at")
+  updatedAt                DateTime   @updatedAt @map("updated_at")
+
+  voucherBatches VoucherBatch[]
+  vouchers       Voucher[]
+  payments       Payment[]
+
+  @@map("plans")
+}
+
+/// Client final (Section 19).
+model Customer {
+  id        String         @id @default(uuid())
+  name      String
+  phone     String         @unique
+  email     String?
+  address   String?
+  status    CustomerStatus @default(ACTIVE)
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  devices  Device[]
+  vouchers Voucher[]
+  payments Payment[]
+
+  @@map("customers")
+}
+
+/// Appareil associé à un client (Section 20). La MAC n'est volontairement PAS
+/// unique : un CPE en NAT peut représenter plusieurs appareils réels derrière
+/// une seule adresse côté HotSpot (ne jamais supposer 1 MAC = 1 appareil).
+model Device {
+  id           String    @id @default(uuid())
+  customerId   String?   @map("customer_id")
+  customer     Customer? @relation(fields: [customerId], references: [id])
+  macAddress   String    @map("mac_address")
+  ipAddress    String?   @map("ip_address")
+  hostname     String?
+  deviceType   String?   @map("device_type")
+  firstSeenAt  DateTime  @default(now()) @map("first_seen_at")
+  lastSeenAt   DateTime  @default(now()) @map("last_seen_at")
+
+  vouchers Voucher[]
+
+  @@index([macAddress])
+  @@map("devices")
+}
+
+model VoucherBatch {
+  id          String              @id @default(uuid())
+  routerId    String              @map("router_id")
+  router      Router              @relation(fields: [routerId], references: [id])
+  planId      String              @map("plan_id")
+  plan        Plan                @relation(fields: [planId], references: [id])
+  quantity    Int
+  prefix      String?
+  status      VoucherBatchStatus  @default(PENDING)
+  createdByAdminId String         @map("created_by_admin_id")
+  createdByAdmin   AdminUser      @relation(fields: [createdByAdminId], references: [id])
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  jobs     VoucherJob[]
+  vouchers Voucher[]
+
+  @@map("voucher_batches")
+}
+
+model VoucherJob {
+  id           String    @id @default(uuid())
+  batchId      String    @map("batch_id")
+  batch        VoucherBatch @relation(fields: [batchId], references: [id])
+  processed    Int       @default(0)
+  total        Int
+  status       String    @default("queued")
+  errorMessage String?   @map("error_message")
+  startedAt    DateTime? @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+
+  @@map("voucher_jobs")
+}
+
+/// Voucher individuel (Section 17). `code` sert à la fois de nom
+/// d'utilisateur et de mot de passe côté HotSpot/User Manager, pour que le
+/// client n'ait qu'un seul champ à saisir (Section 6).
+model Voucher {
+  id          String        @id @default(uuid())
+  code        String        @unique
+  batchId     String?       @map("batch_id")
+  batch       VoucherBatch? @relation(fields: [batchId], references: [id])
+  planId      String        @map("plan_id")
+  plan        Plan          @relation(fields: [planId], references: [id])
+  priceAr     Decimal       @map("price_ar") @db.Decimal(12, 2)
+  status      VoucherStatus @default(CREATED)
+  customerId  String?       @map("customer_id")
+  customer    Customer?     @relation(fields: [customerId], references: [id])
+  deviceId    String?       @map("device_id")
+  device      Device?       @relation(fields: [deviceId], references: [id])
+  payment     Payment?
+  createdAt   DateTime      @default(now()) @map("created_at")
+  activatedAt DateTime?     @map("activated_at")
+  expiresAt   DateTime?     @map("expires_at")
+
+  @@index([status])
+  @@map("vouchers")
+}
+
+/// Paiement (Sections 22-24). La contrainte unique (method, reference)
+/// garantit l'idempotence : une même référence ne peut jamais être vérifiée
+/// deux fois ni générer deux accès.
+model Payment {
+  id                 String        @id @default(uuid())
+  customerId         String        @map("customer_id")
+  customer           Customer      @relation(fields: [customerId], references: [id])
+  planId             String        @map("plan_id")
+  plan               Plan          @relation(fields: [planId], references: [id])
+  amountAr           Decimal       @map("amount_ar") @db.Decimal(12, 2)
+  method             PaymentMethod
+  reference          String
+  status             PaymentStatus @default(PENDING)
+  voucherId          String?       @unique @map("voucher_id")
+  voucher            Voucher?      @relation(fields: [voucherId], references: [id])
+  verifiedByAdminId  String?       @map("verified_by_admin_id")
+  verifiedByAdmin    AdminUser?    @relation(fields: [verifiedByAdminId], references: [id])
+  createdAt          DateTime      @default(now()) @map("created_at")
+  verifiedAt         DateTime?     @map("verified_at")
+
+  @@unique([method, reference])
+  @@map("payments")
+}
+
+model AuditLog {
+  id          String      @id @default(uuid())
+  adminUserId String?     @map("admin_user_id")
+  adminUser   AdminUser?  @relation(fields: [adminUserId], references: [id])
+  routerId    String?     @map("router_id")
+  router      Router?     @relation(fields: [routerId], references: [id])
+  action      String
+  targetType  String      @map("target_type")
+  targetId    String?     @map("target_id")
+  payloadDiff Json?       @map("payload_diff")
+  ipAddress   String?     @map("ip_address")
+  result      AuditResult @default(SUCCESS)
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  @@map("audit_logs")
+  @@index([createdAt])
+}
+
+model UserCacheEntry {
+  id       String   @id @default(uuid())
+  routerId String   @map("router_id")
+  router   Router   @relation(fields: [routerId], references: [id])
+  username String
+  payload  Json
+  syncedAt DateTime @default(now()) @map("synced_at")
+
+  @@unique([routerId, username])
+  @@map("user_cache")
+}
+
+model SessionCacheEntry {
+  id        String   @id @default(uuid())
+  routerId  String   @map("router_id")
+  router    Router   @relation(fields: [routerId], references: [id])
+  sessionId String   @map("session_id")
+  payload   Json
+  syncedAt  DateTime @default(now()) @map("synced_at")
+
+  @@unique([routerId, sessionId])
+  @@map("session_cache")
+}
+
+model StatsCacheEntry {
+  id       String   @id @default(uuid())
+  routerId String   @map("router_id")
+  router   Router   @relation(fields: [routerId], references: [id])
+  scopeKey String   @map("scope_key")
+  payload  Json
+  syncedAt DateTime @default(now()) @map("synced_at")
+
+  @@unique([routerId, scopeKey])
+  @@map("stats_cache")
+}

@@ -1,0 +1,26 @@
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wifitati-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wifitati
+      POSTGRES_PASSWORD: 18245167
+      POSTGRES_DB: wifitati
+    ports:
+      # 5432 est déjà pris par un Postgres natif sur cette machine — le
+      # conteneur est exposé sur 55432 pour éviter le conflit.
+      - "55432:5432"
+    volumes:
+      - wifitati_postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: wifitati-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+volumes:
+  wifitati_postgres_data:

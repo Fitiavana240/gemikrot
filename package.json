@@ -1,0 +1,26 @@
+{
+  "name": "wifitati-manager",
+  "private": true,
+  "workspaces": [
+    "apps/backend",
+    "packages/mikrotik-service"
+  ],
+  "scripts": {
+    "dev:backend": "npm run start:dev --workspace=apps/backend",
+    "dev": "npm run dev:backend",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "allowScripts": {
+    "bcrypt": true,
+    "esbuild": true,
+    "msgpackr-extract": true,
+    "workerd": true,
+    "prisma@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "@prisma/client@6.19.3": true
+  }
+}
