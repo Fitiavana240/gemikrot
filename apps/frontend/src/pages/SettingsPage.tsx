@@ -5,20 +5,7 @@ import type { PaymentMethod } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, FormField, Input, Select, Table } from '../components/ui';
-
-const CURRENCIES = [
-  { code: 'MGA', label: 'Ariary (MGA)' },
-  { code: 'EUR', label: 'Euro (EUR)' },
-  { code: 'USD', label: 'Dollar (USD)' },
-  { code: 'XOF', label: 'Franc CFA (XOF)' },
-];
-
-const PROVIDERS: { value: PaymentMethod; label: string }[] = [
-  { value: 'MVOLA', label: 'MVola' },
-  { value: 'ORANGE_MONEY', label: 'Orange Money' },
-  { value: 'AIRTEL_MONEY', label: 'Airtel Money' },
-  { value: 'OTHER', label: 'Autre' },
-];
+import { CURRENCIES, PROVIDERS } from '../lib/options';
 
 export function SettingsPage() {
   const { canWrite } = useAuth();

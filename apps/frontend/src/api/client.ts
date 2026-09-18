@@ -32,14 +32,21 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const res = await fetch(`/api${path}`, { ...options, headers });
 
-  if (res.status === 401) {
-    clearToken();
-    window.location.assign('/login');
-    throw new ApiError(401, 'Session expirée');
-  }
-
   const isJson = res.headers.get('content-type')?.includes('application/json');
   const body = isJson ? await res.json() : undefined;
+
+  // Un 401 sur une session ouverte veut dire jeton expiré : on renvoie vers
+  // la connexion. Un 401 sans jeton est une tentative de connexion refusée,
+  // et rediriger reviendrait à recharger l'écran de connexion — effaçant au
+  // passage le message d'erreur que l'appelant s'apprête à afficher.
+  if (res.status === 401) {
+    if (token) {
+      clearToken();
+      window.location.assign('/login');
+      throw new ApiError(401, 'Session expirée');
+    }
+    throw new ApiError(401, body?.message ?? 'Identifiants invalides');
+  }
 
   if (!res.ok) {
     throw new ApiError(res.status, body?.message ?? `Erreur ${res.status}`);

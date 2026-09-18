@@ -3,24 +3,23 @@ import { Link } from 'react-router-dom';
 import { signupApi, type SignupInput } from '../api/tenants';
 import type { PaymentMethod } from '../api/types';
 import { ApiError } from '../api/client';
-import { Button, Card, FormField, Input, Select } from '../components/ui';
+import { CURRENCIES, PROVIDERS } from '../lib/options';
+import { AuthNotice, AuthShell } from '../components/AuthShell';
+import { BrandMark } from '../components/Brand';
+import { Button, FormField, Input, Select } from '../components/ui';
 
-const CURRENCIES = [
-  { code: 'MGA', label: 'Ariary (MGA)' },
-  { code: 'EUR', label: 'Euro (EUR)' },
-  { code: 'USD', label: 'Dollar (USD)' },
-  { code: 'XOF', label: 'Franc CFA (XOF)' },
-];
-
-const PROVIDERS: { value: PaymentMethod; label: string }[] = [
-  { value: 'MVOLA', label: 'MVola' },
-  { value: 'ORANGE_MONEY', label: 'Orange Money' },
-  { value: 'AIRTEL_MONEY', label: 'Airtel Money' },
-];
+/** Doit rester aligné sur MIN_PASSWORD_LENGTH côté serveur (auth.service.ts). */
+const MIN_PASSWORD_LENGTH = 6;
 
 type Account = { provider: PaymentMethod; phoneNumber: string; accountName: string };
 
-const EMPTY: SignupInput = {
+const STEPS = [
+  { title: 'Votre activité', hint: 'Ce que vos clients verront' },
+  { title: 'Mobile Money', hint: 'Où vos clients paient' },
+  { title: 'Votre accès', hint: 'Vos identifiants de connexion' },
+];
+
+const EMPTY_FORM: SignupInput = {
   organizationName: '',
   wifiName: '',
   currency: 'MGA',
@@ -28,29 +27,78 @@ const EMPTY: SignupInput = {
   password: '',
 };
 
+const EMPTY_ACCOUNT: Account = { provider: 'MVOLA', phoneNumber: '', accountName: '' };
+
 export function SignupPage() {
-  const [form, setForm] = useState<SignupInput>(EMPTY);
+  const [step, setStep] = useState(0);
+  const [form, setForm] = useState<SignupInput>(EMPTY_FORM);
   const [domains, setDomains] = useState('');
-  const [accounts, setAccounts] = useState<Account[]>([
-    { provider: 'MVOLA', phoneNumber: '', accountName: '' },
-  ]);
+  const [accounts, setAccounts] = useState<Account[]>([EMPTY_ACCOUNT]);
+  const [passwordConfirm, setPasswordConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  function patchAccount(index: number, patch: Partial<Account>) {
+    setAccounts(accounts.map((a, i) => (i === index ? { ...a, ...patch } : a)));
+  }
+
+  /** Ce qui manque à l'étape courante, ou `null` si elle est complète. */
+  function validateStep(index: number): string | null {
+    if (index === 0) {
+      if (!form.organizationName.trim()) return 'Indiquez le nom de votre activité';
+      if (!form.wifiName.trim()) return 'Indiquez le nom du Wi-Fi vu par vos clients';
+      return null;
+    }
+    if (index === 1) {
+      // Une puce à moitié saisie ne servirait à rien au client qui paie.
+      const partial = accounts.find(
+        (a) => (a.phoneNumber.trim() || a.accountName.trim()) && !(a.phoneNumber.trim() && a.accountName.trim()),
+      );
+      if (partial) return 'Chaque puce demande un numéro et le nom de son titulaire';
+      return null;
+    }
+    if (!form.email.trim()) return 'Indiquez votre adresse email';
+    if (form.password.length < MIN_PASSWORD_LENGTH) {
+      return `Le mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères`;
+    }
+    if (form.password !== passwordConfirm) return 'Les deux mots de passe ne correspondent pas';
+    return null;
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    const problem = validateStep(step);
+    if (problem) {
+      setError(problem);
+      return;
+    }
     setError(null);
+
+    // Entrée dans un champ = étape suivante tant qu'il en reste une.
+    if (step < STEPS.length - 1) {
+      setStep(step + 1);
+      return;
+    }
+
     setLoading(true);
     try {
       const result = await signupApi.signup({
         ...form,
+        organizationName: form.organizationName.trim(),
+        wifiName: form.wifiName.trim(),
+        email: form.email.trim(),
+        logoUrl: form.logoUrl?.trim() || undefined,
         domains: domains.split(',').map((d) => d.trim()).filter(Boolean),
-        mobileMoneyAccounts: accounts.filter((a) => a.phoneNumber && a.accountName),
+        mobileMoneyAccounts: accounts.filter((a) => a.phoneNumber.trim() && a.accountName.trim()),
       });
       setDone(result.message);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Erreur inconnue');
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Serveur injoignable — vérifiez que l'application est démarrée",
+      );
     } finally {
       setLoading(false);
     }
@@ -58,38 +106,83 @@ export function SignupPage() {
 
   if (done) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
-        <Card title="Inscription enregistrée">
-          <p className="text-sm text-slate-700">{done}</p>
-          <Link to="/login" className="mt-4 inline-block text-sm text-sky-700 hover:underline">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-5 py-10">
+        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <BrandMark className="mx-auto h-12 w-12" />
+          <h1 className="mt-5 text-xl font-semibold tracking-tight text-slate-900">
+            Inscription enregistrée
+          </h1>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">{done}</p>
+          <div className="mt-6 rounded-lg bg-slate-50 px-4 py-3 text-left text-sm">
+            <p className="font-medium text-slate-700">Vos identifiants</p>
+            <p className="mt-1 break-all font-mono text-xs text-slate-600">{form.email.trim()}</p>
+            <p className="mt-1.5 text-slate-500">
+              À utiliser dès que la plateforme aura validé votre inscription.
+            </p>
+          </div>
+          <Link
+            to="/login"
+            className="mt-6 inline-block text-sm font-medium text-sky-700 hover:underline"
+          >
             Retour à la connexion
           </Link>
-        </Card>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-2xl space-y-4">
-        <Card title="Créer un compte exploitant">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+    <AuthShell
+      wide
+      title="Créer un compte exploitant"
+      subtitle="Trois étapes, puis validation par la plateforme."
+    >
+      <ol className="mb-8 grid grid-cols-3 gap-2">
+        {STEPS.map((item, index) => {
+          const state = index === step ? 'current' : index < step ? 'done' : 'todo';
+          return (
+            <li key={item.title}>
+              <div
+                className={`h-1 rounded-full ${
+                  state === 'todo' ? 'bg-slate-200' : 'bg-sky-600'
+                }`}
+              />
+              <p
+                className={`mt-2 text-xs font-medium ${
+                  state === 'current' ? 'text-sky-700' : 'text-slate-500'
+                }`}
+              >
+                {index + 1}. {item.title}
+              </p>
+              <p className="text-xs text-slate-400">{item.hint}</p>
+            </li>
+          );
+        })}
+      </ol>
+
+      <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+        {step === 0 && (
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <FormField label="Nom de votre activité">
               <Input
-                required
+                uiSize="md"
+                autoFocus
+                placeholder="Zone WIFI-TATI"
                 value={form.organizationName}
                 onChange={(e) => setForm({ ...form, organizationName: e.target.value })}
               />
             </FormField>
             <FormField label="Nom du Wi-Fi (vu par vos clients)">
               <Input
-                required
+                uiSize="md"
+                placeholder="hotspot-tati"
                 value={form.wifiName}
                 onChange={(e) => setForm({ ...form, wifiName: e.target.value })}
               />
             </FormField>
-            <FormField label="Devise">
+            <FormField label="Devise de vos tarifs">
               <Select
+                uiSize="md"
                 value={form.currency}
                 onChange={(e) => setForm({ ...form, currency: e.target.value })}
               >
@@ -100,110 +193,162 @@ export function SignupPage() {
                 ))}
               </Select>
             </FormField>
-            <FormField label="Domaines (optionnel, séparés par des virgules)">
-              <Input value={domains} onChange={(e) => setDomains(e.target.value)} />
-            </FormField>
-            <FormField label="URL du logo (optionnel)">
+            <FormField label="Domaines du portail (optionnel)">
               <Input
-                value={form.logoUrl ?? ''}
-                onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
+                uiSize="md"
+                placeholder="wifitati.net, portail.wifitati.net"
+                value={domains}
+                onChange={(e) => setDomains(e.target.value)}
               />
             </FormField>
-          </div>
-        </Card>
-
-        <Card title="Vos puces Mobile Money — où vos clients enverront l'argent">
-          {accounts.map((account, index) => (
-            <div key={index} className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-              <FormField label="Opérateur">
-                <Select
-                  value={account.provider}
-                  onChange={(e) =>
-                    setAccounts(
-                      accounts.map((a, i) =>
-                        i === index ? { ...a, provider: e.target.value as PaymentMethod } : a,
-                      ),
-                    )
-                  }
-                >
-                  {PROVIDERS.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </Select>
-              </FormField>
-              <FormField label="Numéro de la puce">
+            <div className="sm:col-span-2">
+              <FormField label="URL de votre logo (optionnel)">
                 <Input
-                  value={account.phoneNumber}
-                  onChange={(e) =>
-                    setAccounts(
-                      accounts.map((a, i) =>
-                        i === index ? { ...a, phoneNumber: e.target.value } : a,
-                      ),
-                    )
-                  }
-                />
-              </FormField>
-              <FormField label="Nom du titulaire">
-                <Input
-                  value={account.accountName}
-                  onChange={(e) =>
-                    setAccounts(
-                      accounts.map((a, i) =>
-                        i === index ? { ...a, accountName: e.target.value } : a,
-                      ),
-                    )
-                  }
+                  uiSize="md"
+                  type="url"
+                  placeholder="https://…/logo.png"
+                  value={form.logoUrl ?? ''}
+                  onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
                 />
               </FormField>
             </div>
-          ))}
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() =>
-              setAccounts([...accounts, { provider: 'MVOLA', phoneNumber: '', accountName: '' }])
-            }
-          >
-            Ajouter une puce
-          </Button>
-        </Card>
+          </div>
+        )}
 
-        <Card title="Votre accès">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <FormField label="Email">
-              <Input
-                type="email"
-                required
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-              />
-            </FormField>
+        {step === 1 && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-500">
+              Ces numéros sont affichés à vos clients au moment de payer, avec le nom du
+              titulaire pour qu'ils reconnaissent le bon destinataire. Vous pourrez en ajouter
+              d'autres plus tard.
+            </p>
+
+            {accounts.map((account, index) => (
+              <div
+                key={index}
+                className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 sm:grid-cols-3"
+              >
+                <FormField label="Opérateur">
+                  <Select
+                    uiSize="md"
+                    value={account.provider}
+                    onChange={(e) =>
+                      patchAccount(index, { provider: e.target.value as PaymentMethod })
+                    }
+                  >
+                    {PROVIDERS.map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
+                <FormField label="Numéro de la puce">
+                  <Input
+                    uiSize="md"
+                    inputMode="tel"
+                    placeholder="034 00 000 00"
+                    value={account.phoneNumber}
+                    onChange={(e) => patchAccount(index, { phoneNumber: e.target.value })}
+                  />
+                </FormField>
+                <FormField label="Nom du titulaire">
+                  <Input
+                    uiSize="md"
+                    placeholder="Nom inscrit sur la puce"
+                    value={account.accountName}
+                    onChange={(e) => patchAccount(index, { accountName: e.target.value })}
+                  />
+                </FormField>
+                {accounts.length > 1 && (
+                  <div className="sm:col-span-3">
+                    <button
+                      type="button"
+                      onClick={() => setAccounts(accounts.filter((_, i) => i !== index))}
+                      className="text-xs font-medium text-slate-500 hover:text-red-600"
+                    >
+                      Retirer cette puce
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setAccounts([...accounts, { ...EMPTY_ACCOUNT }])}
+            >
+              Ajouter une puce
+            </Button>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <FormField label="Adresse email">
+                <Input
+                  uiSize="md"
+                  type="email"
+                  autoFocus
+                  autoComplete="username"
+                  placeholder="vous@exemple.com"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                />
+              </FormField>
+            </div>
             <FormField label="Mot de passe">
               <Input
+                uiSize="md"
                 type="password"
-                required
-                minLength={6}
+                autoComplete="new-password"
+                placeholder={`${MIN_PASSWORD_LENGTH} caractères minimum`}
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
               />
             </FormField>
+            <FormField label="Confirmer le mot de passe">
+              <Input
+                uiSize="md"
+                type="password"
+                autoComplete="new-password"
+                value={passwordConfirm}
+                onChange={(e) => setPasswordConfirm(e.target.value)}
+              />
+            </FormField>
+            <p className="text-xs text-slate-500 sm:col-span-2">
+              Votre compte sera utilisable après validation par l'administrateur de la
+              plateforme.
+            </p>
           </div>
-          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-          <p className="mt-3 text-xs text-slate-500">
-            Votre compte sera utilisable après validation par l'administrateur de la plateforme.
-          </p>
-          <div className="mt-4 flex items-center gap-4">
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Envoi…' : 'Créer mon compte'}
+        )}
+
+        {error && <AuthNotice tone="error">{error}</AuthNotice>}
+
+        <div className="flex items-center gap-3 border-t border-slate-100 pt-5">
+          {step > 0 && (
+            <Button
+              type="button"
+              variant="secondary"
+              uiSize="md"
+              onClick={() => {
+                setError(null);
+                setStep(step - 1);
+              }}
+            >
+              Retour
             </Button>
-            <Link to="/login" className="text-sm text-slate-500 hover:underline">
-              J'ai déjà un compte
-            </Link>
-          </div>
-        </Card>
+          )}
+          <Button type="submit" uiSize="md" disabled={loading}>
+            {step < STEPS.length - 1 ? 'Continuer' : loading ? 'Envoi…' : 'Créer mon compte'}
+          </Button>
+          <Link to="/login" className="ml-auto text-sm text-slate-500 hover:text-slate-700">
+            J'ai déjà un compte
+          </Link>
+        </div>
       </form>
-    </div>
+    </AuthShell>
   );
 }

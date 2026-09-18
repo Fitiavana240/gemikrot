@@ -1,5 +1,8 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
+import { tenantsApi } from '../api/tenants';
+import { APP_NAME, BrandMark } from './Brand';
 
 const NAV: { to: string; label: string; end?: boolean }[] = [
   { to: '/', label: 'Dashboard', end: true },
@@ -20,10 +23,28 @@ const SUPER_ADMIN_NAV: typeof NAV = [{ to: '/tenants', label: 'Exploitants' }];
 export function Layout() {
   const { user, logout } = useAuth();
 
+  // Le SUPER_ADMIN n'appartient à aucun exploitant : l'appel échouerait.
+  const tenant = useQuery({
+    queryKey: ['tenant-me'],
+    queryFn: tenantsApi.mine,
+    enabled: user?.role !== 'SUPER_ADMIN',
+    retry: false,
+  });
+
   return (
     <div className="flex min-h-screen">
       <aside className="w-56 shrink-0 border-r border-slate-200 bg-white p-4">
-        <div className="mb-6 text-lg font-semibold text-sky-700">Zone WIFI-TATI</div>
+        <div className="mb-6 flex items-center gap-2.5">
+          <BrandMark className="h-8 w-8" />
+          <div className="leading-tight">
+            <div className="text-base font-semibold tracking-tight text-slate-900">{APP_NAME}</div>
+            {/* Le réseau piloté, sous le nom du produit : sur plusieurs
+                exploitants ouverts côte à côte, on sait lequel on regarde. */}
+            <div className="truncate text-xs text-slate-500">
+              {user?.role === 'SUPER_ADMIN' ? 'Plateforme' : tenant.data?.wifiName ?? '…'}
+            </div>
+          </div>
+        </div>
         <nav className="space-y-1">
           {[...NAV, ...(user?.role === 'SUPER_ADMIN' ? SUPER_ADMIN_NAV : [])].map((item) => (
             <NavLink
