@@ -25,16 +25,20 @@ import {
 } from '../dto/user-manager.dto';
 import {
   AssignProfileDto,
+  AttachLimitationDto,
   CreateHotspotProfileDto,
   CreateHotspotUserDto,
   CreateIpBindingDto,
+  CreateLimitationDto,
   CreateProfileDto,
   CreateUserManagerUserDto,
   DisconnectHotspotUserDto,
   RemoveProfileAssignmentDto,
   UpdateHotspotProfileDto,
   UpdateHotspotUserDto,
+  UpdateLimitationDto,
   UpdateProfileDto,
+  UpdateUserManagerUserDto,
 } from '../dto/commands.dto';
 
 /**
@@ -108,11 +112,22 @@ export interface IMikrotikService {
   // ---------- User Manager : écriture ----------
 
   createUserManagerUser(input: CreateUserManagerUserDto): Promise<UserManagerUserDto>;
+  /** Rotation du mot de passe d'un compte existant, sans perdre son historique. */
+  updateUserManagerUser(input: UpdateUserManagerUserDto): Promise<UserManagerUserDto>;
   deleteUserManagerUser(username: string): Promise<void>;
   /** Suspension d'un abonné sans perdre son compte (Section 5). */
   setUserManagerUserDisabled(username: string, disabled: boolean): Promise<UserManagerUserDto>;
   createProfile(input: CreateProfileDto): Promise<UserManagerProfileDto>;
   updateProfile(input: UpdateProfileDto): Promise<UserManagerProfileDto>;
+  deleteProfile(name: string): Promise<void>;
   assignProfile(input: AssignProfileDto): Promise<UserManagerUserProfileDto>;
   removeProfile(input: RemoveProfileAssignmentDto): Promise<void>;
+
+  // ---------- User Manager : limitations de débit et de volume ----------
+
+  createLimitation(input: CreateLimitationDto): Promise<UserManagerLimitationDto>;
+  updateLimitation(input: UpdateLimitationDto): Promise<UserManagerLimitationDto>;
+  deleteLimitation(name: string): Promise<void>;
+  attachLimitationToProfile(input: AttachLimitationDto): Promise<UserManagerProfileLimitationDto>;
+  detachLimitationFromProfile(input: AttachLimitationDto): Promise<void>;
 }

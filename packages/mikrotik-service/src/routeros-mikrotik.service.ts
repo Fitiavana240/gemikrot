@@ -7,35 +7,72 @@ import * as UmMapper from './mappers/user-manager.mapper';
 import { validate } from './validation/validate';
 import {
   assignProfileSchema,
+  attachLimitationSchema,
   createHotspotProfileSchema,
   createHotspotUserSchema,
   createIpBindingSchema,
+  createLimitationSchema,
   createProfileSchema,
   createUserManagerUserSchema,
   disconnectHotspotUserSchema,
   hotspotUsernameParamSchema,
   ipBindingTypeSchema,
+  limitationNameParamSchema,
+  profileNameParamSchema,
   removeProfileAssignmentSchema,
   updateHotspotProfileSchema,
   updateHotspotUserSchema,
+  updateLimitationSchema,
   updateProfileSchema,
+  updateUserManagerUserSchema,
   usernameParamSchema,
 } from './validation/schemas';
 import {
   AssignProfileDto,
+  AttachLimitationDto,
   CreateHotspotProfileDto,
   CreateHotspotUserDto,
   CreateIpBindingDto,
+  CreateLimitationDto,
   CreateProfileDto,
   CreateUserManagerUserDto,
   DisconnectHotspotUserDto,
   RemoveProfileAssignmentDto,
   UpdateHotspotProfileDto,
   UpdateHotspotUserDto,
+  UpdateLimitationDto,
   UpdateProfileDto,
+  UpdateUserManagerUserDto,
 } from './dto/commands.dto';
 import { IpBindingType } from './dto/hotspot.dto';
 import { MikrotikConflictError, MikrotikNotFoundError } from './errors/mikrotik.errors';
+
+/**
+ * Corps d'écriture d'une limitation. Les champs sont ceux relevés sur un hAP
+ * en 7.24.4 : `rate-limit-rx`/`rate-limit-tx` séparés et en bits par seconde
+ * (et non un jeton « rx/tx » comme sur un profil HotSpot), `transfer-limit`
+ * en octets, `uptime-limit` en durée.
+ *
+ * `null` veut dire « retirer le plafond » : RouterOS l'exprime par zéro, ce
+ * qui permet de lever une limite existante sans supprimer la limitation.
+ * `undefined` veut dire « ne pas toucher » et n'apparaît pas dans le corps.
+ */
+function buildLimitationPayload(data: Partial<CreateLimitationDto>): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  if (data.rateLimitRxBitsPerSecond !== undefined) {
+    payload['rate-limit-rx'] = data.rateLimitRxBitsPerSecond ?? 0;
+  }
+  if (data.rateLimitTxBitsPerSecond !== undefined) {
+    payload['rate-limit-tx'] = data.rateLimitTxBitsPerSecond ?? 0;
+  }
+  if (data.transferLimitBytes !== undefined) {
+    payload['transfer-limit'] = data.transferLimitBytes ?? 0;
+  }
+  if (data.uptimeLimitSeconds !== undefined) {
+    payload['uptime-limit'] = data.uptimeLimitSeconds != null ? `${data.uptimeLimitSeconds}s` : '0s';
+  }
+  return payload;
+}
 
 /**
  * Implémentation concrète de `IMikrotikService` s'appuyant sur l'API REST
@@ -450,6 +487,162 @@ export class RouterOSMikrotikService implements IMikrotikService {
 
     this.logger.info('Retrait de profil', { username: data.username, profile: data.profileName });
     await this.client.delete(`/user-manager/user-profile/${target.id}`);
+  }
+
+  /**
+   * Rotation du mot de passe (ou des autres attributs) d'un compte existant.
+   * Nécessaire dès qu'un client rachète : son compte est déjà là, et le
+   * supprimer pour le recréer effacerait son historique de sessions.
+   */
+  async updateUserManagerUser(input: UpdateUserManagerUserDto) {
+    const data = validate(updateUserManagerUserSchema, input);
+    const existing = await this.findUserManagerUserByUsername(data.username);
+    if (!existing) {
+      throw new MikrotikNotFoundError('Utilisateur User Manager', data.username);
+    }
+
+    this.logger.info('Mise à jour utilisateur User Manager', { username: data.username });
+    const payload: Record<string, unknown> = {};
+    if (data.password !== undefined) payload.password = data.password;
+    if (data.sharedUsers !== undefined) payload['shared-users'] = data.sharedUsers;
+    if (data.comment !== undefined) payload.comment = data.comment;
+    if (data.group !== undefined) payload.group = data.group;
+
+    const raw = await this.client.patch<any>(`/user-manager/user/${existing.id}`, payload);
+    return UmMapper.mapUserManagerUser(raw);
+  }
+
+  /**
+   * RouterOS refuse de supprimer un profil encore attribué à un compte ou
+   * encore rattaché à une limitation. L'erreur brute ne le dit pas
+   * clairement : elle est traduite en conflit explicite.
+   */
+  async deleteProfile(name: string) {
+    const validName = validate(profileNameParamSchema, name);
+    const profiles = await this.getUserManagerProfiles();
+    const target = profiles.find((profile) => profile.name === validName);
+    if (!target) {
+      throw new MikrotikNotFoundError('Profil User Manager', validName);
+    }
+
+    const assignments = await this.getUserManagerUserProfiles();
+    const stillAssigned = assignments.filter((a) => a.profileName === validName);
+    if (stillAssigned.length > 0) {
+      throw new MikrotikConflictError(
+        `Le profil "${validName}" est encore attribué à ${stillAssigned.length} compte(s)`,
+        { name: validName, assignedTo: stillAssigned.map((a) => a.username) },
+      );
+    }
+
+    this.logger.info('Suppression profil User Manager', { name: validName });
+    await this.client.delete(`/user-manager/profile/${target.id}`);
+  }
+
+  // ============ User Manager : limitations de débit et de volume ============
+
+  async createLimitation(input: CreateLimitationDto) {
+    const data = validate(createLimitationSchema, input);
+
+    const existing = await this.getUserManagerLimitations();
+    if (existing.some((limitation) => limitation.name === data.name)) {
+      throw new MikrotikConflictError(`La limitation "${data.name}" existe déjà`, {
+        name: data.name,
+      });
+    }
+
+    this.logger.info('Création limitation User Manager', { name: data.name });
+    const raw = await this.client.put<any>('/user-manager/limitation', {
+      name: data.name,
+      ...buildLimitationPayload(data),
+    });
+    return UmMapper.mapUserManagerLimitation(raw);
+  }
+
+  async updateLimitation(input: UpdateLimitationDto) {
+    const data = validate(updateLimitationSchema, input);
+    const limitations = await this.getUserManagerLimitations();
+    const target = limitations.find((limitation) => limitation.name === data.name);
+    if (!target) {
+      throw new MikrotikNotFoundError('Limitation User Manager', data.name);
+    }
+
+    this.logger.info('Mise à jour limitation User Manager', { name: data.name });
+    const raw = await this.client.patch<any>(
+      `/user-manager/limitation/${target.id}`,
+      buildLimitationPayload(data),
+    );
+    return UmMapper.mapUserManagerLimitation(raw);
+  }
+
+  async deleteLimitation(name: string) {
+    const validName = validate(limitationNameParamSchema, name);
+    const limitations = await this.getUserManagerLimitations();
+    const target = limitations.find((limitation) => limitation.name === validName);
+    if (!target) {
+      throw new MikrotikNotFoundError('Limitation User Manager', validName);
+    }
+
+    // Une limitation encore rattachée à un profil ne peut pas partir : la
+    // jonction serait orpheline et RouterOS refuse.
+    const junctions = await this.getUserManagerProfileLimitations();
+    const attached = junctions.filter((junction) => junction.limitationName === validName);
+    if (attached.length > 0) {
+      throw new MikrotikConflictError(
+        `La limitation "${validName}" est encore rattachée à ${attached.length} profil(s)`,
+        { name: validName, profiles: attached.map((junction) => junction.profileName) },
+      );
+    }
+
+    this.logger.info('Suppression limitation User Manager', { name: validName });
+    await this.client.delete(`/user-manager/limitation/${target.id}`);
+  }
+
+  async attachLimitationToProfile(input: AttachLimitationDto) {
+    const data = validate(attachLimitationSchema, input);
+
+    const existing = await this.getUserManagerProfileLimitations();
+    const already = existing.find(
+      (junction) =>
+        junction.profileName === data.profileName &&
+        junction.limitationName === data.limitationName,
+    );
+    // Rattacher deux fois créerait un doublon côté RouterOS, qui l'accepte
+    // sans broncher : l'opération est rendue idempotente ici.
+    if (already) return already;
+
+    this.logger.info('Rattachement limitation ↔ profil', {
+      profile: data.profileName,
+      limitation: data.limitationName,
+    });
+    const raw = await this.client.put<any>('/user-manager/profile-limitation', {
+      profile: data.profileName,
+      limitation: data.limitationName,
+    });
+    return UmMapper.mapUserManagerProfileLimitation(raw);
+  }
+
+  async detachLimitationFromProfile(input: AttachLimitationDto) {
+    const data = validate(attachLimitationSchema, input);
+    const junctions = await this.getUserManagerProfileLimitations();
+    const targets = junctions.filter(
+      (junction) =>
+        junction.profileName === data.profileName &&
+        junction.limitationName === data.limitationName,
+    );
+    if (targets.length === 0) {
+      throw new MikrotikNotFoundError(
+        'Rattachement profil/limitation',
+        `${data.profileName}/${data.limitationName}`,
+      );
+    }
+
+    this.logger.info('Retrait limitation ↔ profil', {
+      profile: data.profileName,
+      limitation: data.limitationName,
+    });
+    for (const target of targets) {
+      await this.client.delete(`/user-manager/profile-limitation/${target.id}`);
+    }
   }
 
   // ==================== Aides internes ====================

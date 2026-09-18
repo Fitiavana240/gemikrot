@@ -19,6 +19,49 @@ export const createUserManagerUserSchema = z.object({
   group: z.string().max(64).optional(),
 });
 
+export const updateUserManagerUserSchema = z.object({
+  username: z
+    .string()
+    .min(3)
+    .max(64)
+    .regex(/^[a-zA-Z0-9_.-]+$/, 'Caractères non autorisés dans le nom d\'utilisateur'),
+  password: z.string().min(4).max(128).optional(),
+  sharedUsers: z.number().int().positive().max(50).optional(),
+  comment: z.string().max(255).optional(),
+  group: z.string().max(64).optional(),
+});
+
+/**
+ * Le nom d'une limitation traverse l'URL lors des mises à jour et des
+ * suppressions : le jeu de caractères est volontairement restreint, à
+ * l'identique des noms de profils.
+ */
+export const createLimitationSchema = z.object({
+  name: z
+    .string()
+    .min(2)
+    .max(64)
+    .regex(/^[a-zA-Z0-9_.-]+$/, 'Caractères non autorisés dans le nom de la limitation'),
+  // `null` = aucune limite ; RouterOS l'enregistre comme zéro.
+  rateLimitRxBitsPerSecond: z.number().int().positive().nullable().optional(),
+  rateLimitTxBitsPerSecond: z.number().int().positive().nullable().optional(),
+  transferLimitBytes: z.number().int().positive().nullable().optional(),
+  uptimeLimitSeconds: z.number().int().positive().nullable().optional(),
+});
+
+export const updateLimitationSchema = createLimitationSchema.partial().extend({
+  name: createLimitationSchema.shape.name,
+});
+
+export const attachLimitationSchema = z.object({
+  profileName: z.string().min(2).max(64),
+  limitationName: z.string().min(2).max(64),
+});
+
+export const limitationNameParamSchema = createLimitationSchema.shape.name;
+
+export const profileNameParamSchema = z.string().min(2).max(64);
+
 export const createProfileSchema = z.object({
   name: z.string().min(2).max(64),
   // `null` = validité illimitée, valeur légitime côté RouterOS.

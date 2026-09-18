@@ -32,6 +32,41 @@ export interface UpdateProfileDto {
   comment?: string;
 }
 
+export interface UpdateUserManagerUserDto {
+  /** Compte à modifier (identifiant métier). */
+  username: string;
+  password?: string;
+  sharedUsers?: number;
+  comment?: string;
+  group?: string;
+}
+
+/**
+ * Plafonds de débit et de volume (`/user-manager/limitation`). Séparés du
+ * profil, qui ne porte que la validité : une même limitation peut être
+ * rattachée à plusieurs offres.
+ *
+ * `null` sur un plafond = aucune limite (RouterOS stocke zéro).
+ */
+export interface CreateLimitationDto {
+  name: string;
+  rateLimitRxBitsPerSecond?: number | null;
+  rateLimitTxBitsPerSecond?: number | null;
+  transferLimitBytes?: number | null;
+  uptimeLimitSeconds?: number | null;
+}
+
+export interface UpdateLimitationDto extends Partial<CreateLimitationDto> {
+  /** Limitation à modifier (identifiant métier). */
+  name: string;
+}
+
+/** Rattachement d'une limitation à une offre (`/user-manager/profile-limitation`). */
+export interface AttachLimitationDto {
+  profileName: string;
+  limitationName: string;
+}
+
 export interface AssignProfileDto {
   username: string;
   profileName: string;

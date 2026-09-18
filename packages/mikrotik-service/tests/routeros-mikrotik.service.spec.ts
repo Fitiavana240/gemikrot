@@ -190,4 +190,169 @@ describe('RouterOSMikrotikService', () => {
       expect(client.delete).not.toHaveBeenCalled();
     });
   });
+
+  describe('updateUserManagerUser', () => {
+    it('fait tourner le mot de passe sans toucher au reste du compte', async () => {
+      client.get.mockResolvedValueOnce([{ '.id': '*5', name: 'Mario', 'shared-users': '2' }]);
+      client.patch.mockResolvedValueOnce({ '.id': '*5', name: 'Mario', 'shared-users': '2' });
+
+      await service.updateUserManagerUser({ username: 'Mario', password: 'NOUVEAU42' });
+
+      // Seul le mot de passe part : `shared-users` et le commentaire ne
+      // doivent pas être réécrits à leur valeur par défaut au passage.
+      expect(client.patch).toHaveBeenCalledWith('/user-manager/user/*5', {
+        password: 'NOUVEAU42',
+      });
+    });
+
+    it('refuse un compte inexistant plutôt que de le créer', async () => {
+      client.get.mockResolvedValueOnce([]);
+
+      await expect(
+        service.updateUserManagerUser({ username: 'fantome', password: 'abcd1234' }),
+      ).rejects.toBeInstanceOf(MikrotikNotFoundError);
+      expect(client.patch).not.toHaveBeenCalled();
+      expect(client.put).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteProfile', () => {
+    it("refuse de supprimer un profil encore attribué", async () => {
+      client.get
+        .mockResolvedValueOnce([{ '.id': '*2', name: '1Mois', validity: '4w2d' }])
+        .mockResolvedValueOnce([{ '.id': '*9', user: 'Mario', profile: '1Mois', state: 'used' }]);
+
+      await expect(service.deleteProfile('1Mois')).rejects.toBeInstanceOf(MikrotikConflictError);
+      expect(client.delete).not.toHaveBeenCalled();
+    });
+
+    it('supprime un profil libre de toute attribution', async () => {
+      client.get
+        .mockResolvedValueOnce([{ '.id': '*2', name: '1Mois', validity: '4w2d' }])
+        .mockResolvedValueOnce([]);
+
+      await service.deleteProfile('1Mois');
+
+      expect(client.delete).toHaveBeenCalledWith('/user-manager/profile/*2');
+    });
+  });
+
+  describe('createLimitation', () => {
+    it('écrit les débits dans deux champs distincts, en bits par seconde', async () => {
+      client.get.mockResolvedValueOnce([]);
+      client.put.mockResolvedValueOnce({
+        '.id': '*1',
+        name: 'OFFRE-LIM',
+        'rate-limit-rx': '2000000',
+        'rate-limit-tx': '1000000',
+        'transfer-limit': '1073741824',
+        'uptime-limit': '1h',
+      });
+
+      const result = await service.createLimitation({
+        name: 'OFFRE-LIM',
+        rateLimitRxBitsPerSecond: 2_000_000,
+        rateLimitTxBitsPerSecond: 1_000_000,
+        transferLimitBytes: 1_073_741_824,
+        uptimeLimitSeconds: 3600,
+      });
+
+      // Une limitation n'a pas de jeton « rx/tx » comme un profil HotSpot :
+      // relevé sur un hAP en 7.24.4.
+      expect(client.put).toHaveBeenCalledWith('/user-manager/limitation', {
+        name: 'OFFRE-LIM',
+        'rate-limit-rx': 2_000_000,
+        'rate-limit-tx': 1_000_000,
+        'transfer-limit': 1_073_741_824,
+        'uptime-limit': '3600s',
+      });
+      expect(result.rateLimit.rxBitsPerSecond).toBe(2_000_000);
+      expect(result.uptimeLimitSeconds).toBe(3600);
+    });
+
+    it('refuse un nom déjà pris', async () => {
+      client.get.mockResolvedValueOnce([{ '.id': '*1', name: 'OFFRE-LIM' }]);
+
+      await expect(
+        service.createLimitation({ name: 'OFFRE-LIM', rateLimitRxBitsPerSecond: 1_000_000 }),
+      ).rejects.toBeInstanceOf(MikrotikConflictError);
+      expect(client.put).not.toHaveBeenCalled();
+    });
+
+    it('rejette un nom qui casserait le chemin REST', async () => {
+      await expect(
+        service.createLimitation({ name: 'offre/lim', rateLimitRxBitsPerSecond: 1_000_000 }),
+      ).rejects.toBeInstanceOf(MikrotikValidationError);
+      expect(client.get).not.toHaveBeenCalled();
+      expect(client.put).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateLimitation', () => {
+    it('lève un plafond avec zéro plutôt que de supprimer la limitation', async () => {
+      client.get.mockResolvedValueOnce([
+        { '.id': '*1', name: 'OFFRE-LIM', 'rate-limit-rx': '2000000' },
+      ]);
+      client.patch.mockResolvedValueOnce({ '.id': '*1', name: 'OFFRE-LIM', 'rate-limit-rx': '0' });
+
+      const result = await service.updateLimitation({
+        name: 'OFFRE-LIM',
+        rateLimitRxBitsPerSecond: null,
+      });
+
+      expect(client.patch).toHaveBeenCalledWith('/user-manager/limitation/*1', {
+        'rate-limit-rx': 0,
+      });
+      // Zéro côté RouterOS veut dire « aucune limite », pas « 0 bit/s ».
+      expect(result.rateLimit.rxBitsPerSecond).toBeNull();
+    });
+  });
+
+  describe('attachLimitationToProfile', () => {
+    it('ne crée pas de doublon quand le rattachement existe déjà', async () => {
+      client.get.mockResolvedValueOnce([
+        { '.id': '*1', profile: '1Mois', limitation: 'OFFRE-LIM' },
+      ]);
+
+      const result = await service.attachLimitationToProfile({
+        profileName: '1Mois',
+        limitationName: 'OFFRE-LIM',
+      });
+
+      expect(result.id).toBe('*1');
+      expect(client.put).not.toHaveBeenCalled();
+    });
+
+    it('crée le rattachement quand il est absent', async () => {
+      client.get.mockResolvedValueOnce([]);
+      client.put.mockResolvedValueOnce({
+        '.id': '*3',
+        profile: '1Mois',
+        limitation: 'OFFRE-LIM',
+      });
+
+      await service.attachLimitationToProfile({
+        profileName: '1Mois',
+        limitationName: 'OFFRE-LIM',
+      });
+
+      expect(client.put).toHaveBeenCalledWith('/user-manager/profile-limitation', {
+        profile: '1Mois',
+        limitation: 'OFFRE-LIM',
+      });
+    });
+  });
+
+  describe('deleteLimitation', () => {
+    it('refuse tant que la limitation est rattachée à un profil', async () => {
+      client.get
+        .mockResolvedValueOnce([{ '.id': '*1', name: 'OFFRE-LIM' }])
+        .mockResolvedValueOnce([{ '.id': '*7', profile: '1Mois', limitation: 'OFFRE-LIM' }]);
+
+      await expect(service.deleteLimitation('OFFRE-LIM')).rejects.toBeInstanceOf(
+        MikrotikConflictError,
+      );
+      expect(client.delete).not.toHaveBeenCalled();
+    });
+  });
 });

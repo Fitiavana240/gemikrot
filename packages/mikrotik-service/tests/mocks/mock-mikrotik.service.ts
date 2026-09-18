@@ -26,16 +26,20 @@ import {
 } from '../../src/dto/user-manager.dto';
 import {
   AssignProfileDto,
+  AttachLimitationDto,
   CreateHotspotProfileDto,
   CreateHotspotUserDto,
   CreateIpBindingDto,
+  CreateLimitationDto,
   CreateProfileDto,
   CreateUserManagerUserDto,
   DisconnectHotspotUserDto,
   RemoveProfileAssignmentDto,
   UpdateHotspotProfileDto,
   UpdateHotspotUserDto,
+  UpdateLimitationDto,
   UpdateProfileDto,
+  UpdateUserManagerUserDto,
 } from '../../src/dto/commands.dto';
 import { MikrotikConflictError, MikrotikNotFoundError } from '../../src/errors/mikrotik.errors';
 
@@ -53,6 +57,7 @@ export class MockMikrotikService implements IMikrotikService {
   private users = new Map<string, UserManagerUserDto>();
   private profiles = new Map<string, UserManagerProfileDto>();
   private limitations = new Map<string, UserManagerLimitationDto>();
+  private profileLimitations: UserManagerProfileLimitationDto[] = [];
   private userProfiles: UserManagerUserProfileDto[] = [];
   private activeHotspotUsers: HotspotActiveUserDto[] = [];
   private hotspotUsers = new Map<string, HotspotUserDto>();
@@ -277,7 +282,7 @@ export class MockMikrotikService implements IMikrotikService {
   }
 
   async getUserManagerProfileLimitations(): Promise<UserManagerProfileLimitationDto[]> {
-    return [];
+    return [...this.profileLimitations];
   }
 
   async getUserManagerUserProfiles(username?: string): Promise<UserManagerUserProfileDto[]> {
@@ -392,6 +397,125 @@ export class MockMikrotikService implements IMikrotikService {
     );
     if (this.userProfiles.length === before) {
       throw new MikrotikNotFoundError('Association utilisateur/profil', `${input.username}/${input.profileName}`);
+    }
+  }
+
+  async updateUserManagerUser(input: UpdateUserManagerUserDto): Promise<UserManagerUserDto> {
+    const user = this.users.get(input.username);
+    if (!user) {
+      throw new MikrotikNotFoundError('Utilisateur User Manager', input.username);
+    }
+    const updated: UserManagerUserDto = {
+      ...user,
+      sharedUsers: input.sharedUsers ?? user.sharedUsers,
+      comment: input.comment ?? user.comment,
+      group: input.group ?? user.group,
+    };
+    this.users.set(input.username, updated);
+    return updated;
+  }
+
+  async deleteProfile(name: string): Promise<void> {
+    if (!this.profiles.has(name)) {
+      throw new MikrotikNotFoundError('Profil User Manager', name);
+    }
+    const assigned = this.userProfiles.filter((p) => p.profileName === name);
+    if (assigned.length > 0) {
+      throw new MikrotikConflictError(
+        `Le profil "${name}" est encore attribué à ${assigned.length} compte(s)`,
+      );
+    }
+    this.profiles.delete(name);
+  }
+
+  // ---------- User Manager : limitations ----------
+
+  async createLimitation(input: CreateLimitationDto): Promise<UserManagerLimitationDto> {
+    if (this.limitations.has(input.name)) {
+      throw new MikrotikConflictError(`La limitation "${input.name}" existe déjà`);
+    }
+    const limitation: UserManagerLimitationDto = {
+      id: this.nextId(),
+      name: input.name,
+      rateLimit: {
+        rxBitsPerSecond: input.rateLimitRxBitsPerSecond ?? null,
+        txBitsPerSecond: input.rateLimitTxBitsPerSecond ?? null,
+      },
+      transferLimitBytes: input.transferLimitBytes ?? null,
+      uptimeLimitSeconds: input.uptimeLimitSeconds ?? null,
+    };
+    this.limitations.set(input.name, limitation);
+    return limitation;
+  }
+
+  async updateLimitation(input: UpdateLimitationDto): Promise<UserManagerLimitationDto> {
+    const existing = this.limitations.get(input.name);
+    if (!existing) {
+      throw new MikrotikNotFoundError('Limitation User Manager', input.name);
+    }
+    const updated: UserManagerLimitationDto = {
+      ...existing,
+      rateLimit: {
+        rxBitsPerSecond:
+          input.rateLimitRxBitsPerSecond !== undefined
+            ? input.rateLimitRxBitsPerSecond
+            : existing.rateLimit.rxBitsPerSecond,
+        txBitsPerSecond:
+          input.rateLimitTxBitsPerSecond !== undefined
+            ? input.rateLimitTxBitsPerSecond
+            : existing.rateLimit.txBitsPerSecond,
+      },
+      transferLimitBytes:
+        input.transferLimitBytes !== undefined
+          ? input.transferLimitBytes
+          : existing.transferLimitBytes,
+      uptimeLimitSeconds:
+        input.uptimeLimitSeconds !== undefined
+          ? input.uptimeLimitSeconds
+          : existing.uptimeLimitSeconds,
+    };
+    this.limitations.set(input.name, updated);
+    return updated;
+  }
+
+  async deleteLimitation(name: string): Promise<void> {
+    if (!this.limitations.has(name)) {
+      throw new MikrotikNotFoundError('Limitation User Manager', name);
+    }
+    const attached = this.profileLimitations.filter((j) => j.limitationName === name);
+    if (attached.length > 0) {
+      throw new MikrotikConflictError(
+        `La limitation "${name}" est encore rattachée à ${attached.length} profil(s)`,
+      );
+    }
+    this.limitations.delete(name);
+  }
+
+  async attachLimitationToProfile(input: AttachLimitationDto): Promise<UserManagerProfileLimitationDto> {
+    const already = this.profileLimitations.find(
+      (j) => j.profileName === input.profileName && j.limitationName === input.limitationName,
+    );
+    if (already) return already;
+
+    const junction: UserManagerProfileLimitationDto = {
+      id: this.nextId(),
+      profileName: input.profileName,
+      limitationName: input.limitationName,
+    };
+    this.profileLimitations.push(junction);
+    return junction;
+  }
+
+  async detachLimitationFromProfile(input: AttachLimitationDto): Promise<void> {
+    const before = this.profileLimitations.length;
+    this.profileLimitations = this.profileLimitations.filter(
+      (j) => !(j.profileName === input.profileName && j.limitationName === input.limitationName),
+    );
+    if (this.profileLimitations.length === before) {
+      throw new MikrotikNotFoundError(
+        'Rattachement profil/limitation',
+        `${input.profileName}/${input.limitationName}`,
+      );
     }
   }
 

@@ -7,7 +7,7 @@ import {
   UserManagerUserProfileDto,
   UserManagerUserProfileState,
 } from '../dto/user-manager.dto';
-import { formatRateToken, parseRouterOsDuration, splitRateLimitToken } from './hotspot.mapper';
+import { formatRateToken, parseRateToken, parseRouterOsDuration } from './hotspot.mapper';
 
 // Les helpers de débit vivent dans `hotspot.mapper` (avec le parseur de
 // durées) ; réexportés ici car le service les consomme depuis ce module.
@@ -43,17 +43,39 @@ export function mapUserManagerProfile(raw: any): UserManagerProfileDto {
   };
 }
 
+/**
+ * Une limitation ne porte pas de jeton `rate-limit` « rx/tx » comme un profil
+ * HotSpot : RouterOS expose deux champs distincts, `rate-limit-rx` et
+ * `rate-limit-tx`, en bits par seconde. Relevé sur un hAP en 7.24.4 — la
+ * lecture d'un `rate-limit` inexistant renvoyait silencieusement deux `null`.
+ *
+ * Zéro est la valeur par défaut de RouterOS pour « aucune limite » : elle est
+ * ramenée à `null`, pour ne pas la confondre avec un plafond réel de 0 bit/s.
+ */
 export function mapUserManagerLimitation(raw: any): UserManagerLimitationDto {
-  const rateLimit = splitRateLimitToken(raw?.['rate-limit']);
-
   return {
     id: raw?.['.id'] ?? '',
     name: raw?.name ?? '',
-    rateLimit: { rxBitsPerSecond: rateLimit.rx, txBitsPerSecond: rateLimit.tx },
-    transferLimitBytes: raw?.['transfer-limit'] != null ? Number(raw['transfer-limit']) : null,
-    uptimeLimitSeconds:
-      raw?.['uptime-limit'] != null ? parseRouterOsDuration(raw['uptime-limit']) : null,
+    rateLimit: {
+      rxBitsPerSecond: parsePositiveAmount(raw?.['rate-limit-rx']),
+      txBitsPerSecond: parsePositiveAmount(raw?.['rate-limit-tx']),
+    },
+    transferLimitBytes: parsePositiveAmount(raw?.['transfer-limit']),
+    uptimeLimitSeconds: parsePositiveDuration(raw?.['uptime-limit']),
   };
+}
+
+/** Accepte aussi bien `"2000000"` que `"2M"` : RouterOS lit les deux. */
+function parsePositiveAmount(value: unknown): number | null {
+  if (value == null || value === '' || value === 'unlimited') return null;
+  const parsed = parseRateToken(String(value));
+  return parsed && parsed > 0 ? parsed : null;
+}
+
+function parsePositiveDuration(value: unknown): number | null {
+  if (value == null || value === '' || value === 'unlimited') return null;
+  const seconds = parseRouterOsDuration(value);
+  return seconds > 0 ? seconds : null;
 }
 
 export function mapUserManagerProfileLimitation(raw: any): UserManagerProfileLimitationDto {
