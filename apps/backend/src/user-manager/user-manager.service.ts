@@ -8,6 +8,7 @@ import type {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
+import { parseRouterTime } from '../routers/router-time.util.js';
 import type {
   AssignProfileDto,
   AttachLimitationDto,
@@ -19,6 +20,35 @@ import type {
   UpdateUserManagerProfileDto,
 } from './dto/user-manager.dto.js';
 
+/**
+ * Parmi les attributions d'un compte, celle qui décrit son accès courant.
+ *
+ * Un compte en porte une par achat : au rachat, RouterOS en ajoute une et
+ * laisse les précédentes à l'état `used`. La plus récente n'est pas
+ * nécessairement la bonne non plus — une attribution `running-active` sans
+ * échéance (profil illimité) prime sur une attribution périmée créée après.
+ */
+function pickGoverningAssignment<T extends { state: string; endTime: string | null }>(
+  assignments: T[],
+  gmtOffset: string,
+): T | undefined {
+  if (assignments.length <= 1) return assignments[0];
+
+  const active = assignments.find((a) => a.state === 'running-active');
+  if (active) return active;
+
+  const waiting = assignments.find((a) => a.state === 'waiting');
+  if (waiting) return waiting;
+
+  // Que des attributions consommées : la dernière à expirer est celle qui a
+  // donné son accès au client le plus récemment.
+  return [...assignments].sort((a, b) => {
+    const left = parseRouterTime(a.endTime, gmtOffset)?.getTime() ?? 0;
+    const right = parseRouterTime(b.endTime, gmtOffset)?.getTime() ?? 0;
+    return right - left;
+  })[0];
+}
+
 /** D'où vient un compte trouvé sur le routeur. */
 export type AccountSource = 'TICKET' | 'ABONNEMENT' | 'HORS_APPLICATION';
 
@@ -28,8 +58,11 @@ export interface AccountView {
   sharedUsers: number;
   comment: string | null;
   profileName: string | null;
+  /** Échéance en instant absolu (ISO), convertie depuis le fuseau du routeur. */
   endTime: string | null;
   state: UserManagerUserProfileState | null;
+  /** Nombre d'attributions portées par ce compte : un rachat en ajoute une. */
+  assignmentCount: number;
   source: AccountSource;
   customerName: string | null;
   voucherId: string | null;
@@ -89,7 +122,9 @@ export class UserManagerService {
         limitationNames: junctions
           .filter((j) => j.profileName === profile.name)
           .map((j) => j.limitationName),
-        accountCount: assignments.filter((a) => a.profileName === profile.name).length,
+        accountCount: new Set(
+          assignments.filter((a) => a.profileName === profile.name).map((a) => a.username),
+        ).size,
       };
     });
   }
@@ -232,12 +267,25 @@ export class UserManagerService {
 
     const voucherByCode = new Map(vouchers.map((v) => [v.code, v]));
     const subscriptionByUsername = new Map(subscriptions.map((s) => [s.hotspotUsername, s]));
-    const assignmentByUser = new Map(assignments.map((a) => [a.username, a]));
+
+    // Un compte peut porter plusieurs attributions : chaque achat en ajoute
+    // une, et les précédentes restent, à l'état `used`. Le routeur en a par
+    // exemple deux pour `test1h`. En retenir une au hasard afficherait une
+    // échéance périmée comme si elle était courante.
+    const assignmentsByUser = new Map<string, typeof assignments>();
+    for (const assignment of assignments) {
+      const list = assignmentsByUser.get(assignment.username) ?? [];
+      list.push(assignment);
+      assignmentsByUser.set(assignment.username, list);
+    }
+
+    const { gmtOffset } = await mikrotik.getClock();
 
     return users.map((user) => {
       const voucher = voucherByCode.get(user.username);
       const subscription = subscriptionByUsername.get(user.username);
-      const assignment = assignmentByUser.get(user.username);
+      const userAssignments = assignmentsByUser.get(user.username) ?? [];
+      const assignment = pickGoverningAssignment(userAssignments, gmtOffset);
 
       // L'abonnement prime : un compte suivi comme abonnement l'est
       // explicitement, alors qu'un code de ticket pourrait coïncider.
@@ -253,8 +301,9 @@ export class UserManagerService {
         sharedUsers: user.sharedUsers,
         comment: user.comment,
         profileName: assignment?.profileName ?? null,
-        endTime: assignment?.endTime ?? null,
+        endTime: parseRouterTime(assignment?.endTime, gmtOffset)?.toISOString() ?? null,
         state: assignment?.state ?? null,
+        assignmentCount: userAssignments.length,
         source,
         customerName: subscription?.customer?.name ?? voucher?.customer?.name ?? null,
         voucherId: voucher?.id ?? null,

@@ -3,6 +3,7 @@ import { Payment, Prisma, Subscription, SubscriptionStatus } from '@prisma/clien
 import { MikrotikNotFoundError, type IMikrotikService } from '@wifitati/mikrotik-service';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { PlanProvisioningService } from '../plans/plan-provisioning.service.js';
+import { parseRouterTime } from '../routers/router-time.util.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
@@ -238,11 +239,21 @@ export class SubscriptionsService {
     const subscription = await this.findOne(subscriptionId);
     const mikrotik = await this.clients.forRouter(subscription.routerId);
 
-    const assignments = await mikrotik.getUserManagerUserProfiles(subscription.hotspotUsername);
-    const current = assignments.find((a) => a.endTime);
-    if (!current?.endTime) return subscription;
+    const [assignments, clock] = await Promise.all([
+      mikrotik.getUserManagerUserProfiles(subscription.hotspotUsername),
+      mikrotik.getClock(),
+    ]);
 
-    const end = new Date(current.endTime);
+    // Un abonné renouvelé porte plusieurs attributions, les anciennes restant
+    // à l'état `used` : retenir la première venue ramènerait une échéance
+    // périmée et suspendrait un client à jour. L'échéance qui fait foi est la
+    // plus lointaine.
+    const end = assignments
+      .map((a) => parseRouterTime(a.endTime, clock.gmtOffset))
+      .filter((date): date is Date => date !== null)
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+    if (!end) return subscription;
+
     if (end.getTime() === subscription.currentPeriodEnd.getTime()) return subscription;
 
     return this.prisma.scoped.subscription.update({

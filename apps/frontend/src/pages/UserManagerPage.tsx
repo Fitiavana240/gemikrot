@@ -511,7 +511,14 @@ function AccountsTab() {
                 </Badge>
               </td>
               <td className="px-3 py-2">{account.customerName ?? '—'}</td>
-              <td className="px-3 py-2">{account.profileName ?? '—'}</td>
+              <td className="px-3 py-2">
+                {account.profileName ?? '—'}
+                {account.assignmentCount > 1 && (
+                  <span className="ml-1.5 text-xs text-slate-400">
+                    ({account.assignmentCount} attributions)
+                  </span>
+                )}
+              </td>
               <td className="px-3 py-2 text-slate-500">
                 {account.endTime
                   ? new Date(account.endTime).toLocaleString('fr-FR')

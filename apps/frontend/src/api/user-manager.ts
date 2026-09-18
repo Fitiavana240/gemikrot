@@ -35,8 +35,11 @@ export interface UserManagerAccount {
   sharedUsers: number;
   comment: string | null;
   profileName: string | null;
+  /** Instant absolu (ISO) : le backend a converti le fuseau du routeur. */
   endTime: string | null;
   state: AccountState | null;
+  /** Nombre d'attributions du compte : un rachat en ajoute une. */
+  assignmentCount: number;
   source: AccountSource;
   customerName: string | null;
   voucherId: string | null;
