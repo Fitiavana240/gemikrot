@@ -9,6 +9,7 @@ import {
 import {
   DhcpLeaseDto,
   HotspotActiveUserDto,
+  HotspotCookieDto,
   HotspotHostDto,
   HotspotProfileDto,
   HotspotUserDto,
@@ -82,6 +83,14 @@ export interface IMikrotikService {
   setHotspotUserDisabled(username: string, disabled: boolean): Promise<HotspotUserDto>;
   deleteHotspotUser(username: string): Promise<void>;
 
+  /**
+   * Cookies de connexion. Les purger est indispensable pour couper
+   * réellement un accès : un cookie vivant rouvre la session sans RADIUS,
+   * donc sans consulter la validité User Manager.
+   */
+  getHotspotCookies(): Promise<HotspotCookieDto[]>;
+  deleteHotspotCookie(id: string): Promise<void>;
+
   createHotspotProfile(input: CreateHotspotProfileDto): Promise<HotspotProfileDto>;
   updateHotspotProfile(input: UpdateHotspotProfileDto): Promise<HotspotProfileDto>;
 
@@ -112,6 +121,12 @@ export interface IMikrotikService {
   // ---------- User Manager : écriture ----------
 
   createUserManagerUser(input: CreateUserManagerUserDto): Promise<UserManagerUserDto>;
+  /**
+   * Création en lot. La liste des comptes existants n'est relue qu'une fois,
+   * là où un appel unitaire répété la relit à chaque création — intenable
+   * pour un lot de tickets sur un parc qui grossit.
+   */
+  createUserManagerUsers(inputs: CreateUserManagerUserDto[]): Promise<UserManagerUserDto[]>;
   /** Rotation du mot de passe d'un compte existant, sans perdre son historique. */
   updateUserManagerUser(input: UpdateUserManagerUserDto): Promise<UserManagerUserDto>;
   deleteUserManagerUser(username: string): Promise<void>;

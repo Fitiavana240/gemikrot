@@ -66,7 +66,12 @@ export interface Voucher {
   deviceId: string | null;
   createdAt: string;
   activatedAt: string | null;
+  /** Échéance calculée par le routeur. `null` = validité pas encore démarrée. */
   expiresAt: string | null;
+  /** Compte User Manager. `null` = ticket historique, servi par le HotSpot. */
+  umUsername: string | null;
+  umState: string | null;
+  lastReconciledAt: string | null;
 }
 
 export interface Payment {

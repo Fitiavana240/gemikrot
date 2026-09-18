@@ -5,6 +5,9 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
+import { parseRouterTime } from '../routers/router-time.util.js';
+import { PlanProvisioningService } from '../plans/plan-provisioning.service.js';
+import { VoucherAccessService } from './voucher-access.service.js';
 import type { CreateVoucherBatchDto } from './dto/create-voucher-batch.dto.js';
 import { generateVoucherCode } from './voucher-code.util.js';
 
@@ -16,13 +19,97 @@ export class VouchersService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly clients: MikrotikClientFactory,
+    private readonly provisioning: PlanProvisioningService,
+    private readonly access: VoucherAccessService,
     private readonly tenantContext: TenantContextService,
   ) {}
 
-  findAll(filter: { status?: VoucherStatus; planId?: string } = {}): Promise<Voucher[]> {
+  /**
+   * `scope` distingue les deux générations : `um` pour les tickets servis par
+   * User Manager, `legacy` pour ceux d'avant la bascule, encore sur le
+   * HotSpot local et sans échéance.
+   */
+  findAll(
+    filter: { status?: VoucherStatus; planId?: string; scope?: 'um' | 'legacy' } = {},
+  ): Promise<Voucher[]> {
+    const { scope, ...rest } = filter;
     return this.prisma.scoped.voucher.findMany({
-      where: filter,
+      where: {
+        ...rest,
+        ...(scope === 'um' ? { umUsername: { not: null } } : {}),
+        ...(scope === 'legacy' ? { umUsername: null } : {}),
+      },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Tickets expirés. Le statut seul ne suffit pas : entre deux
+   * réconciliations, un ticket dont l'échéance est passée porte encore
+   * VENDU. Le routeur, lui, a déjà cessé de le servir — la liste doit dire
+   * la même chose que le réseau.
+   */
+  findExpired(): Promise<Voucher[]> {
+    return this.prisma.scoped.voucher.findMany({
+      where: {
+        OR: [
+          { status: VoucherStatus.EXPIRED },
+          {
+            status: { in: [VoucherStatus.SOLD, VoucherStatus.ACTIVE] },
+            expiresAt: { lt: new Date() },
+          },
+        ],
+      },
+      orderBy: { expiresAt: 'desc' },
+    });
+  }
+
+  /**
+   * Répartition par offre — un profil User Manager, une offre. Donne d'un
+   * coup d'œil ce qui reste à vendre et ce qui est consommé.
+   */
+  async countByPlan(): Promise<
+    {
+      planId: string;
+      planName: string;
+      price: string;
+      umProfileName: string | null;
+      validityDurationSeconds: number;
+      counts: Record<string, number>;
+      total: number;
+    }[]
+  > {
+    const [plans, grouped] = await Promise.all([
+      this.prisma.scoped.plan.findMany({
+        select: {
+          id: true,
+          name: true,
+          price: true,
+          umProfileName: true,
+          validityDurationSeconds: true,
+        },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.scoped.voucher.groupBy({ by: ['planId', 'status'], _count: { _all: true } }),
+    ]);
+
+    return plans.map((plan) => {
+      const rows = grouped.filter((row) => row.planId === plan.id);
+      const counts: Record<string, number> = {};
+      let total = 0;
+      for (const row of rows) {
+        counts[row.status] = row._count._all;
+        total += row._count._all;
+      }
+      return {
+        planId: plan.id,
+        planName: plan.name,
+        price: plan.price.toString(),
+        umProfileName: plan.umProfileName,
+        validityDurationSeconds: plan.validityDurationSeconds,
+        counts,
+        total,
+      };
     });
   }
 
@@ -84,6 +171,12 @@ export class VouchersService {
         );
       }
 
+      // Les comptes sont créés sur le routeur dès la génération : un ticket
+      // imprimé fonctionne immédiatement, sans qu'un vendeur ait à l'activer
+      // dans la console. La validité ne court qu'à la première connexion, un
+      // ticket invendu ne s'use donc pas.
+      const provisioned = await this.provisionOnUserManager(vouchers, plan, routerId);
+
       await this.prisma.scoped.voucherBatch.update({ where: { id: batch.id }, data: { status: 'COMPLETED' } });
       await this.prisma.scoped.voucherJob.update({
         where: { id: batch.jobs[0].id },
@@ -94,10 +187,10 @@ export class VouchersService {
         action: 'CREATE_VOUCHER_BATCH',
         targetType: 'VoucherBatch',
         targetId: batch.id,
-        payloadDiff: { planId: plan.id, quantity: dto.quantity },
+        payloadDiff: { planId: plan.id, quantity: dto.quantity, routerId },
       });
 
-      return vouchers;
+      return provisioned;
     } catch (error) {
       await this.prisma.scoped.voucherBatch.update({ where: { id: batch.id }, data: { status: 'FAILED' } });
       await this.prisma.scoped.voucherJob.update({
@@ -125,18 +218,32 @@ export class VouchersService {
     }
     const plan = await this.getActivePlan(voucher.planId);
 
-    const mikrotik = await this.clients.forDefaultRouter();
-    await mikrotik.createHotspotUser({
-      username: voucher.code,
-      password: voucher.code,
-      profileName: plan.mikrotikProfileName,
-      comment: `wifitati:voucher:${voucher.code}`,
-    });
+    // Le compte existe déjà sur le routeur depuis la génération du lot : le
+    // ticket imprimé fonctionnait avant même d'être vendu. Ne reste ici que
+    // le rattachement commercial. Un ticket d'avant la bascule n'a pas de
+    // compte User Manager : il est provisionné maintenant, sur le HotSpot,
+    // pour ne pas changer le comportement de l'existant.
+    let expiresAt: Date | null = null;
+    let umState: string | null = voucher.umState;
 
-    // Le compte HotSpot n'a pas de date d'expiration : c'est le
-    // `session-timeout` du profil qui limite la session une fois le client
-    // connecté. La durée n'est donc décomptée qu'à partir de la connexion.
-    const expiresAt = null;
+    if (voucher.umUsername) {
+      const mikrotik = await this.clients.forDefaultRouter();
+      const [assignments, clock] = await Promise.all([
+        mikrotik.getUserManagerUserProfiles(voucher.umUsername),
+        mikrotik.getClock(),
+      ]);
+      const current = assignments.find((a) => a.profileName === plan.umProfileName) ?? assignments[0];
+      expiresAt = parseRouterTime(current?.endTime, clock.gmtOffset);
+      umState = current?.state ?? umState;
+    } else {
+      const mikrotik = await this.clients.forDefaultRouter();
+      await mikrotik.createHotspotUser({
+        username: voucher.code,
+        password: voucher.code,
+        profileName: plan.mikrotikProfileName,
+        comment: `wifitati:voucher:${voucher.code}`,
+      });
+    }
 
     const updated = await this.prisma.scoped.voucher.update({
       where: { id: voucher.id },
@@ -146,6 +253,8 @@ export class VouchersService {
         deviceId: params.deviceId,
         activatedAt: new Date(),
         expiresAt,
+        umState,
+        lastReconciledAt: voucher.umUsername ? new Date() : null,
       },
     });
 
@@ -163,15 +272,22 @@ export class VouchersService {
   async disable(id: string, adminUserId?: string): Promise<Voucher> {
     const voucher = await this.findOne(id);
 
-    if (voucher.status === VoucherStatus.SOLD || voucher.status === VoucherStatus.ACTIVE) {
-      try {
-        const mikrotik = await this.clients.forDefaultRouter();
-        // Désactivé plutôt que supprimé : le compte reste visible sur le
-        // routeur pour tracer ce qui a été vendu.
+    try {
+      const mikrotik = await this.clients.forDefaultRouter();
+      // Désactivé plutôt que supprimé : le compte reste visible sur le
+      // routeur pour tracer ce qui a été vendu.
+      if (voucher.umUsername) {
+        // Désactiver ne suffit pas : un cookie encore valide rouvre la
+        // session sans repasser par RADIUS, donc sans consulter User
+        // Manager. Cookies et session en cours partent avec.
+        await this.access.revoke(mikrotik, voucher.umUsername);
+      } else if (voucher.status === VoucherStatus.SOLD || voucher.status === VoucherStatus.ACTIVE) {
         await mikrotik.setHotspotUserDisabled(voucher.code, true);
-      } catch (error) {
-        if (!(error instanceof MikrotikNotFoundError)) throw error;
+        await this.access.purgeCookies(mikrotik, voucher.code);
+        await this.access.closeSessions(mikrotik, voucher.code);
       }
+    } catch (error) {
+      if (!(error instanceof MikrotikNotFoundError)) throw error;
     }
 
     const updated = await this.prisma.scoped.voucher.update({
@@ -199,6 +315,52 @@ export class VouchersService {
       data: { status: VoucherStatus.CANCELLED },
     });
     await this.audit.log({ adminUserId, action: 'CANCEL_VOUCHER', targetType: 'Voucher', targetId: id });
+    return updated;
+  }
+
+/**
+   * Crée les comptes User Manager du lot et leur attribue le profil de
+   * l'offre. Les comptes partent en une seule passe : la liste des comptes
+   * existants n'est relue qu'une fois, là où un appel unitaire la relirait à
+   * chaque ticket.
+   *
+   * Le code sert de nom d'utilisateur **et** de mot de passe : le client n'a
+   * qu'un seul champ à saisir sur le portail captif.
+   */
+  private async provisionOnUserManager(
+    vouchers: Voucher[],
+    plan: { id: string; name: string },
+    routerId: string,
+  ): Promise<Voucher[]> {
+    const { profileName } = await this.provisioning.reconcile(plan.id, routerId);
+    const mikrotik = await this.clients.forRouter(routerId);
+    const tenantId = this.tenantContext.requireTenantId();
+
+    await mikrotik.createUserManagerUsers(
+      vouchers.map((voucher) => ({
+        username: voucher.code,
+        password: voucher.code,
+        comment: `gemikrot:t:${tenantId.slice(0, 8)}:v:${voucher.code}`,
+      })),
+    );
+
+    const updated: Voucher[] = [];
+    for (const voucher of vouchers) {
+      const assignment = await mikrotik.assignProfile({
+        username: voucher.code,
+        profileName,
+      });
+      updated.push(
+        await this.prisma.scoped.voucher.update({
+          where: { id: voucher.id },
+          data: {
+            umUsername: voucher.code,
+            umState: assignment.state,
+            lastReconciledAt: new Date(),
+          },
+        }),
+      );
+    }
     return updated;
   }
 

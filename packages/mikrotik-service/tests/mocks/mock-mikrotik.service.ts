@@ -10,6 +10,7 @@ import {
 import {
   DhcpLeaseDto,
   HotspotActiveUserDto,
+  HotspotCookieDto,
   HotspotHostDto,
   HotspotProfileDto,
   HotspotUserDto,
@@ -63,6 +64,7 @@ export class MockMikrotikService implements IMikrotikService {
   private hotspotUsers = new Map<string, HotspotUserDto>();
   private hotspotProfiles = new Map<string, HotspotProfileDto>();
   private ipBindings: IpBindingDto[] = [];
+  private cookies: HotspotCookieDto[] = [];
   private dhcpLeases: DhcpLeaseDto[] = [];
   private idCounter = 1;
 
@@ -294,6 +296,31 @@ export class MockMikrotikService implements IMikrotikService {
   }
 
   // ---------- User Manager : écriture ----------
+
+  async getHotspotCookies(): Promise<HotspotCookieDto[]> {
+    return [...this.cookies];
+  }
+
+  async deleteHotspotCookie(id: string): Promise<void> {
+    const before = this.cookies.length;
+    this.cookies = this.cookies.filter((cookie) => cookie.id !== id);
+    if (this.cookies.length === before) {
+      throw new MikrotikNotFoundError('Cookie HotSpot', id);
+    }
+  }
+
+  /** Permet à un test de simuler un cookie encore valide. */
+  seedHotspotCookie(cookie: HotspotCookieDto): void {
+    this.cookies.push(cookie);
+  }
+
+  async createUserManagerUsers(inputs: CreateUserManagerUserDto[]): Promise<UserManagerUserDto[]> {
+    const created: UserManagerUserDto[] = [];
+    for (const input of inputs) {
+      created.push(await this.createUserManagerUser(input));
+    }
+    return created;
+  }
 
   async createUserManagerUser(input: CreateUserManagerUserDto): Promise<UserManagerUserDto> {
     if (this.users.has(input.username)) {

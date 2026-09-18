@@ -1,6 +1,7 @@
 import {
   DhcpLeaseDto,
   HotspotActiveUserDto,
+  HotspotCookieDto,
   HotspotHostDto,
   HotspotProfileDto,
   HotspotUserDto,
@@ -50,6 +51,15 @@ export function mapHotspotUser(raw: any): HotspotUserDto {
     limitUptimeSeconds: raw?.['limit-uptime'] != null ? parseRouterOsDuration(raw['limit-uptime']) : null,
     limitBytesIn: raw?.['limit-bytes-in'] != null ? Number(raw['limit-bytes-in']) : null,
     limitBytesOut: raw?.['limit-bytes-out'] != null ? Number(raw['limit-bytes-out']) : null,
+  };
+}
+
+export function mapHotspotCookie(raw: any): HotspotCookieDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    username: raw?.user ?? '',
+    macAddress: raw?.['mac-address'] ?? '',
+    expiresInSeconds: parseRouterOsDuration(raw?.['expires-in']),
   };
 }
 

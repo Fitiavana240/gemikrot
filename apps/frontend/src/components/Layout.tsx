@@ -11,7 +11,7 @@ const NAV: { to: string; label: string; end?: boolean }[] = [
   { to: '/devices', label: 'Appareils' },
   { to: '/plans', label: 'Offres' },
   { to: '/customers', label: 'Clients' },
-  { to: '/vouchers', label: 'Vouchers' },
+  { to: '/vouchers', label: 'Tickets' },
   { to: '/payments', label: 'Paiements' },
   { to: '/routers', label: 'Routeurs' },
   { to: '/user-manager', label: 'User Manager' },

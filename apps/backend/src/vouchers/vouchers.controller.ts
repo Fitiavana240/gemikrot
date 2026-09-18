@@ -5,16 +5,43 @@ import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { AuthenticatedUser } from '../auth/jwt.strategy.js';
 import { VouchersService } from './vouchers.service.js';
 import { CreateVoucherBatchDto } from './dto/create-voucher-batch.dto.js';
+import { VoucherReconciliationService } from './voucher-reconciliation.service.js';
 
 const CAN_MANAGE = [AdminRole.SUPER_ADMIN, AdminRole.ADMIN, AdminRole.OPERATOR];
 
 @Controller('vouchers')
 export class VouchersController {
-  constructor(private readonly vouchersService: VouchersService) {}
+  constructor(
+    private readonly vouchersService: VouchersService,
+    private readonly reconciliation: VoucherReconciliationService,
+  ) {}
 
   @Get()
-  findAll(@Query('status') status?: VoucherStatus, @Query('planId') planId?: string) {
-    return this.vouchersService.findAll({ status, planId });
+  findAll(
+    @Query('status') status?: VoucherStatus,
+    @Query('planId') planId?: string,
+    @Query('scope') scope?: 'um' | 'legacy',
+  ) {
+    return this.vouchersService.findAll({ status, planId, scope });
+  }
+
+  /** Tickets expirés, statut posé ou échéance dépassée. */
+  @Get('expired')
+  findExpired() {
+    return this.vouchersService.findExpired();
+  }
+
+  /** Répartition des tickets par offre. */
+  @Get('by-plan')
+  countByPlan() {
+    return this.vouchersService.countByPlan();
+  }
+
+  /** Relit les échéances sur le routeur et coupe les accès périmés. */
+  @Roles(...CAN_MANAGE)
+  @Post('reconcile')
+  reconcile(@Query('routerId') routerId?: string) {
+    return this.reconciliation.reconcileTenant(routerId);
   }
 
   @Get(':id')

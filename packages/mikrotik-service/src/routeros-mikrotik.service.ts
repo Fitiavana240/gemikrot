@@ -45,6 +45,7 @@ import {
   UpdateUserManagerUserDto,
 } from './dto/commands.dto';
 import { IpBindingType } from './dto/hotspot.dto';
+import type { UserManagerUserDto } from './dto/user-manager.dto';
 import { MikrotikConflictError, MikrotikNotFoundError } from './errors/mikrotik.errors';
 
 /**
@@ -219,6 +220,17 @@ export class RouterOSMikrotikService implements IMikrotikService {
     await this.client.delete(`/ip/hotspot/user/${target.id}`);
   }
 
+  /** Cookies de connexion : les purger coupe réellement un accès. */
+  async getHotspotCookies() {
+    const raw = await this.client.get<any[]>('/ip/hotspot/cookie');
+    return raw.map(HotspotMapper.mapHotspotCookie);
+  }
+
+  async deleteHotspotCookie(id: string) {
+    this.logger.info('Suppression cookie HotSpot', { id });
+    await this.client.delete(`/ip/hotspot/cookie/${encodeURIComponent(id)}`);
+  }
+
   async createHotspotProfile(input: CreateHotspotProfileDto) {
     const data = validate(createHotspotProfileSchema, input);
 
@@ -378,6 +390,47 @@ export class RouterOSMikrotikService implements IMikrotikService {
       group: data.group,
     });
     return UmMapper.mapUserManagerUser(raw);
+  }
+
+  /**
+   * Création en lot : la liste des comptes n'est relue qu'une fois, et toutes
+   * les entrées sont validées avant la moindre écriture. Un lot de tickets
+   * part donc entier ou pas du tout, plutôt qu'à moitié.
+   */
+  async createUserManagerUsers(inputs: CreateUserManagerUserDto[]) {
+    const data = inputs.map((input) => validate(createUserManagerUserSchema, input));
+
+    const seen = new Set<string>();
+    for (const item of data) {
+      if (seen.has(item.username)) {
+        throw new MikrotikConflictError(`Le nom "${item.username}" apparaît deux fois dans le lot`, {
+          username: item.username,
+        });
+      }
+      seen.add(item.username);
+    }
+
+    const existing = new Set((await this.getUserManagerUsers()).map((user) => user.username));
+    const clash = data.find((item) => existing.has(item.username));
+    if (clash) {
+      throw new MikrotikConflictError(`L'utilisateur "${clash.username}" existe déjà`, {
+        username: clash.username,
+      });
+    }
+
+    this.logger.info('Création groupée User Manager', { count: data.length });
+    const created: UserManagerUserDto[] = [];
+    for (const item of data) {
+      const raw = await this.client.put<any>('/user-manager/user', {
+        name: item.username,
+        password: item.password,
+        'shared-users': item.sharedUsers ?? 1,
+        comment: item.comment,
+        group: item.group,
+      });
+      created.push(UmMapper.mapUserManagerUser(raw));
+    }
+    return created;
   }
 
   async deleteUserManagerUser(username: string) {

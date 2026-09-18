@@ -42,6 +42,10 @@ function createFakePrisma() {
         return record;
       }),
       findUnique: vi.fn(async ({ where }: any) => vouchers.get(where.code) ?? null),
+      update: vi.fn(async ({ where, data }: any) => {
+        const record = [...vouchers.values()].find((v) => v.id === where.id);
+        return Object.assign(record ?? {}, data);
+      }),
     },
     _vouchers: vouchers,
   };
@@ -54,19 +58,48 @@ describe('VouchersService.generateBatch', () => {
   let prisma: ReturnType<typeof createFakePrisma>;
   let audit: { log: ReturnType<typeof vi.fn> };
   let mikrotik: Record<string, ReturnType<typeof vi.fn>>;
+  let clients: Record<string, ReturnType<typeof vi.fn>>;
+  let provisioning: { reconcile: ReturnType<typeof vi.fn> };
+  let access: Record<string, ReturnType<typeof vi.fn>>;
 
   beforeEach(() => {
     prisma = createFakePrisma();
     audit = { log: vi.fn(async () => {}) };
-    mikrotik = {};
+    mikrotik = {
+      createUserManagerUsers: vi.fn(async (inputs: any[]) => inputs),
+      assignProfile: vi.fn(async () => ({ state: 'waiting', endTime: null })),
+    };
+    clients = {
+      forRouter: vi.fn(async () => mikrotik),
+      forDefaultRouter: vi.fn(async () => mikrotik),
+    };
+    provisioning = {
+      reconcile: vi.fn(async () => ({
+        profileName: '1JOUR-2000AR',
+        limitationName: null,
+        actions: [],
+      })),
+    };
+    access = { revoke: vi.fn(async () => ({ cookiesRemoved: 0, sessionsClosed: 0 })) };
     vi.mocked(voucherCode.generateVoucherCode).mockReset();
   });
+
+  function buildService() {
+    return new VouchersService(
+      prisma as any,
+      audit as any,
+      clients as any,
+      provisioning as any,
+      access as any,
+      tenantContext as any,
+    );
+  }
 
   it('génère la quantité demandée de vouchers, tous avec un code unique', async () => {
     const codes = ['AAA', 'BBB', 'CCC', 'DDD'];
     vi.mocked(voucherCode.generateVoucherCode).mockImplementation(() => codes.shift()!);
 
-    const service = new VouchersService(prisma as any, audit as any, mikrotik as any, tenantContext as any);
+    const service = buildService();
     const result = await service.generateBatch(
       { planId: 'plan-1', quantity: 4 } as any,
       'admin-1',
@@ -74,6 +107,29 @@ describe('VouchersService.generateBatch', () => {
 
     expect(result).toHaveLength(4);
     expect(new Set(result.map((v) => v.code)).size).toBe(4);
+    // Les comptes partent en une seule passe, pas un appel par ticket.
+    expect(mikrotik.createUserManagerUsers).toHaveBeenCalledTimes(1);
+    expect(mikrotik.createUserManagerUsers.mock.calls[0][0]).toHaveLength(4);
+  });
+
+  it('crée les comptes sur le routeur dès la génération, avec le code en mot de passe', async () => {
+    // Un ticket imprimé doit fonctionner sans qu'un vendeur l'active.
+    const codes = ['KF77', 'HRT7'];
+    vi.mocked(voucherCode.generateVoucherCode).mockImplementation(() => codes.shift()!);
+
+    const service = buildService();
+    const result = await service.generateBatch(
+      { planId: 'plan-1', quantity: 2 } as any,
+      'admin-1',
+    );
+
+    const created = mikrotik.createUserManagerUsers.mock.calls[0][0];
+    expect(created[0]).toMatchObject({ username: 'KF77', password: 'KF77' });
+    expect(mikrotik.assignProfile).toHaveBeenCalledWith({
+      username: 'KF77',
+      profileName: '1JOUR-2000AR',
+    });
+    expect(result.every((v) => v.umUsername)).toBe(true);
   });
 
   it("relance la génération quand le code aléatoire entre en collision avec un voucher existant", async () => {
@@ -81,7 +137,7 @@ describe('VouchersService.generateBatch', () => {
     const codes = ['DUP', 'DUP', 'UNIQUE'];
     vi.mocked(voucherCode.generateVoucherCode).mockImplementation(() => codes.shift()!);
 
-    const service = new VouchersService(prisma as any, audit as any, mikrotik as any, tenantContext as any);
+    const service = buildService();
     const first = await (service as any).createVoucherWithUniqueCode({ planId: 'plan-1', priceAr: 2000 });
     expect(first.code).toBe('DUP');
 

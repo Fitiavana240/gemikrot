@@ -76,3 +76,16 @@ export interface HotspotProfileDto {
   sharedUsers: number;
   idleTimeoutSeconds: number | null;
 }
+
+/**
+ * Cookie HotSpot (`/ip/hotspot/cookie`). Un client dont le cookie est encore
+ * valide se reconnecte **sans repasser par RADIUS**, donc sans que User
+ * Manager ne soit consulté : suspendre un compte ne suffit pas à le couper
+ * tant que son cookie vit (jusqu'à 3 jours sur ce parc).
+ */
+export interface HotspotCookieDto {
+  id: string;
+  username: string;
+  macAddress: string;
+  expiresInSeconds: number;
+}

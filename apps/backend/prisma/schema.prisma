@@ -391,9 +391,20 @@ model Voucher {
   payment     Payment?
   createdAt   DateTime      @default(now()) @map("created_at")
   activatedAt DateTime?     @map("activated_at")
+  /// Échéance recopiée depuis `end-time` du routeur. `null` tant que la
+  /// validité n'a pas démarré : un ticket vendu mais jamais utilisé ne s'use
+  /// pas, puisqu'elle ne court qu'à la première connexion.
   expiresAt   DateTime?     @map("expires_at")
+  /// Compte `/user-manager/user` correspondant. `null` = ticket historique,
+  /// servi par le HotSpot local : c'est le discriminant entre les deux
+  /// générations, et aucune ligne existante n'en porte.
+  umUsername  String?       @map("um_username")
+  /// Dernier état relu sur le routeur : waiting, running-active, used.
+  umState     String?       @map("um_state")
+  lastReconciledAt DateTime? @map("last_reconciled_at")
 
   @@index([status])
+  @@index([umUsername])
   @@map("vouchers")
 }
 
