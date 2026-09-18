@@ -38,4 +38,9 @@ export class UpdatePlanDto {
   @IsInt()
   @Min(1)
   maxSharedUsers?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  subscriptionPeriodDays?: number;
 }

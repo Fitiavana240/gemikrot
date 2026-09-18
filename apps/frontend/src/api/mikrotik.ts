@@ -37,9 +37,12 @@ export interface MikrotikStatus {
   ntp: { enabled: boolean; status: string; lastUpdate: string | null };
 }
 
+/** Les routes sont portées par un routeur depuis le passage au multi-sites. */
 export const mikrotikApi = {
-  status: () => api.get<MikrotikStatus>('/mikrotik/status'),
-  activeSessions: () => api.get<HotspotActiveUser[]>('/mikrotik/active-sessions'),
-  hosts: () => api.get<HotspotHost[]>('/mikrotik/hosts'),
-  disconnect: (sessionId: string) => api.post<void>(`/mikrotik/active-sessions/${sessionId}/disconnect`),
+  status: (routerId: string) => api.get<MikrotikStatus>(`/routers/${routerId}/status`),
+  activeSessions: (routerId: string) =>
+    api.get<HotspotActiveUser[]>(`/routers/${routerId}/active-sessions`),
+  hosts: (routerId: string) => api.get<HotspotHost[]>(`/routers/${routerId}/hosts`),
+  disconnect: (routerId: string, sessionId: string) =>
+    api.post<void>(`/routers/${routerId}/active-sessions/${sessionId}/disconnect`),
 };

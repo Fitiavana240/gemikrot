@@ -65,7 +65,7 @@ describe('RouterOSMikrotikService', () => {
       ).rejects.toBeInstanceOf(MikrotikValidationError);
 
       expect(client.get).not.toHaveBeenCalled();
-      expect(client.post).not.toHaveBeenCalled();
+      expect(client.put).not.toHaveBeenCalled();
     });
 
     it("lève un conflit si l'utilisateur existe déjà", async () => {
@@ -75,12 +75,12 @@ describe('RouterOSMikrotikService', () => {
         service.createUserManagerUser({ username: 'client01', password: 'secret123' }),
       ).rejects.toBeInstanceOf(MikrotikConflictError);
 
-      expect(client.post).not.toHaveBeenCalled();
+      expect(client.put).not.toHaveBeenCalled();
     });
 
     it('crée l\'utilisateur et retourne le DTO mappé quand tout est valide', async () => {
       client.get.mockResolvedValueOnce([]); // aucun utilisateur existant
-      client.post.mockResolvedValueOnce({
+      client.put.mockResolvedValueOnce({
         '.id': '*2',
         name: 'client02',
         'shared-users': '1',
@@ -92,7 +92,7 @@ describe('RouterOSMikrotikService', () => {
       });
 
       expect(result.username).toBe('client02');
-      expect(client.post).toHaveBeenCalledWith(
+      expect(client.put).toHaveBeenCalledWith(
         '/user-manager/user',
         expect.objectContaining({ name: 'client02', password: 'secret123' }),
       );
@@ -132,8 +132,8 @@ describe('RouterOSMikrotikService', () => {
 
   describe('createProfile', () => {
     it('crée le profile puis le profile-limitation avec le bon rate-limit', async () => {
-      client.post.mockResolvedValueOnce({}); // /user-manager/profile
-      client.post.mockResolvedValueOnce({
+      client.put.mockResolvedValueOnce({}); // /user-manager/profile
+      client.put.mockResolvedValueOnce({
         '.id': '*9',
         name: 'forfait-7j',
         validity: '604800s',
@@ -151,7 +151,7 @@ describe('RouterOSMikrotikService', () => {
 
       expect(result.name).toBe('forfait-7j');
       expect(result.rateLimit.rxBitsPerSecond).toBe(2_000_000);
-      expect(client.post).toHaveBeenNthCalledWith(2, '/user-manager/profile-limitation', expect.objectContaining({
+      expect(client.put).toHaveBeenNthCalledWith(2, '/user-manager/profile-limitation', expect.objectContaining({
         'rate-limit': '2M/1M',
         'starts-when': 'logon',
       }));

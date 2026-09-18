@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { mikrotikApi } from '../api/mikrotik';
+import { useDefaultRouter } from '../api/use-default-router';
 import { useAuth } from '../auth/AuthContext';
 import { Badge, Button, Card, Table } from '../components/ui';
 
@@ -25,30 +26,33 @@ function formatDuration(seconds: number): string {
 export function SessionsPage() {
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
+  const { router } = useDefaultRouter();
+  const routerId = router?.id;
 
   const statusQuery = useQuery({
-    queryKey: ['mikrotik-status'],
-    queryFn: mikrotikApi.status,
+    queryKey: ['mikrotik-status', routerId],
+    queryFn: () => mikrotikApi.status(routerId!),
+    enabled: !!routerId,
     retry: false,
     refetchInterval: 30_000,
   });
 
   const sessionsQuery = useQuery({
-    queryKey: ['mikrotik-active-sessions'],
-    queryFn: mikrotikApi.activeSessions,
-    enabled: statusQuery.isSuccess,
+    queryKey: ['mikrotik-active-sessions', routerId],
+    queryFn: () => mikrotikApi.activeSessions(routerId!),
+    enabled: !!routerId && statusQuery.isSuccess,
     refetchInterval: 10_000,
   });
 
   const hostsQuery = useQuery({
-    queryKey: ['mikrotik-hosts'],
-    queryFn: mikrotikApi.hosts,
-    enabled: statusQuery.isSuccess,
+    queryKey: ['mikrotik-hosts', routerId],
+    queryFn: () => mikrotikApi.hosts(routerId!),
+    enabled: !!routerId && statusQuery.isSuccess,
     refetchInterval: 15_000,
   });
 
   const disconnectMutation = useMutation({
-    mutationFn: mikrotikApi.disconnect,
+    mutationFn: (sessionId: string) => mikrotikApi.disconnect(routerId!, sessionId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mikrotik-active-sessions'] }),
   });
 

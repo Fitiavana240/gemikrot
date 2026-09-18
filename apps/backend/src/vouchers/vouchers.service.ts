@@ -1,10 +1,9 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Voucher, VoucherStatus } from '@prisma/client';
-import type { IMikrotikService } from '@wifitati/mikrotik-service';
 import { MikrotikNotFoundError } from '@wifitati/mikrotik-service';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
-import { MIKROTIK_SERVICE } from '../mikrotik/mikrotik.constants.js';
+import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 import type { CreateVoucherBatchDto } from './dto/create-voucher-batch.dto.js';
 import { generateVoucherCode } from './voucher-code.util.js';
 
@@ -15,7 +14,7 @@ export class VouchersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    @Inject(MIKROTIK_SERVICE) private readonly mikrotik: IMikrotikService,
+    private readonly clients: MikrotikClientFactory,
   ) {}
 
   findAll(filter: { status?: VoucherStatus; planId?: string } = {}): Promise<Voucher[]> {
@@ -107,9 +106,8 @@ export class VouchersService {
   }
 
   /**
-   * Provisionne le voucher côté User Manager (création utilisateur +
-   * assignation du profil) et l'attribue au client. Appelé par
-   * `PaymentsService` une fois le paiement vérifié (Section 24).
+   * Provisionne le voucher comme compte HotSpot et l'attribue au client.
+   * Appelé par `PaymentsService` une fois le paiement vérifié (Section 24).
    *
    * `code` sert à la fois de nom d'utilisateur et de mot de passe RouterOS
    * (Section 6 : un seul champ à saisir côté client).
@@ -124,21 +122,18 @@ export class VouchersService {
     }
     const plan = await this.getActivePlan(voucher.planId);
 
-    await this.mikrotik.createUserManagerUser({
+    const mikrotik = await this.clients.forDefaultRouter();
+    await mikrotik.createHotspotUser({
       username: voucher.code,
       password: voucher.code,
+      profileName: plan.mikrotikProfileName,
       comment: `wifitati:voucher:${voucher.code}`,
     });
-    await this.mikrotik.assignProfile({ username: voucher.code, profileName: plan.mikrotikProfileName });
 
-    // La véritable expiration dépend de `starts-when` côté User Manager
-    // (Section 12) : avec CREATION, elle démarre maintenant ; avec LOGON,
-    // elle ne démarre qu'à la première authentification et n'est donc pas
-    // connue ici (null, à réconcilier plus tard via getUserManagerUserProfiles).
-    const expiresAt =
-      plan.startsWhen === 'CREATION'
-        ? new Date(Date.now() + plan.validityDurationSeconds * 1000)
-        : null;
+    // Le compte HotSpot n'a pas de date d'expiration : c'est le
+    // `session-timeout` du profil qui limite la session une fois le client
+    // connecté. La durée n'est donc décomptée qu'à partir de la connexion.
+    const expiresAt = null;
 
     const updated = await this.prisma.voucher.update({
       where: { id: voucher.id },
@@ -167,7 +162,10 @@ export class VouchersService {
 
     if (voucher.status === VoucherStatus.SOLD || voucher.status === VoucherStatus.ACTIVE) {
       try {
-        await this.mikrotik.deleteUserManagerUser(voucher.code);
+        const mikrotik = await this.clients.forDefaultRouter();
+        // Désactivé plutôt que supprimé : le compte reste visible sur le
+        // routeur pour tracer ce qui a été vendu.
+        await mikrotik.setHotspotUserDisabled(voucher.code, true);
       } catch (error) {
         if (!(error instanceof MikrotikNotFoundError)) throw error;
       }

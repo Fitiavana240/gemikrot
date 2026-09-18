@@ -1,0 +1,73 @@
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { AdminRole } from '@prisma/client';
+import { Roles } from '../auth/roles.decorator.js';
+import { CurrentUser } from '../auth/current-user.decorator.js';
+import type { AuthenticatedUser } from '../auth/jwt.strategy.js';
+import { RoutersService } from './routers.service.js';
+import { RouterImportService } from './router-import.service.js';
+import { CreateRouterDto, ProbeFingerprintDto, UpdateRouterDto } from './dto/create-router.dto.js';
+
+/** La configuration des routeurs est réservée aux administrateurs. */
+const CAN_CONFIGURE = [AdminRole.SUPER_ADMIN, AdminRole.ADMIN];
+
+@Controller('routers')
+export class RoutersController {
+  constructor(
+    private readonly routersService: RoutersService,
+    private readonly importService: RouterImportService,
+  ) {}
+
+  @Get()
+  findAll() {
+    return this.routersService.findAll();
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.routersService.findOne(id);
+  }
+
+  @Get(':id/test-connection')
+  testConnection(@Param('id') id: string) {
+    return this.routersService.testConnection(id);
+  }
+
+  @Roles(...CAN_CONFIGURE)
+  @Post()
+  create(@Body() dto: CreateRouterDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.routersService.create(dto, user.id);
+  }
+
+  @Roles(...CAN_CONFIGURE)
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateRouterDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.routersService.update(id, dto, user.id);
+  }
+
+  @Roles(...CAN_CONFIGURE)
+  @Post('probe-fingerprint')
+  probeFingerprint(@Body() dto: ProbeFingerprintDto) {
+    return this.routersService.probeFingerprint(dto.host, dto.port);
+  }
+
+  /**
+   * Recopie l'état du routeur en base (profils, comptes, contournements).
+   * `?dryRun=true` montre ce qui serait importé sans rien écrire.
+   */
+  @Roles(...CAN_CONFIGURE)
+  @Post(':id/import')
+  import(
+    @Param('id') id: string,
+    @Query('dryRun') dryRun: string | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.importService.importFromRouter(id, {
+      dryRun: dryRun === 'true',
+      adminUserId: user.id,
+    });
+  }
+}

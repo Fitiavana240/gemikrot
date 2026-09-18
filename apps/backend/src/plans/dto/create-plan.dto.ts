@@ -38,4 +38,10 @@ export class CreatePlanDto {
   @IsInt()
   @Min(1)
   maxSharedUsers?: number;
+
+  /** Renseigné uniquement pour un abonnement récurrent (ex: 30 jours). */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  subscriptionPeriodDays?: number;
 }

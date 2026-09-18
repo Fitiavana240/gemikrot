@@ -1,1 +1,0 @@
-export const MIKROTIK_SERVICE = Symbol('MIKROTIK_SERVICE');

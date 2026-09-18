@@ -24,6 +24,31 @@ enum PlanStatus {
   ARCHIVED
 }
 
+/// Distingue les offres à la durée (tickets, majorité du parc) des
+/// abonnements renouvelés au paiement (Section 5 du cahier des charges).
+enum PlanKind {
+  TICKET
+  SUBSCRIPTION
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  GRACE
+  SUSPENDED
+  CANCELLED
+}
+
+/// Sert à décider si un appareil peut afficher le portail captif : une TV ou
+/// une caméra ne le peut pas et nécessite un contournement par MAC.
+enum DeviceType {
+  PHONE
+  COMPUTER
+  TV
+  CAMERA
+  ROUTER
+  OTHER
+}
+
 enum CustomerStatus {
   ACTIVE
   DISABLED
@@ -101,6 +126,8 @@ model Router {
   sessionCache         SessionCacheEntry[]
   statsCache           StatsCacheEntry[]
   auditLogs            AuditLog[]
+  subscriptions        Subscription[]
+  devices              Device[]
 
   @@map("routers")
 }
@@ -120,14 +147,53 @@ model Plan {
   maxSharedUsers           Int?       @map("max_shared_users")
   mikrotikProfileName      String     @unique @map("mikrotik_profile_name")
   status                   PlanStatus @default(ACTIVE)
+  kind                     PlanKind   @default(TICKET)
+  /// Longueur d'une période d'abonnement (null pour les offres à ticket).
+  subscriptionPeriodDays   Int?       @map("subscription_period_days")
+  /// `session-timeout` du profil HotSpot : limite une session, pas l'abonnement.
+  sessionTimeoutSeconds    Int?       @map("session_timeout_seconds")
+  /// Prix déduit du nom du profil lors de l'import, à confirmer par un admin.
+  priceNeedsReview         Boolean    @default(false) @map("price_needs_review")
   createdAt                DateTime   @default(now()) @map("created_at")
   updatedAt                DateTime   @updatedAt @map("updated_at")
 
   voucherBatches VoucherBatch[]
   vouchers       Voucher[]
   payments       Payment[]
+  subscriptions  Subscription[]
 
   @@map("plans")
+}
+
+/// Abonnement récurrent (Section 5). PostgreSQL est la SEULE source de vérité
+/// des périodes : RouterOS ne stocke aucune date d'expiration pour un compte
+/// HotSpot, seulement `disabled` oui/non.
+model Subscription {
+  id                 String             @id @default(uuid())
+  customerId         String             @map("customer_id")
+  customer           Customer           @relation(fields: [customerId], references: [id])
+  planId             String             @map("plan_id")
+  plan               Plan               @relation(fields: [planId], references: [id])
+  routerId           String             @map("router_id")
+  router             Router             @relation(fields: [routerId], references: [id])
+  /// Nom du compte tel qu'il existe dans `/ip/hotspot/user`.
+  hotspotUsername    String             @map("hotspot_username")
+  status             SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart DateTime           @map("current_period_start")
+  currentPeriodEnd   DateTime           @map("current_period_end")
+  /// Fin de la tolérance de 7 jours après expiration, avant suspension.
+  graceEndsAt        DateTime           @map("grace_ends_at")
+  suspendedAt        DateTime?          @map("suspended_at")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  payments Payment[]
+  devices  Device[]
+
+  @@unique([routerId, hotspotUsername])
+  @@index([status])
+  @@index([currentPeriodEnd])
+  @@map("subscriptions")
 }
 
 /// Client final (Section 19).
@@ -141,9 +207,10 @@ model Customer {
   createdAt DateTime       @default(now()) @map("created_at")
   updatedAt DateTime       @updatedAt @map("updated_at")
 
-  devices  Device[]
-  vouchers Voucher[]
-  payments Payment[]
+  devices       Device[]
+  vouchers      Voucher[]
+  payments      Payment[]
+  subscriptions Subscription[]
 
   @@map("customers")
 }
@@ -152,15 +219,28 @@ model Customer {
 /// unique : un CPE en NAT peut représenter plusieurs appareils réels derrière
 /// une seule adresse côté HotSpot (ne jamais supposer 1 MAC = 1 appareil).
 model Device {
-  id           String    @id @default(uuid())
-  customerId   String?   @map("customer_id")
-  customer     Customer? @relation(fields: [customerId], references: [id])
-  macAddress   String    @map("mac_address")
-  ipAddress    String?   @map("ip_address")
+  id           String     @id @default(uuid())
+  customerId   String?    @map("customer_id")
+  customer     Customer?  @relation(fields: [customerId], references: [id])
+  routerId     String?    @map("router_id")
+  router       Router?    @relation(fields: [routerId], references: [id])
+  subscriptionId String?  @map("subscription_id")
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+  macAddress   String     @map("mac_address")
+  ipAddress    String?    @map("ip_address")
   hostname     String?
-  deviceType   String?   @map("device_type")
-  firstSeenAt  DateTime  @default(now()) @map("first_seen_at")
-  lastSeenAt   DateTime  @default(now()) @map("last_seen_at")
+  /// Type retenu — proposé par détection, puis confirmé par un admin.
+  type         DeviceType @default(OTHER)
+  /// Ce que la détection automatique avait proposé, conservé pour audit.
+  detectedType DeviceType? @map("detected_type")
+  /// Ce sur quoi la détection s'est appuyée (nom DHCP, fabricant MAC…).
+  detectionSource String?  @map("detection_source")
+  /// Vrai quand un ip-binding `bypassed` existe pour cet appareil.
+  bypassEnabled   Boolean  @default(false) @map("bypass_enabled")
+  /// `.id` de l'entrée `/ip/hotspot/ip-binding` correspondante.
+  mikrotikBindingId String? @map("mikrotik_binding_id")
+  firstSeenAt  DateTime   @default(now()) @map("first_seen_at")
+  lastSeenAt   DateTime   @default(now()) @map("last_seen_at")
 
   vouchers Voucher[]
 
@@ -239,8 +319,11 @@ model Payment {
   method             PaymentMethod
   reference          String
   status             PaymentStatus @default(PENDING)
+  /// Un paiement solde soit un voucher (ticket), soit une période d'abonnement.
   voucherId          String?       @unique @map("voucher_id")
   voucher            Voucher?      @relation(fields: [voucherId], references: [id])
+  subscriptionId     String?       @map("subscription_id")
+  subscription       Subscription? @relation(fields: [subscriptionId], references: [id])
   verifiedByAdminId  String?       @map("verified_by_admin_id")
   verifiedByAdmin    AdminUser?    @relation(fields: [verifiedByAdminId], references: [id])
   createdAt          DateTime      @default(now()) @map("created_at")

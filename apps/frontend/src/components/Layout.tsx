@@ -4,10 +4,13 @@ import { useAuth } from '../auth/AuthContext';
 const NAV = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/sessions', label: 'Appareils actifs' },
+  { to: '/subscriptions', label: 'Abonnements' },
+  { to: '/devices', label: 'Appareils' },
   { to: '/plans', label: 'Offres' },
   { to: '/customers', label: 'Clients' },
   { to: '/vouchers', label: 'Vouchers' },
   { to: '/payments', label: 'Paiements' },
+  { to: '/routers', label: 'Routeurs' },
 ];
 
 export function Layout() {

@@ -7,7 +7,15 @@ import {
   RouterIdentityDto,
   SystemResourceDto,
 } from '../../src/dto/router.dto';
-import { HotspotActiveUserDto, HotspotHostDto, HotspotProfileDto, HotspotUserDto } from '../../src/dto/hotspot.dto';
+import {
+  DhcpLeaseDto,
+  HotspotActiveUserDto,
+  HotspotHostDto,
+  HotspotProfileDto,
+  HotspotUserDto,
+  IpBindingDto,
+  IpBindingType,
+} from '../../src/dto/hotspot.dto';
 import {
   UserManagerLimitationDto,
   UserManagerProfileDto,
@@ -17,10 +25,15 @@ import {
 } from '../../src/dto/user-manager.dto';
 import {
   AssignProfileDto,
+  CreateHotspotProfileDto,
+  CreateHotspotUserDto,
+  CreateIpBindingDto,
   CreateProfileDto,
   CreateUserManagerUserDto,
   DisconnectHotspotUserDto,
   RemoveProfileAssignmentDto,
+  UpdateHotspotProfileDto,
+  UpdateHotspotUserDto,
   UpdateProfileDto,
 } from '../../src/dto/commands.dto';
 import { MikrotikConflictError, MikrotikNotFoundError } from '../../src/errors/mikrotik.errors';
@@ -40,6 +53,10 @@ export class MockMikrotikService implements IMikrotikService {
   private limitations = new Map<string, UserManagerLimitationDto>();
   private userProfiles: UserManagerUserProfileDto[] = [];
   private activeHotspotUsers: HotspotActiveUserDto[] = [];
+  private hotspotUsers = new Map<string, HotspotUserDto>();
+  private hotspotProfiles = new Map<string, HotspotProfileDto>();
+  private ipBindings: IpBindingDto[] = [];
+  private dhcpLeases: DhcpLeaseDto[] = [];
   private idCounter = 1;
 
   private nextId(): string {
@@ -97,15 +114,150 @@ export class MockMikrotikService implements IMikrotikService {
   }
 
   async getHotspotUsers(): Promise<HotspotUserDto[]> {
-    return [];
+    return [...this.hotspotUsers.values()];
   }
 
   async getHotspotProfiles(): Promise<HotspotProfileDto[]> {
-    return [];
+    return [...this.hotspotProfiles.values()];
   }
 
   async disconnectHotspotUser(input: DisconnectHotspotUserDto): Promise<void> {
     this.activeHotspotUsers = this.activeHotspotUsers.filter((u) => u.id !== input.sessionId);
+  }
+
+  // ---------- HotSpot : écriture ----------
+
+  async createHotspotUser(input: CreateHotspotUserDto): Promise<HotspotUserDto> {
+    if (this.hotspotUsers.has(input.username)) {
+      throw new MikrotikConflictError(`Le compte HotSpot "${input.username}" existe déjà`);
+    }
+    const user: HotspotUserDto = {
+      id: this.nextId(),
+      username: input.username,
+      profile: input.profileName,
+      disabled: false,
+      comment: input.comment ?? null,
+      server: input.server ?? null,
+      bytesIn: 0,
+      bytesOut: 0,
+      limitUptimeSeconds: null,
+      limitBytesIn: null,
+      limitBytesOut: null,
+    };
+    this.hotspotUsers.set(input.username, user);
+    return user;
+  }
+
+  async updateHotspotUser(input: UpdateHotspotUserDto): Promise<HotspotUserDto> {
+    const existing = this.requireHotspotUser(input.username);
+    const updated: HotspotUserDto = {
+      ...existing,
+      profile: input.profileName ?? existing.profile,
+      comment: input.comment ?? existing.comment,
+    };
+    this.hotspotUsers.set(input.username, updated);
+    return updated;
+  }
+
+  async setHotspotUserDisabled(username: string, disabled: boolean): Promise<HotspotUserDto> {
+    const existing = this.requireHotspotUser(username);
+    const updated: HotspotUserDto = { ...existing, disabled };
+    this.hotspotUsers.set(username, updated);
+    return updated;
+  }
+
+  async deleteHotspotUser(username: string): Promise<void> {
+    this.requireHotspotUser(username);
+    this.hotspotUsers.delete(username);
+  }
+
+  async createHotspotProfile(input: CreateHotspotProfileDto): Promise<HotspotProfileDto> {
+    if (this.hotspotProfiles.has(input.name)) {
+      throw new MikrotikConflictError(`Le profil HotSpot "${input.name}" existe déjà`);
+    }
+    const profile: HotspotProfileDto = {
+      id: this.nextId(),
+      name: input.name,
+      rateLimitRxBitsPerSecond: input.rateLimitRxBitsPerSecond ?? null,
+      rateLimitTxBitsPerSecond: input.rateLimitTxBitsPerSecond ?? null,
+      sessionTimeoutSeconds: input.sessionTimeoutSeconds ?? null,
+      sharedUsers: input.sharedUsers ?? 1,
+      idleTimeoutSeconds: null,
+    };
+    this.hotspotProfiles.set(input.name, profile);
+    return profile;
+  }
+
+  async updateHotspotProfile(input: UpdateHotspotProfileDto): Promise<HotspotProfileDto> {
+    const existing = this.hotspotProfiles.get(input.name);
+    if (!existing) {
+      throw new MikrotikNotFoundError('Profil HotSpot', input.name);
+    }
+    const updated: HotspotProfileDto = {
+      ...existing,
+      rateLimitRxBitsPerSecond: input.rateLimitRxBitsPerSecond ?? existing.rateLimitRxBitsPerSecond,
+      rateLimitTxBitsPerSecond: input.rateLimitTxBitsPerSecond ?? existing.rateLimitTxBitsPerSecond,
+      sessionTimeoutSeconds: input.sessionTimeoutSeconds ?? existing.sessionTimeoutSeconds,
+      sharedUsers: input.sharedUsers ?? existing.sharedUsers,
+    };
+    this.hotspotProfiles.set(input.name, updated);
+    return updated;
+  }
+
+  // ---------- Contournement du portail captif ----------
+
+  async getIpBindings(): Promise<IpBindingDto[]> {
+    return [...this.ipBindings];
+  }
+
+  async createIpBinding(input: CreateIpBindingDto): Promise<IpBindingDto> {
+    const duplicate = this.ipBindings.find(
+      (binding) => binding.macAddress.toUpperCase() === input.macAddress.toUpperCase(),
+    );
+    if (duplicate) {
+      throw new MikrotikConflictError(`Un contournement existe déjà pour la MAC ${input.macAddress}`);
+    }
+    const binding: IpBindingDto = {
+      id: this.nextId(),
+      macAddress: input.macAddress,
+      address: input.address ?? null,
+      toAddress: null,
+      type: input.type,
+      server: input.server ?? null,
+      comment: input.comment ?? null,
+      disabled: false,
+    };
+    this.ipBindings.push(binding);
+    return binding;
+  }
+
+  async setIpBindingType(id: string, type: IpBindingType): Promise<IpBindingDto> {
+    const binding = this.ipBindings.find((b) => b.id === id);
+    if (!binding) {
+      throw new MikrotikNotFoundError('Contournement HotSpot', id);
+    }
+    binding.type = type;
+    return binding;
+  }
+
+  async deleteIpBinding(id: string): Promise<void> {
+    const before = this.ipBindings.length;
+    this.ipBindings = this.ipBindings.filter((b) => b.id !== id);
+    if (this.ipBindings.length === before) {
+      throw new MikrotikNotFoundError('Contournement HotSpot', id);
+    }
+  }
+
+  async getDhcpLeases(): Promise<DhcpLeaseDto[]> {
+    return [...this.dhcpLeases];
+  }
+
+  private requireHotspotUser(username: string): HotspotUserDto {
+    const user = this.hotspotUsers.get(username);
+    if (!user) {
+      throw new MikrotikNotFoundError('Compte HotSpot', username);
+    }
+    return user;
   }
 
   // ---------- User Manager : lecture ----------
@@ -223,5 +375,9 @@ export class MockMikrotikService implements IMikrotikService {
   /** Permet à un test de préparer un état (ex : simuler une session active). */
   seedActiveHotspotUser(user: HotspotActiveUserDto): void {
     this.activeHotspotUsers.push(user);
+  }
+
+  seedDhcpLease(lease: DhcpLeaseDto): void {
+    this.dhcpLeases.push(lease);
   }
 }

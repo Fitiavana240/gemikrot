@@ -7,21 +7,34 @@ import * as UmMapper from './mappers/user-manager.mapper';
 import { validate } from './validation/validate';
 import {
   assignProfileSchema,
+  createHotspotProfileSchema,
+  createHotspotUserSchema,
+  createIpBindingSchema,
   createProfileSchema,
   createUserManagerUserSchema,
   disconnectHotspotUserSchema,
+  hotspotUsernameParamSchema,
+  ipBindingTypeSchema,
   removeProfileAssignmentSchema,
+  updateHotspotProfileSchema,
+  updateHotspotUserSchema,
   updateProfileSchema,
   usernameParamSchema,
 } from './validation/schemas';
 import {
   AssignProfileDto,
+  CreateHotspotProfileDto,
+  CreateHotspotUserDto,
+  CreateIpBindingDto,
   CreateProfileDto,
   CreateUserManagerUserDto,
   DisconnectHotspotUserDto,
   RemoveProfileAssignmentDto,
+  UpdateHotspotProfileDto,
+  UpdateHotspotUserDto,
   UpdateProfileDto,
 } from './dto/commands.dto';
+import { IpBindingType } from './dto/hotspot.dto';
 import { MikrotikConflictError, MikrotikNotFoundError } from './errors/mikrotik.errors';
 
 /**
@@ -111,6 +124,166 @@ export class RouterOSMikrotikService implements IMikrotikService {
     await this.client.delete(`/ip/hotspot/active/${encodeURIComponent(data.sessionId)}`);
   }
 
+  // ==================== HotSpot : écriture ====================
+
+  async createHotspotUser(input: CreateHotspotUserDto) {
+    const data = validate(createHotspotUserSchema, input);
+
+    const existing = await this.findHotspotUserByUsername(data.username);
+    if (existing) {
+      throw new MikrotikConflictError(`Le compte HotSpot "${data.username}" existe déjà`, {
+        username: data.username,
+      });
+    }
+
+    this.logger.info('Création compte HotSpot', { username: data.username, profile: data.profileName });
+    const raw = await this.client.put<any>('/ip/hotspot/user', {
+      name: data.username,
+      password: data.password,
+      profile: data.profileName,
+      server: data.server,
+      comment: data.comment,
+    });
+    return HotspotMapper.mapHotspotUser(raw);
+  }
+
+  async updateHotspotUser(input: UpdateHotspotUserDto) {
+    const data = validate(updateHotspotUserSchema, input);
+    const target = await this.requireHotspotUser(data.username);
+
+    const payload: Record<string, unknown> = {};
+    if (data.profileName !== undefined) payload.profile = data.profileName;
+    if (data.password !== undefined) payload.password = data.password;
+    if (data.comment !== undefined) payload.comment = data.comment;
+
+    this.logger.info('Mise à jour compte HotSpot', { username: data.username });
+    const raw = await this.client.patch<any>(`/ip/hotspot/user/${target.id}`, payload);
+    return HotspotMapper.mapHotspotUser(raw);
+  }
+
+  async setHotspotUserDisabled(username: string, disabled: boolean) {
+    const validUsername = validate(hotspotUsernameParamSchema, username);
+    const target = await this.requireHotspotUser(validUsername);
+
+    this.logger.info(disabled ? 'Suspension compte HotSpot' : 'Réactivation compte HotSpot', {
+      username: validUsername,
+    });
+    const raw = await this.client.patch<any>(`/ip/hotspot/user/${target.id}`, {
+      disabled: disabled ? 'true' : 'false',
+    });
+    return HotspotMapper.mapHotspotUser(raw);
+  }
+
+  async deleteHotspotUser(username: string) {
+    const validUsername = validate(hotspotUsernameParamSchema, username);
+    const target = await this.requireHotspotUser(validUsername);
+
+    this.logger.info('Suppression compte HotSpot', { username: validUsername });
+    await this.client.delete(`/ip/hotspot/user/${target.id}`);
+  }
+
+  async createHotspotProfile(input: CreateHotspotProfileDto) {
+    const data = validate(createHotspotProfileSchema, input);
+
+    const profiles = await this.getHotspotProfiles();
+    if (profiles.some((profile) => profile.name === data.name)) {
+      throw new MikrotikConflictError(`Le profil HotSpot "${data.name}" existe déjà`, {
+        name: data.name,
+      });
+    }
+
+    this.logger.info('Création profil HotSpot', { name: data.name });
+    const raw = await this.client.put<any>('/ip/hotspot/user/profile', {
+      name: data.name,
+      'rate-limit': HotspotMapper.buildRateLimitToken(
+        data.rateLimitRxBitsPerSecond,
+        data.rateLimitTxBitsPerSecond,
+      ),
+      'shared-users': data.sharedUsers,
+      'session-timeout': data.sessionTimeoutSeconds ? `${data.sessionTimeoutSeconds}s` : undefined,
+    });
+    return HotspotMapper.mapHotspotProfile(raw);
+  }
+
+  async updateHotspotProfile(input: UpdateHotspotProfileDto) {
+    const data = validate(updateHotspotProfileSchema, input);
+    const profiles = await this.getHotspotProfiles();
+    const target = profiles.find((profile) => profile.name === data.name);
+    if (!target) {
+      throw new MikrotikNotFoundError('Profil HotSpot', data.name);
+    }
+
+    const payload: Record<string, unknown> = {};
+    if (data.rateLimitRxBitsPerSecond !== undefined || data.rateLimitTxBitsPerSecond !== undefined) {
+      payload['rate-limit'] = HotspotMapper.buildRateLimitToken(
+        data.rateLimitRxBitsPerSecond,
+        data.rateLimitTxBitsPerSecond,
+      );
+    }
+    if (data.sharedUsers !== undefined) payload['shared-users'] = data.sharedUsers;
+    if (data.sessionTimeoutSeconds !== undefined) {
+      payload['session-timeout'] = `${data.sessionTimeoutSeconds}s`;
+    }
+
+    this.logger.info('Mise à jour profil HotSpot', { name: data.name });
+    const raw = await this.client.patch<any>(`/ip/hotspot/user/profile/${target.id}`, payload);
+    return HotspotMapper.mapHotspotProfile(raw);
+  }
+
+  // ==================== Contournement du portail captif ====================
+
+  async getIpBindings() {
+    const raw = await this.client.get<any[]>('/ip/hotspot/ip-binding');
+    return raw.map(HotspotMapper.mapIpBinding);
+  }
+
+  async createIpBinding(input: CreateIpBindingDto) {
+    const data = validate(createIpBindingSchema, input);
+
+    const existing = await this.getIpBindings();
+    const duplicate = existing.find(
+      (binding) => binding.macAddress.toUpperCase() === data.macAddress.toUpperCase(),
+    );
+    if (duplicate) {
+      throw new MikrotikConflictError(
+        `Un contournement existe déjà pour la MAC ${data.macAddress}`,
+        { macAddress: data.macAddress, bindingId: duplicate.id },
+      );
+    }
+
+    this.logger.info('Création contournement HotSpot', {
+      macAddress: data.macAddress,
+      type: data.type,
+    });
+    const raw = await this.client.put<any>('/ip/hotspot/ip-binding', {
+      'mac-address': data.macAddress,
+      type: data.type,
+      server: data.server,
+      address: data.address,
+      comment: data.comment,
+    });
+    return HotspotMapper.mapIpBinding(raw);
+  }
+
+  async setIpBindingType(id: string, type: IpBindingType) {
+    const validType = validate(ipBindingTypeSchema, type);
+    this.logger.info('Changement de type de contournement', { bindingId: id, type: validType });
+    const raw = await this.client.patch<any>(`/ip/hotspot/ip-binding/${encodeURIComponent(id)}`, {
+      type: validType,
+    });
+    return HotspotMapper.mapIpBinding(raw);
+  }
+
+  async deleteIpBinding(id: string) {
+    this.logger.info('Suppression contournement HotSpot', { bindingId: id });
+    await this.client.delete(`/ip/hotspot/ip-binding/${encodeURIComponent(id)}`);
+  }
+
+  async getDhcpLeases() {
+    const raw = await this.client.get<any[]>('/ip/dhcp-server/lease');
+    return raw.map(HotspotMapper.mapDhcpLease);
+  }
+
   // ==================== User Manager : lecture ====================
 
   async getUserManagerUsers() {
@@ -153,7 +326,7 @@ export class RouterOSMikrotikService implements IMikrotikService {
     }
 
     this.logger.info('Création utilisateur User Manager', { username: data.username });
-    const raw = await this.client.post<any>('/user-manager/user', {
+    const raw = await this.client.put<any>('/user-manager/user', {
       name: data.username,
       password: data.password,
       'shared-users': data.sharedUsers ?? 1,
@@ -179,9 +352,9 @@ export class RouterOSMikrotikService implements IMikrotikService {
 
     // Un profil User Manager complet nécessite deux entités RouterOS liées :
     // le `profile` (identité) et le `profile-limitation` (règles réelles).
-    await this.client.post('/user-manager/profile', { name: data.name });
+    await this.client.put('/user-manager/profile', { name: data.name });
 
-    const raw = await this.client.post<any>('/user-manager/profile-limitation', {
+    const raw = await this.client.put<any>('/user-manager/profile-limitation', {
       name: data.name,
       validity: `${data.validityDurationSeconds}s`,
       'starts-when': data.startsWhen,
@@ -224,7 +397,7 @@ export class RouterOSMikrotikService implements IMikrotikService {
     }
 
     this.logger.info('Attribution de profil', { username: data.username, profile: data.profileName });
-    const raw = await this.client.post<any>('/user-manager/user-profile', {
+    const raw = await this.client.put<any>('/user-manager/user-profile', {
       user: data.username,
       profile: data.profileName,
     });
@@ -247,6 +420,20 @@ export class RouterOSMikrotikService implements IMikrotikService {
   }
 
   // ==================== Aides internes ====================
+
+  private async findHotspotUserByUsername(username: string) {
+    const users = await this.getHotspotUsers();
+    return users.find((user) => user.username === username) ?? null;
+  }
+
+  /** Même chose, mais lève `MikrotikNotFoundError` si le compte n'existe pas. */
+  private async requireHotspotUser(username: string) {
+    const user = await this.findHotspotUserByUsername(username);
+    if (!user) {
+      throw new MikrotikNotFoundError('Compte HotSpot', username);
+    }
+    return user;
+  }
 
   private async findUserManagerUserByUsername(username: string) {
     const users = await this.getUserManagerUsers();

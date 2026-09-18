@@ -1,4 +1,4 @@
-import { IsEnum, IsPositive, IsString, IsUUID } from 'class-validator';
+import { IsEnum, IsOptional, IsPositive, IsString, IsUUID } from 'class-validator';
 import { PaymentMethod } from '@prisma/client';
 
 export class CreatePaymentDto {
@@ -7,6 +7,11 @@ export class CreatePaymentDto {
 
   @IsUUID()
   planId!: string;
+
+  /** Renseigné pour un renouvellement ; absent pour la vente d'un ticket. */
+  @IsOptional()
+  @IsUUID()
+  subscriptionId?: string;
 
   @IsPositive()
   amountAr!: number;

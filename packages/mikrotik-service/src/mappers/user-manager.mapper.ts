@@ -7,7 +7,11 @@ import {
   UserManagerUserProfileDto,
   UserManagerUserProfileState,
 } from '../dto/user-manager.dto';
-import { parseRouterOsDuration } from './hotspot.mapper';
+import { formatRateToken, parseRateToken, parseRouterOsDuration } from './hotspot.mapper';
+
+// `formatRateToken` reste réexporté ici : le service l'importe déjà depuis ce
+// module, et les helpers de débit vivent désormais dans `hotspot.mapper`.
+export { formatRateToken };
 
 export function mapUserManagerUser(raw: any): UserManagerUserDto {
   return {
@@ -84,20 +88,3 @@ function mapUserProfileState(state: unknown): UserManagerUserProfileState {
   }
 }
 
-/** Convertit un token de rate-limit RouterOS (ex: "2M", "512k") en bits/s. */
-function parseRateToken(token: string): number | null {
-  const match = token.trim().match(/^([\d.]+)([kKmMgG]?)$/);
-  if (!match) return null;
-  const value = parseFloat(match[1]);
-  const unit = match[2].toLowerCase();
-  const multiplier = unit === 'k' ? 1_000 : unit === 'm' ? 1_000_000 : unit === 'g' ? 1_000_000_000 : 1;
-  return Math.round(value * multiplier);
-}
-
-/** Opération inverse : bits/s applicatifs → token RouterOS ("2M", "512k"). */
-export function formatRateToken(bitsPerSecond?: number): string | undefined {
-  if (bitsPerSecond == null) return undefined;
-  if (bitsPerSecond >= 1_000_000) return `${bitsPerSecond / 1_000_000}M`;
-  if (bitsPerSecond >= 1_000) return `${bitsPerSecond / 1_000}k`;
-  return `${bitsPerSecond}`;
-}

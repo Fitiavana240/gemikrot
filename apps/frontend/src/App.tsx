@@ -5,6 +5,9 @@ import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { SessionsPage } from './pages/SessionsPage';
+import { SubscriptionsPage } from './pages/SubscriptionsPage';
+import { DevicesPage } from './pages/DevicesPage';
+import { RoutersPage } from './pages/RoutersPage';
 import { PlansPage } from './pages/PlansPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { VouchersPage } from './pages/VouchersPage';
@@ -25,6 +28,9 @@ export function App() {
           >
             <Route path="/" element={<DashboardPage />} />
             <Route path="/sessions" element={<SessionsPage />} />
+            <Route path="/subscriptions" element={<SubscriptionsPage />} />
+            <Route path="/devices" element={<DevicesPage />} />
+            <Route path="/routers" element={<RoutersPage />} />
             <Route path="/plans" element={<PlansPage />} />
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/vouchers" element={<VouchersPage />} />

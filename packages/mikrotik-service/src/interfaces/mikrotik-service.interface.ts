@@ -6,7 +6,15 @@ import {
   RouterIdentityDto,
   SystemResourceDto,
 } from '../dto/router.dto';
-import { HotspotActiveUserDto, HotspotHostDto, HotspotProfileDto, HotspotUserDto } from '../dto/hotspot.dto';
+import {
+  DhcpLeaseDto,
+  HotspotActiveUserDto,
+  HotspotHostDto,
+  HotspotProfileDto,
+  HotspotUserDto,
+  IpBindingDto,
+  IpBindingType,
+} from '../dto/hotspot.dto';
 import {
   UserManagerLimitationDto,
   UserManagerProfileDto,
@@ -16,10 +24,15 @@ import {
 } from '../dto/user-manager.dto';
 import {
   AssignProfileDto,
+  CreateHotspotProfileDto,
+  CreateHotspotUserDto,
+  CreateIpBindingDto,
   CreateProfileDto,
   CreateUserManagerUserDto,
   DisconnectHotspotUserDto,
   RemoveProfileAssignmentDto,
+  UpdateHotspotProfileDto,
+  UpdateHotspotUserDto,
   UpdateProfileDto,
 } from '../dto/commands.dto';
 
@@ -55,6 +68,28 @@ export interface IMikrotikService {
   getHotspotUsers(): Promise<HotspotUserDto[]>;
   getHotspotProfiles(): Promise<HotspotProfileDto[]>;
   disconnectHotspotUser(input: DisconnectHotspotUserDto): Promise<void>;
+
+  // ---------- HotSpot : écriture (base AAA réellement exploitée) ----------
+
+  createHotspotUser(input: CreateHotspotUserDto): Promise<HotspotUserDto>;
+  updateHotspotUser(input: UpdateHotspotUserDto): Promise<HotspotUserDto>;
+  /** Suspension / réactivation d'un abonné sans perdre son compte. */
+  setHotspotUserDisabled(username: string, disabled: boolean): Promise<HotspotUserDto>;
+  deleteHotspotUser(username: string): Promise<void>;
+
+  createHotspotProfile(input: CreateHotspotProfileDto): Promise<HotspotProfileDto>;
+  updateHotspotProfile(input: UpdateHotspotProfileDto): Promise<HotspotProfileDto>;
+
+  // ---------- Contournement du portail captif ----------
+
+  getIpBindings(): Promise<IpBindingDto[]>;
+  createIpBinding(input: CreateIpBindingDto): Promise<IpBindingDto>;
+  /** `bypassed` (accès sans portail) ↔ `blocked` (suspension d'un abonné). */
+  setIpBindingType(id: string, type: IpBindingType): Promise<IpBindingDto>;
+  deleteIpBinding(id: string): Promise<void>;
+
+  /** Baux DHCP — seule source côté routeur pour deviner le type d'appareil. */
+  getDhcpLeases(): Promise<DhcpLeaseDto[]>;
 
   // ---------- User Manager : lecture ----------
 

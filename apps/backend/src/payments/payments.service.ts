@@ -3,6 +3,7 @@ import { Payment, PaymentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { VouchersService } from '../vouchers/vouchers.service.js';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 import { PAYMENT_PROVIDER, type PaymentProvider } from './providers/payment-provider.interface.js';
 import type { CreatePaymentDto } from './dto/create-payment.dto.js';
 
@@ -12,6 +13,7 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly vouchers: VouchersService,
+    private readonly subscriptions: SubscriptionsService,
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
   ) {}
 
@@ -46,6 +48,7 @@ export class PaymentsService {
       data: {
         customerId: dto.customerId,
         planId: dto.planId,
+        subscriptionId: dto.subscriptionId,
         amountAr: dto.amountAr,
         method: dto.method,
         reference: dto.reference,
@@ -70,6 +73,11 @@ export class PaymentsService {
     if (!verification.verified) {
       await this.markStatus(payment.id, PaymentStatus.REJECTED, adminUserId, 'FAILURE');
       throw new ConflictException(`Paiement refusé : ${verification.reason ?? 'non vérifié'}`);
+    }
+
+    // Un paiement solde soit une période d'abonnement, soit un ticket.
+    if (payment.subscriptionId) {
+      return this.verifySubscriptionPayment(payment, adminUserId);
     }
 
     const voucher =
@@ -105,6 +113,39 @@ export class PaymentsService {
       payloadDiff: { voucherId: activated.id, amountAr: payment.amountAr.toString() },
     });
 
+    return this.findOne(payment.id);
+  }
+
+  /**
+   * Renouvellement d'abonnement : même garantie d'idempotence que pour un
+   * ticket — l'update conditionnel sur `PENDING` empêche deux vérifications
+   * concurrentes de prolonger deux fois la même période.
+   */
+  private async verifySubscriptionPayment(payment: Payment, adminUserId: string): Promise<Payment> {
+    const claimed = await this.prisma.payment.updateMany({
+      where: { id: payment.id, status: PaymentStatus.PENDING },
+      data: {
+        status: PaymentStatus.VERIFIED,
+        verifiedByAdminId: adminUserId,
+        verifiedAt: new Date(),
+      },
+    });
+    if (claimed.count === 0) {
+      throw new ConflictException(`Paiement ${payment.id} déjà vérifié par une requête concurrente`);
+    }
+
+    await this.subscriptions.renew(payment.subscriptionId!, payment, adminUserId);
+
+    await this.audit.log({
+      adminUserId,
+      action: 'VERIFY_PAYMENT',
+      targetType: 'Payment',
+      targetId: payment.id,
+      payloadDiff: {
+        subscriptionId: payment.subscriptionId,
+        amountAr: payment.amountAr.toString(),
+      },
+    });
     return this.findOne(payment.id);
   }
 

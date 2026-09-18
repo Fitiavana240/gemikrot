@@ -1,15 +1,9 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { Plan, ProfileStartsWhen } from '@prisma/client';
-import type { IMikrotikService } from '@wifitati/mikrotik-service';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Plan } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { MIKROTIK_SERVICE } from '../mikrotik/mikrotik.constants.js';
+import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 import type { CreatePlanDto } from './dto/create-plan.dto.js';
 import type { UpdatePlanDto } from './dto/update-plan.dto.js';
-
-const STARTS_WHEN_TO_MIKROTIK: Record<ProfileStartsWhen, 'logon' | 'creation'> = {
-  LOGON: 'logon',
-  CREATION: 'creation',
-};
 
 function slugifyProfileName(name: string): string {
   return name
@@ -24,7 +18,7 @@ function slugifyProfileName(name: string): string {
 export class PlansService {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(MIKROTIK_SERVICE) private readonly mikrotik: IMikrotikService,
+    private readonly clients: MikrotikClientFactory,
   ) {}
 
   findAll(): Promise<Plan[]> {
@@ -38,11 +32,13 @@ export class PlansService {
   }
 
   /**
-   * Crée l'offre en base puis provisionne le profil User Manager
-   * correspondant. Si la création RouterOS échoue, la ligne Postgres est
-   * annulée pour ne jamais laisser une offre "orpheline" sans profil réseau
-   * (Section 8 : toute écriture RouterOS doit rester cohérente avec l'état
-   * applicatif).
+   * Crée l'offre en base puis provisionne le profil HotSpot correspondant.
+   * Si la création RouterOS échoue, la ligne Postgres est annulée pour ne
+   * jamais laisser une offre "orpheline" sans profil réseau (Section 8).
+   *
+   * Le profil est créé sur le routeur par défaut : la politique de réplication
+   * entre sites (tarifs communs ou par site) n'est pas encore arbitrée, et
+   * un seul routeur est déployé aujourd'hui.
    */
   async create(dto: CreatePlanDto): Promise<Plan> {
     const mikrotikProfileName = await this.reserveProfileName(dto.name);
@@ -58,18 +54,20 @@ export class PlansService {
         rateLimitTxBps: dto.rateLimitTxBps,
         transferLimitBytes: dto.transferLimitBytes,
         maxSharedUsers: dto.maxSharedUsers,
+        kind: dto.subscriptionPeriodDays ? 'SUBSCRIPTION' : 'TICKET',
+        subscriptionPeriodDays: dto.subscriptionPeriodDays,
+        sessionTimeoutSeconds: dto.validityDurationSeconds,
         mikrotikProfileName,
       },
     });
 
     try {
-      await this.mikrotik.createProfile({
+      const mikrotik = await this.clients.forDefaultRouter();
+      await mikrotik.createHotspotProfile({
         name: mikrotikProfileName,
-        validityDurationSeconds: dto.validityDurationSeconds,
-        startsWhen: STARTS_WHEN_TO_MIKROTIK[dto.startsWhen],
         rateLimitRxBitsPerSecond: dto.rateLimitRxBps,
         rateLimitTxBitsPerSecond: dto.rateLimitTxBps,
-        transferLimitBytes: dto.transferLimitBytes,
+        sessionTimeoutSeconds: dto.validityDurationSeconds,
         sharedUsers: dto.maxSharedUsers,
       });
     } catch (error) {
@@ -83,13 +81,12 @@ export class PlansService {
   async update(id: string, dto: UpdatePlanDto): Promise<Plan> {
     const existing = await this.findOne(id);
 
-    await this.mikrotik.updateProfile({
+    const mikrotik = await this.clients.forDefaultRouter();
+    await mikrotik.updateHotspotProfile({
       name: existing.mikrotikProfileName,
-      validityDurationSeconds: dto.validityDurationSeconds,
-      startsWhen: dto.startsWhen ? STARTS_WHEN_TO_MIKROTIK[dto.startsWhen] : undefined,
       rateLimitRxBitsPerSecond: dto.rateLimitRxBps,
       rateLimitTxBitsPerSecond: dto.rateLimitTxBps,
-      transferLimitBytes: dto.transferLimitBytes,
+      sessionTimeoutSeconds: dto.validityDurationSeconds,
       sharedUsers: dto.maxSharedUsers,
     });
 
@@ -104,6 +101,8 @@ export class PlansService {
         rateLimitTxBps: dto.rateLimitTxBps,
         transferLimitBytes: dto.transferLimitBytes,
         maxSharedUsers: dto.maxSharedUsers,
+        subscriptionPeriodDays: dto.subscriptionPeriodDays,
+        sessionTimeoutSeconds: dto.validityDurationSeconds,
       },
     });
   }

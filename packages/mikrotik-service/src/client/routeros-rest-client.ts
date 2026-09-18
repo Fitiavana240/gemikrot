@@ -1,5 +1,5 @@
-import { Agent, fetch as undiciFetch, type Response as UndiciResponse } from 'undici';
-import type { PeerCertificate } from 'node:tls';
+import { Agent, buildConnector, fetch as undiciFetch, type Response as UndiciResponse } from 'undici';
+import type { TLSSocket } from 'node:tls';
 import { RouterOSClientConfig, DEFAULT_CLIENT_OPTIONS } from '../config/mikrotik-client.config';
 import { ILogger } from '../logging/logger.interface';
 import {
@@ -38,46 +38,62 @@ export class RouterOSRestClient {
   }
 
   /**
-   * `fetch` global de Node vérifie la chaîne de certification par défaut :
-   * suffisant pour un certificat public, mais un hAP en lab/local n'a
-   * qu'un certificat auto-signé. `rejectUnauthorized: false` accepte ce
-   * certificat ; si `tlsFingerprint` est fourni, l'empreinte SHA-256 réelle
-   * est en plus vérifiée pour ne pas accepter n'importe quel certificat
-   * (épinglage — recommandé dès que le routeur est joignable depuis
-   * l'extérieur du LAN de confiance).
+   * `fetch` vérifie la chaîne de certification par défaut : suffisant pour un
+   * certificat public, mais un hAP en lab/local n'a qu'un certificat
+   * auto-signé, qu'aucune autorité ne peut valider.
+   *
+   * Avec `tlsFingerprint`, l'empreinte SHA-256 du certificat réellement
+   * présenté est comparée à celle attendue, ce qui vaut mieux que d'accepter
+   * n'importe quel certificat. La vérification se fait dans un connecteur
+   * dédié et NON via `checkServerIdentity` : Node n'appelle jamais ce dernier
+   * quand `rejectUnauthorized` vaut `false`, l'épinglage n'aurait alors
+   * strictement rien contrôlé.
    */
   private buildDispatcher(): Agent | undefined {
     if (this.config.rejectUnauthorized && !this.config.tlsFingerprint) {
       return undefined;
     }
-    const expectedFingerprint = this.config.tlsFingerprint?.replace(/:/g, '').toUpperCase();
-    return new Agent({
-      connect: {
-        rejectUnauthorized: false,
-        // Absente (et non `undefined`) quand il n'y a pas d'empreinte à
-        // épingler : Node valide strictement le type de cette clé dès
-        // qu'elle est présente, même avec une valeur `undefined`.
-        ...(expectedFingerprint
-          ? {
-              checkServerIdentity: (_hostname: string, cert: PeerCertificate) => {
-                const actual = cert.fingerprint256?.replace(/:/g, '').toUpperCase();
-                if (actual !== expectedFingerprint) {
-                  return new Error(
-                    `Empreinte TLS inattendue pour ${this.config.baseUrl} — épinglage échoué`,
-                  );
-                }
-                return undefined;
-              },
-            }
-          : {}),
-      },
-    });
+
+    const expected = this.config.tlsFingerprint?.replace(/:/g, '').toUpperCase();
+    const baseConnector = buildConnector({ rejectUnauthorized: false });
+    if (!expected) {
+      return new Agent({ connect: baseConnector });
+    }
+
+    const baseUrl = this.config.baseUrl;
+    const pinningConnector: buildConnector.connector = (options, callback) =>
+      baseConnector(options, (error, socket) => {
+        if (error) return callback(error, null);
+
+        const certificate = (socket as TLSSocket).getPeerCertificate?.();
+        const actual = certificate?.fingerprint256?.replace(/:/g, '').toUpperCase();
+        if (actual !== expected) {
+          socket?.destroy();
+          return callback(
+            new Error(`Empreinte TLS inattendue pour ${baseUrl} — épinglage échoué`),
+            null,
+          );
+        }
+        return callback(null, socket);
+      });
+
+    return new Agent({ connect: pinningConnector });
   }
 
   async get<T>(path: string, query?: Record<string, string | number | boolean>): Promise<T> {
     return this.execute<T>('GET', path, undefined, query);
   }
 
+  /**
+   * Création d'une entrée. RouterOS v7 attend un PUT sur le chemin de la
+   * collection : un POST y est interprété comme l'appel d'une *commande* et
+   * répond "no such command".
+   */
+  async put<T>(path: string, body?: unknown): Promise<T> {
+    return this.execute<T>('PUT', path, body);
+  }
+
+  /** Exécution d'une commande RouterOS (ex: `/ip/hotspot/active/remove`). */
   async post<T>(path: string, body?: unknown): Promise<T> {
     return this.execute<T>('POST', path, body);
   }

@@ -1,8 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PaymentStatus } from '@prisma/client';
-import type { IMikrotikService } from '@wifitati/mikrotik-service';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { MIKROTIK_SERVICE } from '../mikrotik/mikrotik.constants.js';
+import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 
 function startOfDay(from = new Date()): Date {
   return new Date(from.getFullYear(), from.getMonth(), from.getDate());
@@ -21,7 +20,7 @@ function startOfMonth(from = new Date()): Date {
 export class DashboardService {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(MIKROTIK_SERVICE) private readonly mikrotik: IMikrotikService,
+    private readonly clients: MikrotikClientFactory,
   ) {}
 
   async getSummary() {
@@ -54,7 +53,11 @@ export class DashboardService {
       }),
       this.prisma.payment.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
       this.prisma.customer.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
-      this.mikrotik.getHotspotActiveUsers().catch(() => []),
+      // Le routeur peut être injoignable : le dashboard reste consultable.
+      this.clients
+        .forDefaultRouter()
+        .then((mikrotik) => mikrotik.getHotspotActiveUsers())
+        .catch(() => []),
     ]);
 
     return {
