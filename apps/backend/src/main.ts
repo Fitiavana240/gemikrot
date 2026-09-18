@@ -1,5 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 
 // Prisma retourne les colonnes BigInt (ex: Plan.transferLimitBytes) sous
@@ -9,7 +11,18 @@ import { AppModule } from './app.module.js';
 };
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // `rawBody` conserve le corps de la requête tel qu'il est arrivé : la
+  // signature du webhook SMS porte sur les octets reçus, pas sur un objet
+  // re-sérialisé, dont l'ordre des clés et les espaces différeraient.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+
+  app.use(helmet());
+
+  // Derrière le portail captif, le routeur relaie les requêtes des clients :
+  // sans cette option elles arrivent toutes avec l'adresse du routeur, et une
+  // limite de débit par IP bannirait tout le quartier d'un coup.
+  app.set('trust proxy', 1);
+
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
   );

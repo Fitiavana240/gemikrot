@@ -108,4 +108,24 @@ describe('Cloisonnement entre exploitants', () => {
 
     expect(seen.length).toBeGreaterThanOrEqual(2);
   });
+
+  describe('scopedStrict', () => {
+    it('refuse de travailler hors de tout exploitant', () => {
+      // `scoped` dégraderait ici en client non cloisonné et renverrait les
+      // lignes de tout le monde : c'est exactement ce qu'une tâche de fond ou
+      // un point d'entrée public ne doit pas pouvoir faire par inadvertance.
+      expect(() => prisma.scopedStrict.customer.findMany()).toThrow(
+        /sans exploitant/i,
+      );
+    });
+
+    it("cloisonne dès qu'un exploitant est posé", async () => {
+      const seenByA = await tenantContext.runAsTenant(tenantA, () =>
+        prisma.scopedStrict.customer.findMany(),
+      );
+
+      expect(seenByA.every((c) => c.tenantId === tenantA)).toBe(true);
+      expect(seenByA.some((c) => c.name === 'Client A')).toBe(true);
+    });
+  });
 });
