@@ -10,6 +10,7 @@ import { DevicesPage } from './pages/DevicesPage';
 import { RoutersPage } from './pages/RoutersPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { TenantsPage } from './pages/TenantsPage';
+import { UserManagerPage } from './pages/UserManagerPage';
 import { SignupPage } from './pages/SignupPage';
 import { PlansPage } from './pages/PlansPage';
 import { CustomersPage } from './pages/CustomersPage';
@@ -35,6 +36,7 @@ export function App() {
             <Route path="/subscriptions" element={<SubscriptionsPage />} />
             <Route path="/devices" element={<DevicesPage />} />
             <Route path="/routers" element={<RoutersPage />} />
+            <Route path="/user-manager" element={<UserManagerPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/tenants" element={<TenantsPage />} />
             <Route path="/plans" element={<PlansPage />} />

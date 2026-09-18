@@ -14,6 +14,7 @@ const NAV: { to: string; label: string; end?: boolean }[] = [
   { to: '/vouchers', label: 'Vouchers' },
   { to: '/payments', label: 'Paiements' },
   { to: '/routers', label: 'Routeurs' },
+  { to: '/user-manager', label: 'User Manager' },
   { to: '/settings', label: 'Paramètres' },
 ];
 
