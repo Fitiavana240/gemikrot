@@ -63,12 +63,14 @@ describe('SubscriptionsService', () => {
   let audit: { log: ReturnType<typeof vi.fn> };
   let mikrotik: ReturnType<typeof createFakeMikrotik>;
   let clients: Record<string, ReturnType<typeof vi.fn>>;
+  let provisioning: { reconcile: ReturnType<typeof vi.fn> };
 
   function buildService(fakePrisma = prisma) {
     return new SubscriptionsService(
       fakePrisma as any,
       audit as any,
       clients as any,
+      provisioning as any,
       tenantContext as any,
     );
   }
@@ -80,6 +82,13 @@ describe('SubscriptionsService', () => {
     clients = {
       forRouter: vi.fn(async () => mikrotik),
       getDefaultRouterId: vi.fn(async () => 'router-1'),
+    };
+    provisioning = {
+      reconcile: vi.fn(async () => ({
+        profileName: '1Mois-15000Ar',
+        limitationName: null,
+        actions: [],
+      })),
     };
   });
 

@@ -221,6 +221,15 @@ model Plan {
   sessionTimeoutSeconds    Int?       @map("session_timeout_seconds")
   /// Prix déduit du nom du profil lors de l'import, à confirmer par un admin.
   priceNeedsReview         Boolean    @default(false) @map("price_needs_review")
+  /// Profil `/user-manager/profile` portant la validité calendaire de
+  /// l'offre. `null` tant que l'offre n'a pas été réconciliée : c'est ce qui
+  /// distingue une offre servie par User Manager d'une offre encore
+  /// uniquement adossée au profil HotSpot historique.
+  umProfileName            String?    @map("um_profile_name")
+  /// Limitation `/user-manager/limitation` portant ses plafonds de débit et
+  /// de volume. `null` quand l'offre n'en impose aucun.
+  umLimitationName         String?    @map("um_limitation_name")
+  umSyncedAt               DateTime?  @map("um_synced_at")
   createdAt                DateTime   @default(now()) @map("created_at")
   updatedAt                DateTime   @updatedAt @map("updated_at")
 
@@ -231,6 +240,7 @@ model Plan {
 
   @@unique([tenantId, name])
   @@unique([tenantId, mikrotikProfileName])
+  @@unique([tenantId, umProfileName])
   @@map("plans")
 }
 

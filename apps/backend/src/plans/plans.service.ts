@@ -2,7 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { Plan } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
-import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
+import { PlanProvisioningService } from './plan-provisioning.service.js';
 import type { CreatePlanDto } from './dto/create-plan.dto.js';
 import type { UpdatePlanDto } from './dto/update-plan.dto.js';
 
@@ -19,7 +19,7 @@ function slugifyProfileName(name: string): string {
 export class PlansService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly clients: MikrotikClientFactory,
+    private readonly provisioning: PlanProvisioningService,
     private readonly tenantContext: TenantContextService,
   ) {}
 
@@ -34,13 +34,17 @@ export class PlansService {
   }
 
   /**
-   * Crée l'offre en base puis provisionne le profil HotSpot correspondant.
-   * Si la création RouterOS échoue, la ligne Postgres est annulée pour ne
-   * jamais laisser une offre "orpheline" sans profil réseau (Section 8).
+   * Crée l'offre en base puis la projette sur User Manager. Si l'écriture
+   * RouterOS échoue, la ligne Postgres est annulée pour ne jamais laisser une
+   * offre "orpheline" sans profil réseau (Section 8).
    *
    * Le profil est créé sur le routeur par défaut : la politique de réplication
    * entre sites (tarifs communs ou par site) n'est pas encore arbitrée, et
    * un seul routeur est déployé aujourd'hui.
+   *
+   * Les nouvelles offres n'ont plus de profil HotSpot : leur validité est
+   * calendaire et tenue par User Manager. Les offres existantes gardent le
+   * leur, et gagnent un profil User Manager à leur première réconciliation.
    */
   async create(dto: CreatePlanDto): Promise<Plan> {
     const mikrotikProfileName = await this.reserveProfileName(dto.name);
@@ -65,35 +69,24 @@ export class PlansService {
     });
 
     try {
-      const mikrotik = await this.clients.forDefaultRouter();
-      await mikrotik.createHotspotProfile({
-        name: mikrotikProfileName,
-        rateLimitRxBitsPerSecond: dto.rateLimitRxBps,
-        rateLimitTxBitsPerSecond: dto.rateLimitTxBps,
-        sessionTimeoutSeconds: dto.validityDurationSeconds,
-        sharedUsers: dto.maxSharedUsers,
-      });
+      await this.provisioning.reconcile(plan.id);
     } catch (error) {
       await this.prisma.scoped.plan.delete({ where: { id: plan.id } });
       throw error;
     }
 
-    return plan;
+    return this.findOne(plan.id);
   }
 
+  /**
+   * La base est écrite d'abord, le routeur ensuite : la réconciliation lit
+   * l'offre telle qu'elle vient d'être enregistrée, et ne peut donc pas
+   * appliquer un prix ou une validité que Postgres n'aurait pas retenus.
+   */
   async update(id: string, dto: UpdatePlanDto): Promise<Plan> {
-    const existing = await this.findOne(id);
+    await this.findOne(id);
 
-    const mikrotik = await this.clients.forDefaultRouter();
-    await mikrotik.updateHotspotProfile({
-      name: existing.mikrotikProfileName,
-      rateLimitRxBitsPerSecond: dto.rateLimitRxBps,
-      rateLimitTxBitsPerSecond: dto.rateLimitTxBps,
-      sessionTimeoutSeconds: dto.validityDurationSeconds,
-      sharedUsers: dto.maxSharedUsers,
-    });
-
-    return this.prisma.scoped.plan.update({
+    await this.prisma.scoped.plan.update({
       where: { id },
       data: {
         description: dto.description,
@@ -108,6 +101,9 @@ export class PlansService {
         sessionTimeoutSeconds: dto.validityDurationSeconds,
       },
     });
+
+    await this.provisioning.reconcile(id);
+    return this.findOne(id);
   }
 
   async archive(id: string): Promise<Plan> {

@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { Payment, Prisma, Subscription, SubscriptionStatus } from '@prisma/client';
 import { MikrotikNotFoundError, type IMikrotikService } from '@wifitati/mikrotik-service';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PlanProvisioningService } from '../plans/plan-provisioning.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
@@ -30,6 +31,7 @@ export class SubscriptionsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly clients: MikrotikClientFactory,
+    private readonly provisioning: PlanProvisioningService,
     private readonly tenantContext: TenantContextService,
   ) {}
 
@@ -75,7 +77,7 @@ export class SubscriptionsService {
     // L'abonnement passe par User Manager : sa validité est calendaire, donc
     // un mois reste un mois même si le client se déconnecte et se reconnecte
     // — ce que le `session-timeout` d'un profil HotSpot ne garantit pas.
-    await this.ensureUserManagerProfile(mikrotik, plan);
+    const { profileName } = await this.provisioning.reconcile(plan.id, routerId);
     await mikrotik.createUserManagerUser({
       username: dto.hotspotUsername,
       password: dto.password,
@@ -83,7 +85,7 @@ export class SubscriptionsService {
     });
     const assignment = await mikrotik.assignProfile({
       username: dto.hotspotUsername,
-      profileName: plan.mikrotikProfileName,
+      profileName,
     });
 
     const start = new Date();
@@ -225,30 +227,6 @@ export class SubscriptionsService {
         return { subscription, daysRemaining, reason: 'IN_GRACE', recommendedAction: 'WARN_CUSTOMER' };
       }
       return { subscription, daysRemaining, reason: 'EXPIRING_SOON', recommendedAction: 'WARN_CUSTOMER' };
-    });
-  }
-
-  /**
-   * Crée au besoin le profil User Manager correspondant à l'offre. Les
-   * profils HotSpot existants ne portent pas de validité calendaire : il faut
-   * leur pendant côté User Manager pour que l'échéance soit tenue par le
-   * routeur.
-   */
-  private async ensureUserManagerProfile(
-    mikrotik: IMikrotikService,
-    plan: { mikrotikProfileName: string; subscriptionPeriodDays: number | null; maxSharedUsers: number | null; price: Prisma.Decimal },
-  ): Promise<void> {
-    const profiles = await mikrotik.getUserManagerProfiles();
-    if (profiles.some((profile) => profile.name === plan.mikrotikProfileName)) return;
-
-    await mikrotik.createProfile({
-      name: plan.mikrotikProfileName,
-      validityDurationSeconds: (plan.subscriptionPeriodDays ?? 30) * 86_400,
-      // La validité ne court qu'à la première connexion : un abonnement vendu
-      // à l'avance ne s'use pas tant que le client ne s'en sert pas.
-      startsWhen: 'first-auth',
-      price: Number(plan.price),
-      sharedUsers: plan.maxSharedUsers ?? undefined,
     });
   }
 

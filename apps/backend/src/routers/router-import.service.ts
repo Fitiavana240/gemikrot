@@ -156,8 +156,14 @@ export class RouterImportService {
       const plan = existing
         ? await this.prisma.scoped.plan.update({
             where: { id: existing.id },
-            // Le prix saisi par un admin prime sur la déduction depuis le nom.
-            data: { ...data, price: existing.priceNeedsReview ? data.price : existing.price },
+            // Ce que l'admin a réglé prime sur ce que l'import déduit. Le prix
+            // dès qu'il a été confirmé, et l'ensemble des paramètres réseau
+            // dès que l'offre est servie par User Manager : les valeurs
+            // relues ici viennent du `session-timeout` du profil HotSpot, qui
+            // n'est plus la référence et écraserait la validité calendaire.
+            data: existing.umProfileName
+              ? { mikrotikProfileName: data.mikrotikProfileName }
+              : { ...data, price: existing.priceNeedsReview ? data.price : existing.price },
           })
         : await this.prisma.scoped.plan.create({ data: { ...data, tenantId } });
 
