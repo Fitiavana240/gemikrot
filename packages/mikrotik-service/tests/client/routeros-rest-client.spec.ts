@@ -7,12 +7,20 @@ import {
 } from '../../src/errors/mikrotik.errors';
 import { createSilentLogger } from '../mocks/silent-logger';
 
+// `undici.fetch` est exporté en lecture seule : jest.spyOn ne peut pas le
+// redéfinir, d'où un jest.mock explicite au niveau du module.
+const fetchMock = jest.fn();
+jest.mock('undici', () => ({
+  ...jest.requireActual('undici'),
+  fetch: (...args: unknown[]) => fetchMock(...args),
+}));
+
 function jsonResponse(status: number, body: unknown) {
   return {
     ok: status >= 200 && status < 300,
     status,
     json: async () => body,
-  } as Response;
+  };
 }
 
 describe('RouterOSRestClient', () => {
@@ -26,11 +34,11 @@ describe('RouterOSRestClient', () => {
   };
 
   beforeEach(() => {
-    jest.restoreAllMocks();
+    fetchMock.mockReset();
   });
 
   it('retourne les données JSON en cas de succès', async () => {
-    jest.spyOn(global, 'fetch').mockResolvedValueOnce(jsonResponse(200, { name: 'wifitati-hap' }));
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { name: 'wifitati-hap' }));
 
     const client = new RouterOSRestClient(baseConfig, createSilentLogger());
     const result = await client.get<{ name: string }>('/system/identity');
@@ -39,7 +47,7 @@ describe('RouterOSRestClient', () => {
   });
 
   it('mappe un 401 en MikrotikAuthError et NE retente PAS', async () => {
-    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse(401, {}));
+    fetchMock.mockResolvedValue(jsonResponse(401, {}));
 
     const client = new RouterOSRestClient(baseConfig, createSilentLogger());
 
@@ -48,9 +56,7 @@ describe('RouterOSRestClient', () => {
   });
 
   it('mappe un 500 en MikrotikApiError et NE retente PAS (erreur métier RouterOS)', async () => {
-    const fetchMock = jest
-      .spyOn(global, 'fetch')
-      .mockResolvedValue(jsonResponse(500, { message: 'internal error' }));
+    fetchMock.mockResolvedValue(jsonResponse(500, { message: 'internal error' }));
 
     const client = new RouterOSRestClient(baseConfig, createSilentLogger());
 
@@ -61,8 +67,7 @@ describe('RouterOSRestClient', () => {
   it('retente en cas de timeout puis réussit à la 2e tentative', async () => {
     const abortError = Object.assign(new Error('aborted'), { name: 'AbortError' });
 
-    const fetchMock = jest
-      .spyOn(global, 'fetch')
+    fetchMock
       .mockRejectedValueOnce(abortError)
       .mockResolvedValueOnce(jsonResponse(200, { name: 'ok-after-retry' }));
 
@@ -75,7 +80,7 @@ describe('RouterOSRestClient', () => {
 
   it('épuise les tentatives et lève MikrotikTimeoutError si toutes échouent', async () => {
     const abortError = Object.assign(new Error('aborted'), { name: 'AbortError' });
-    const fetchMock = jest.spyOn(global, 'fetch').mockRejectedValue(abortError);
+    fetchMock.mockRejectedValue(abortError);
 
     const client = new RouterOSRestClient(baseConfig, createSilentLogger());
 
@@ -85,7 +90,7 @@ describe('RouterOSRestClient', () => {
   });
 
   it('mappe une erreur réseau générique en MikrotikConnectionError', async () => {
-    jest.spyOn(global, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+    fetchMock.mockRejectedValue(new Error('ECONNREFUSED'));
 
     const client = new RouterOSRestClient(baseConfig, createSilentLogger());
 

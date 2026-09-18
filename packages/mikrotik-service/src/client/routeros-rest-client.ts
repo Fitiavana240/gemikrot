@@ -1,3 +1,5 @@
+import { Agent, fetch as undiciFetch, type Response as UndiciResponse } from 'undici';
+import type { PeerCertificate } from 'node:tls';
 import { RouterOSClientConfig, DEFAULT_CLIENT_OPTIONS } from '../config/mikrotik-client.config';
 import { ILogger } from '../logging/logger.interface';
 import {
@@ -28,9 +30,48 @@ type ResolvedConfig = Required<Omit<RouterOSClientConfig, 'tlsFingerprint'>> &
  */
 export class RouterOSRestClient {
   private readonly config: ResolvedConfig;
+  private readonly dispatcher?: Agent;
 
   constructor(config: RouterOSClientConfig, private readonly logger: ILogger) {
     this.config = { ...DEFAULT_CLIENT_OPTIONS, ...config } as ResolvedConfig;
+    this.dispatcher = this.buildDispatcher();
+  }
+
+  /**
+   * `fetch` global de Node vérifie la chaîne de certification par défaut :
+   * suffisant pour un certificat public, mais un hAP en lab/local n'a
+   * qu'un certificat auto-signé. `rejectUnauthorized: false` accepte ce
+   * certificat ; si `tlsFingerprint` est fourni, l'empreinte SHA-256 réelle
+   * est en plus vérifiée pour ne pas accepter n'importe quel certificat
+   * (épinglage — recommandé dès que le routeur est joignable depuis
+   * l'extérieur du LAN de confiance).
+   */
+  private buildDispatcher(): Agent | undefined {
+    if (this.config.rejectUnauthorized && !this.config.tlsFingerprint) {
+      return undefined;
+    }
+    const expectedFingerprint = this.config.tlsFingerprint?.replace(/:/g, '').toUpperCase();
+    return new Agent({
+      connect: {
+        rejectUnauthorized: false,
+        // Absente (et non `undefined`) quand il n'y a pas d'empreinte à
+        // épingler : Node valide strictement le type de cette clé dès
+        // qu'elle est présente, même avec une valeur `undefined`.
+        ...(expectedFingerprint
+          ? {
+              checkServerIdentity: (_hostname: string, cert: PeerCertificate) => {
+                const actual = cert.fingerprint256?.replace(/:/g, '').toUpperCase();
+                if (actual !== expectedFingerprint) {
+                  return new Error(
+                    `Empreinte TLS inattendue pour ${this.config.baseUrl} — épinglage échoué`,
+                  );
+                }
+                return undefined;
+              },
+            }
+          : {}),
+      },
+    });
   }
 
   async get<T>(path: string, query?: Record<string, string | number | boolean>): Promise<T> {
@@ -90,7 +131,7 @@ export class RouterOSRestClient {
     this.logger.debug('Appel RouterOS', { method, path });
 
     try {
-      const response = await fetch(url, {
+      const response = await undiciFetch(url, {
         method,
         headers: {
           Authorization: `Basic ${auth}`,
@@ -98,6 +139,7 @@ export class RouterOSRestClient {
         },
         body: body !== undefined ? JSON.stringify(body) : undefined,
         signal: controller.signal,
+        ...(this.dispatcher ? { dispatcher: this.dispatcher } : {}),
       });
 
       const durationMs = Date.now() - startedAt;
@@ -152,7 +194,7 @@ export class RouterOSRestClient {
     }
   }
 
-  private async safeParseJson(response: Response): Promise<any> {
+  private async safeParseJson(response: UndiciResponse): Promise<any> {
     try {
       return await response.json();
     } catch {
