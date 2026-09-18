@@ -1,0 +1,104 @@
+import { useState, type FormEvent } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { customersApi, type CreateCustomerInput } from '../api/customers';
+import { useAuth } from '../auth/AuthContext';
+import { ApiError } from '../api/client';
+import { Badge, Button, Card, FormField, Input, Table } from '../components/ui';
+
+const EMPTY_FORM: CreateCustomerInput = { name: '', phone: '' };
+
+export function CustomersPage() {
+  const { canWrite } = useAuth();
+  const queryClient = useQueryClient();
+  const { data: customers, isLoading } = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
+  const [form, setForm] = useState<CreateCustomerInput>(EMPTY_FORM);
+  const [error, setError] = useState<string | null>(null);
+
+  const createMutation = useMutation({
+    mutationFn: customersApi.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      setForm(EMPTY_FORM);
+      setError(null);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Erreur inconnue'),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, enable }: { id: string; enable: boolean }) =>
+      enable ? customersApi.enable(id) : customersApi.disable(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['customers'] }),
+  });
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    createMutation.mutate(form);
+  }
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-lg font-semibold">Clients</h1>
+
+      {canWrite && (
+        <Card title="Nouveau client">
+          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <FormField label="Nom">
+              <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </FormField>
+            <FormField label="Téléphone">
+              <Input required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            </FormField>
+            <FormField label="Email (optionnel)">
+              <Input
+                type="email"
+                value={form.email ?? ''}
+                onChange={(e) => setForm({ ...form, email: e.target.value || undefined })}
+              />
+            </FormField>
+            <FormField label="Adresse (optionnel)">
+              <Input
+                value={form.address ?? ''}
+                onChange={(e) => setForm({ ...form, address: e.target.value || undefined })}
+              />
+            </FormField>
+            <div className="col-span-2 md:col-span-4">
+              {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending ? 'Création…' : 'Ajouter'}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      )}
+
+      {isLoading ? (
+        <p className="text-slate-500">Chargement…</p>
+      ) : (
+        <Table head={['Nom', 'Téléphone', 'Email', 'Statut', '']}>
+          {customers?.map((customer) => (
+            <tr key={customer.id}>
+              <td className="px-3 py-2">{customer.name}</td>
+              <td className="px-3 py-2">{customer.phone}</td>
+              <td className="px-3 py-2 text-slate-500">{customer.email ?? '—'}</td>
+              <td className="px-3 py-2">
+                <Badge tone={customer.status === 'ACTIVE' ? 'green' : 'red'}>{customer.status}</Badge>
+              </td>
+              <td className="px-3 py-2 text-right">
+                {canWrite && (
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      toggleMutation.mutate({ id: customer.id, enable: customer.status === 'DISABLED' })
+                    }
+                  >
+                    {customer.status === 'ACTIVE' ? 'Désactiver' : 'Réactiver'}
+                  </Button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </Table>
+      )}
+    </div>
+  );
+}

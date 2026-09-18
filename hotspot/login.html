@@ -1,0 +1,140 @@
+<!doctype html>
+<!--
+  Page captive HotSpot — Zone WIFI-TATI (Sections 6, 9 du cahier des charges).
+
+  Ce fichier n'est PAS servi par apps/frontend : il est destiné à être
+  importé tel quel dans RouterOS (Files > hotspot, ou Winbox > IP > Hotspot >
+  Files) pour remplacer le login.html par défaut du serveur HotSpot
+  "hotspot-tati". Les balises $(...) sont interprétées par RouterOS, pas par
+  un navigateur ou un bundler — ne pas passer ce fichier dans Vite/React.
+
+  Le voucher (Section 17) sert à la fois de nom d'utilisateur et de mot de
+  passe côté User Manager (décision Phase 1, cf. apps/backend VouchersService
+  .activate) : le client ne voit qu'un seul champ "Code d'accès", recopié en
+  JS dans les deux champs cachés username/password avant l'envoi.
+-->
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zone WIFI-TATI — Connexion</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f8fafc;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: #0f172a;
+        padding: 16px;
+      }
+      .card {
+        width: 100%;
+        max-width: 360px;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 28px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+      }
+      h1 {
+        font-size: 18px;
+        color: #0369a1;
+        margin: 0 0 4px;
+      }
+      p.subtitle {
+        margin: 0 0 20px;
+        color: #64748b;
+        font-size: 13px;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: #475569;
+        margin-bottom: 6px;
+      }
+      input[type="text"] {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        font-size: 16px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+      }
+      button {
+        width: 100%;
+        margin-top: 16px;
+        padding: 11px;
+        background: #0284c7;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:active { background: #0369a1; }
+      .error {
+        margin: 0 0 16px;
+        padding: 10px 12px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #b91c1c;
+        border-radius: 8px;
+        font-size: 13px;
+      }
+      .footer {
+        margin-top: 18px;
+        text-align: center;
+        font-size: 12px;
+        color: #94a3b8;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Zone WIFI-TATI</h1>
+      <p class="subtitle">Entrez le code reçu après votre achat pour accéder à Internet.</p>
+
+      $(if chap-id)<div class="error">Session expirée, veuillez réessayer.</div>$(endif)
+      $(if error)<div class="error">$(error)</div>$(endif)
+
+      <form name="login" action="$(link-login-only)" method="post" onsubmit="return prepareSubmit();">
+        <input type="hidden" name="dst" value="$(link-orig-esc)" />
+        <input type="hidden" name="popup" value="true" />
+        <input type="hidden" name="username" id="hidden-username" />
+        <input type="hidden" name="password" id="hidden-password" />
+
+        <label for="code">Code d'accès</label>
+        <input
+          type="text"
+          id="code"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          required
+          placeholder="EX: KF77HRT7C4"
+        />
+
+        <button type="submit">Se connecter</button>
+      </form>
+
+      <div class="footer">Zone WIFI-TATI — Motombe-Tanambao</div>
+    </div>
+
+    <script>
+      function prepareSubmit() {
+        var code = document.getElementById('code').value.trim().toUpperCase();
+        if (!code) return false;
+        document.getElementById('hidden-username').value = code;
+        document.getElementById('hidden-password').value = code;
+        return true;
+      }
+    </script>
+  </body>
+</html>
