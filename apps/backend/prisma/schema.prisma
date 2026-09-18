@@ -14,9 +14,69 @@ enum AdminRole {
   VIEWER
 }
 
+enum TenantStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+/// Exploitant de la plateforme : un réseau Wi-Fi commercial, sa marque, ses
+/// routeurs et ses clients. Le SUPER_ADMIN n'appartient à aucun tenant et
+/// voit l'ensemble.
+model Tenant {
+  id        String       @id @default(uuid())
+  name      String
+  /// Nom du réseau Wi-Fi affiché aux clients finaux.
+  wifiName  String       @map("wifi_name")
+  /// Domaines du portail captif (ex: wifitati.net).
+  domains   String[]     @default([])
+  logoUrl   String?      @map("logo_url")
+  /// Code ISO 4217 : MGA, USD, EUR… choisi par l'exploitant.
+  currency  String       @default("MGA")
+  status    TenantStatus @default(PENDING)
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  adminUsers          AdminUser[]
+  mobileMoneyAccounts MobileMoneyAccount[]
+  routers             Router[]
+  plans               Plan[]
+  customers           Customer[]
+  subscriptions       Subscription[]
+  vouchers            Voucher[]
+  voucherBatches      VoucherBatch[]
+  payments            Payment[]
+  devices             Device[]
+  auditLogs           AuditLog[]
+
+  @@map("tenants")
+}
+
+/// Puce Mobile Money de l'exploitant : le numéro est affiché au client pour
+/// qu'il sache où payer, et sert de clé de rattachement des paiements reçus.
+model MobileMoneyAccount {
+  id          String        @id @default(uuid())
+  tenantId    String        @map("tenant_id")
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider    PaymentMethod
+  phoneNumber String        @map("phone_number")
+  /// Nom du titulaire de la puce, tel qu'il apparaît au client qui paie.
+  accountName String        @map("account_name")
+  isActive    Boolean       @default(true) @map("is_active")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  @@unique([provider, phoneNumber])
+  @@index([tenantId])
+  @@map("mobile_money_accounts")
+}
+
+/// Valeurs telles que RouterOS les nomme sur `/user-manager/profile` :
+/// `first-auth` fait courir la validité à la première authentification,
+/// `assigned` dès l'attribution du profil.
 enum ProfileStartsWhen {
-  LOGON
-  CREATION
+  FIRST_AUTH
+  ASSIGNED
 }
 
 enum PlanStatus {
@@ -92,6 +152,9 @@ enum AuditResult {
 
 model AdminUser {
   id           String    @id @default(uuid())
+  /// `null` pour le SUPER_ADMIN, qui n'appartient à aucun exploitant.
+  tenantId     String?   @map("tenant_id")
+  tenant       Tenant?   @relation(fields: [tenantId], references: [id])
   email        String    @unique
   passwordHash String    @map("password_hash")
   role         AdminRole @default(OPERATOR)
@@ -110,6 +173,8 @@ model AdminUser {
 
 model Router {
   id                   String    @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
   label                String
   host                 String
   restPort             Int       @default(443) @map("rest_port")
@@ -136,16 +201,18 @@ model Router {
 /// vivent ici, jamais codés en dur dans l'application.
 model Plan {
   id                       String     @id @default(uuid())
-  name                     String     @unique
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  name                     String
   description              String?
-  priceAr                  Decimal    @map("price_ar") @db.Decimal(12, 2)
+  price                    Decimal    @db.Decimal(12, 2)
   validityDurationSeconds  Int        @map("validity_duration_seconds")
-  startsWhen               ProfileStartsWhen @default(LOGON) @map("starts_when")
+  startsWhen               ProfileStartsWhen @default(FIRST_AUTH) @map("starts_when")
   rateLimitRxBps           Int?       @map("rate_limit_rx_bps")
   rateLimitTxBps           Int?       @map("rate_limit_tx_bps")
   transferLimitBytes       BigInt?    @map("transfer_limit_bytes")
   maxSharedUsers           Int?       @map("max_shared_users")
-  mikrotikProfileName      String     @unique @map("mikrotik_profile_name")
+  mikrotikProfileName      String     @map("mikrotik_profile_name")
   status                   PlanStatus @default(ACTIVE)
   kind                     PlanKind   @default(TICKET)
   /// Longueur d'une période d'abonnement (null pour les offres à ticket).
@@ -162,21 +229,26 @@ model Plan {
   payments       Payment[]
   subscriptions  Subscription[]
 
+  @@unique([tenantId, name])
+  @@unique([tenantId, mikrotikProfileName])
   @@map("plans")
 }
 
-/// Abonnement récurrent (Section 5). PostgreSQL est la SEULE source de vérité
-/// des périodes : RouterOS ne stocke aucune date d'expiration pour un compte
-/// HotSpot, seulement `disabled` oui/non.
+/// Abonnement récurrent (Section 5), porté par un compte User Manager dont
+/// la validité est calendaire. L'échéance fait autorité côté routeur
+/// (`end-time` sur `/user-manager/user-profile`) et est réconciliée ici ;
+/// PostgreSQL garde le suivi commercial (client, offre, paiements).
 model Subscription {
   id                 String             @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
   customerId         String             @map("customer_id")
   customer           Customer           @relation(fields: [customerId], references: [id])
   planId             String             @map("plan_id")
   plan               Plan               @relation(fields: [planId], references: [id])
   routerId           String             @map("router_id")
   router             Router             @relation(fields: [routerId], references: [id])
-  /// Nom du compte tel qu'il existe dans `/ip/hotspot/user`.
+  /// Nom du compte tel qu'il existe dans `/user-manager/user`.
   hotspotUsername    String             @map("hotspot_username")
   status             SubscriptionStatus @default(ACTIVE)
   currentPeriodStart DateTime           @map("current_period_start")
@@ -199,8 +271,10 @@ model Subscription {
 /// Client final (Section 19).
 model Customer {
   id        String         @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
   name      String
-  phone     String         @unique
+  phone     String
   email     String?
   address   String?
   status    CustomerStatus @default(ACTIVE)
@@ -212,6 +286,7 @@ model Customer {
   payments      Payment[]
   subscriptions Subscription[]
 
+  @@unique([tenantId, phone])
   @@map("customers")
 }
 
@@ -220,6 +295,8 @@ model Customer {
 /// une seule adresse côté HotSpot (ne jamais supposer 1 MAC = 1 appareil).
 model Device {
   id           String     @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
   customerId   String?    @map("customer_id")
   customer     Customer?  @relation(fields: [customerId], references: [id])
   routerId     String?    @map("router_id")
@@ -250,6 +327,8 @@ model Device {
 
 model VoucherBatch {
   id          String              @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
   routerId    String              @map("router_id")
   router      Router              @relation(fields: [routerId], references: [id])
   planId      String              @map("plan_id")
@@ -286,12 +365,14 @@ model VoucherJob {
 /// client n'ait qu'un seul champ à saisir (Section 6).
 model Voucher {
   id          String        @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
   code        String        @unique
   batchId     String?       @map("batch_id")
   batch       VoucherBatch? @relation(fields: [batchId], references: [id])
   planId      String        @map("plan_id")
   plan        Plan          @relation(fields: [planId], references: [id])
-  priceAr     Decimal       @map("price_ar") @db.Decimal(12, 2)
+  price       Decimal       @db.Decimal(12, 2)
   status      VoucherStatus @default(CREATED)
   customerId  String?       @map("customer_id")
   customer    Customer?     @relation(fields: [customerId], references: [id])
@@ -311,11 +392,15 @@ model Voucher {
 /// deux fois ni générer deux accès.
 model Payment {
   id                 String        @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
   customerId         String        @map("customer_id")
   customer           Customer      @relation(fields: [customerId], references: [id])
   planId             String        @map("plan_id")
   plan               Plan          @relation(fields: [planId], references: [id])
-  amountAr           Decimal       @map("amount_ar") @db.Decimal(12, 2)
+  amount             Decimal       @db.Decimal(12, 2)
+  /// Devise au moment du paiement, figée même si l'exploitant en change.
+  currency           String
   method             PaymentMethod
   reference          String
   status             PaymentStatus @default(PENDING)
@@ -329,12 +414,14 @@ model Payment {
   createdAt          DateTime      @default(now()) @map("created_at")
   verifiedAt         DateTime?     @map("verified_at")
 
-  @@unique([method, reference])
+  @@unique([tenantId, method, reference])
   @@map("payments")
 }
 
 model AuditLog {
   id          String      @id @default(uuid())
+  tenantId    String?     @map("tenant_id")
+  tenant      Tenant?     @relation(fields: [tenantId], references: [id])
   adminUserId String?     @map("admin_user_id")
   adminUser   AdminUser?  @relation(fields: [adminUserId], references: [id])
   routerId    String?     @map("router_id")

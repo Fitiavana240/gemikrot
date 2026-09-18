@@ -1,12 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi } from '../api/dashboard';
+import { useCurrency } from '../api/money';
 import { Card } from '../components/ui';
 
-function formatAr(value: string): string {
-  return `${Number(value).toLocaleString('fr-FR')} Ar`;
-}
-
 export function DashboardPage() {
+  const { format } = useCurrency();
   const { data, isLoading, error } = useQuery({
     queryKey: ['dashboard-summary'],
     queryFn: dashboardApi.summary,
@@ -23,13 +21,13 @@ export function DashboardPage() {
           <p className="text-2xl font-semibold">{data.connectedClients}</p>
         </Card>
         <Card title="Revenus aujourd'hui">
-          <p className="text-2xl font-semibold">{formatAr(data.revenue.today)}</p>
+          <p className="text-2xl font-semibold">{format(data.revenue.today)}</p>
         </Card>
         <Card title="Revenus cette semaine">
-          <p className="text-2xl font-semibold">{formatAr(data.revenue.thisWeek)}</p>
+          <p className="text-2xl font-semibold">{format(data.revenue.thisWeek)}</p>
         </Card>
         <Card title="Revenus ce mois">
-          <p className="text-2xl font-semibold">{formatAr(data.revenue.thisMonth)}</p>
+          <p className="text-2xl font-semibold">{format(data.revenue.thisMonth)}</p>
         </Card>
       </div>
 

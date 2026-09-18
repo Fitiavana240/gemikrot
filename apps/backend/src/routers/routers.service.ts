@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Router } from '@prisma/client';
 import { connect as tlsConnect } from 'node:tls';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { RouterCredentialsService } from './router-credentials.service.js';
 import { MikrotikClientFactory } from './mikrotik-client.factory.js';
@@ -22,10 +23,11 @@ export class RoutersService {
     private readonly credentials: RouterCredentialsService,
     private readonly clients: MikrotikClientFactory,
     private readonly audit: AuditService,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   async findAll(): Promise<RouterView[]> {
-    const routers = await this.prisma.router.findMany({ orderBy: { createdAt: 'asc' } });
+    const routers = await this.prisma.scoped.router.findMany({ orderBy: { createdAt: 'asc' } });
     return routers.map(toView);
   }
 
@@ -34,8 +36,9 @@ export class RoutersService {
   }
 
   async create(dto: CreateRouterDto, adminUserId?: string): Promise<RouterView> {
-    const router = await this.prisma.router.create({
+    const router = await this.prisma.scoped.router.create({
       data: {
+        tenantId: this.tenantContext.requireTenantId(),
         label: dto.label,
         host: dto.host,
         restPort: dto.restPort ?? 443,
@@ -65,7 +68,7 @@ export class RoutersService {
     const current = this.credentials.decrypt(existing.credentialsEncrypted);
     const credentialsChanged = dto.username !== undefined || dto.password !== undefined;
 
-    const router = await this.prisma.router.update({
+    const router = await this.prisma.scoped.router.update({
       where: { id },
       data: {
         label: dto.label,
@@ -102,13 +105,13 @@ export class RoutersService {
         service.getRouterIdentity(),
         service.getSystemResource(),
       ]);
-      await this.prisma.router.update({
+      await this.prisma.scoped.router.update({
         where: { id },
         data: { status: 'online', lastSeenAt: new Date() },
       });
       return { reachable: true as const, identity, version: resource.version, uptime: resource.uptime };
     } catch (error) {
-      await this.prisma.router.update({ where: { id }, data: { status: 'unreachable' } });
+      await this.prisma.scoped.router.update({ where: { id }, data: { status: 'unreachable' } });
       return {
         reachable: false as const,
         host: router.host,
@@ -144,7 +147,7 @@ export class RoutersService {
   }
 
   private async requireRouter(id: string): Promise<Router> {
-    const router = await this.prisma.router.findUnique({ where: { id } });
+    const router = await this.prisma.scoped.router.findUnique({ where: { id } });
     if (!router) throw new NotFoundException(`Routeur ${id} introuvable`);
     return router;
   }

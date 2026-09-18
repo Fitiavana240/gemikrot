@@ -4,7 +4,7 @@ import type { Payment, PaymentMethod } from './types';
 export interface CreatePaymentInput {
   customerId: string;
   planId: string;
-  amountAr: number;
+  amount: number;
   method: PaymentMethod;
   reference: string;
 }

@@ -14,7 +14,7 @@ export class CreatePaymentDto {
   subscriptionId?: string;
 
   @IsPositive()
-  amountAr!: number;
+  amount!: number;
 
   @IsEnum(PaymentMethod)
   method!: PaymentMethod;

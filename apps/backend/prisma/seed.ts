@@ -5,6 +5,10 @@ import { createCipheriv, randomBytes } from 'node:crypto';
 
 const prisma = new PrismaClient();
 
+/** Même identifiant que celui posé par la migration multi-locataires, pour
+ * qu'un seed rejoué ne crée pas un second exploitant à côté de l'existant. */
+const DEFAULT_TENANT_ID = 'default-tenant';
+
 /**
  * Même format que `RouterCredentialsService` (src/routers) : `iv.tag.data` en
  * base64url, AES-256-GCM. Dupliqué ici volontairement — le seed tourne hors
@@ -26,22 +30,43 @@ function encryptCredentials(username: string, password: string): string {
 }
 
 async function main() {
-  const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@wifitati.local';
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!';
+  // Le SUPER_ADMIN exploite la plateforme (accès à tout), par opposition aux
+  // ADMIN qui en sont les clients. Ses identifiants viennent de `.env` et ne
+  // sont jamais écrits dans le code : le dépôt ne doit pas porter de mot de
+  // passe réel.
+  const adminEmail = process.env.SEED_ADMIN_EMAIL;
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!adminEmail || !adminPassword) {
+    throw new Error(
+      'SEED_ADMIN_EMAIL et SEED_ADMIN_PASSWORD sont requis — voir apps/backend/.env.example',
+    );
+  }
+  const passwordHash = await bcrypt.hash(adminPassword, 10);
 
   const admin = await prisma.adminUser.upsert({
     where: { email: adminEmail },
-    update: {},
-    create: {
-      email: adminEmail,
-      passwordHash: await bcrypt.hash(adminPassword, 10),
-      role: 'SUPER_ADMIN',
-    },
+    update: { passwordHash, role: 'SUPER_ADMIN' },
+    create: { email: adminEmail, passwordHash, role: 'SUPER_ADMIN' },
   });
   console.log(`SUPER_ADMIN prêt : ${admin.email}`);
-  if (!process.env.SEED_ADMIN_PASSWORD) {
-    console.log(`  mot de passe par défaut "${adminPassword}" — à changer immédiatement.`);
-  }
+
+  // L'exploitant d'origine. La migration multi-locataires l'a déjà créé sur
+  // une base existante ; l'upsert n'est là que pour qu'une base vierge
+  // obtienne le même point de départ, sans écraser une marque déjà
+  // personnalisée par l'exploitant (d'où l'`update` vide).
+  const tenant = await prisma.tenant.upsert({
+    where: { id: DEFAULT_TENANT_ID },
+    update: {},
+    create: {
+      id: DEFAULT_TENANT_ID,
+      name: 'Zone WIFI-TATI',
+      wifiName: 'Zone WIFI-TATI',
+      domains: ['wifitati.net'],
+      currency: 'MGA',
+      status: 'ACTIVE',
+    },
+  });
+  console.log(`Exploitant prêt : ${tenant.name} (devise ${tenant.currency})`);
 
   // Le routeur en base pilote désormais réellement la connexion : les
   // identifiants de `.env` y sont recopiés chiffrés (Section 35), ce qui fait
@@ -51,6 +76,7 @@ async function main() {
   const password = process.env.MIKROTIK_PASSWORD;
 
   const routerData = {
+    tenantId: tenant.id,
     label: 'hAP ac² — Zone WIFI-TATI',
     host: baseUrl.hostname,
     restPort: baseUrl.port ? Number(baseUrl.port) : 443,

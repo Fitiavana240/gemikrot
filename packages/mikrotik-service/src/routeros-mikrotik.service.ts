@@ -296,9 +296,16 @@ export class RouterOSMikrotikService implements IMikrotikService {
     return raw.map(UmMapper.mapUserManagerProfile);
   }
 
+  /** Limitations de débit/quota — distinctes de la validité, qui vit sur le profil. */
   async getUserManagerLimitations() {
-    const raw = await this.client.get<any[]>('/user-manager/profile-limitation');
+    const raw = await this.client.get<any[]>('/user-manager/limitation');
     return raw.map(UmMapper.mapUserManagerLimitation);
+  }
+
+  /** Jonctions profil ↔ limitation. */
+  async getUserManagerProfileLimitations() {
+    const raw = await this.client.get<any[]>('/user-manager/profile-limitation');
+    return raw.map(UmMapper.mapUserManagerProfileLimitation);
   }
 
   async getUserManagerUserProfiles(username?: string) {
@@ -346,47 +353,73 @@ export class RouterOSMikrotikService implements IMikrotikService {
     await this.client.delete(`/user-manager/user/${existing.id}`);
   }
 
+  /**
+   * Crée une offre User Manager. La validité calendaire et `starts-when`
+   * vivent sur le profil lui-même : `/user-manager/profile-limitation` ne
+   * sert qu'à rattacher une limitation de débit, et reste facultatif.
+   */
   async createProfile(input: CreateProfileDto) {
     const data = validate(createProfileSchema, input);
+
+    const existing = await this.getUserManagerProfiles();
+    if (existing.some((profile) => profile.name === data.name)) {
+      throw new MikrotikConflictError(`Le profil User Manager "${data.name}" existe déjà`, {
+        name: data.name,
+      });
+    }
+
     this.logger.info('Création profil User Manager', { name: data.name });
-
-    // Un profil User Manager complet nécessite deux entités RouterOS liées :
-    // le `profile` (identité) et le `profile-limitation` (règles réelles).
-    await this.client.put('/user-manager/profile', { name: data.name });
-
-    const raw = await this.client.put<any>('/user-manager/profile-limitation', {
+    const raw = await this.client.put<any>('/user-manager/profile', {
       name: data.name,
-      validity: `${data.validityDurationSeconds}s`,
+      'name-for-users': data.nameForUsers ?? data.name,
+      validity: UmMapper.formatValidity(data.validityDurationSeconds),
       'starts-when': data.startsWhen,
-      'rate-limit': this.buildRateLimitToken(data.rateLimitRxBitsPerSecond, data.rateLimitTxBitsPerSecond),
-      'transfer-limit': data.transferLimitBytes,
+      price: data.price,
+      'override-shared-users': data.sharedUsers ?? 'off',
+      comment: data.comment,
     });
 
-    return UmMapper.mapUserManagerLimitation(raw);
+    return UmMapper.mapUserManagerProfile(raw);
   }
 
   async updateProfile(input: UpdateProfileDto) {
     const data = validate(updateProfileSchema, input);
-    const limitations = await this.getUserManagerLimitations();
-    const target = limitations.find((limitation) => limitation.name === data.name);
+    const profiles = await this.getUserManagerProfiles();
+    const target = profiles.find((profile) => profile.name === data.name);
     if (!target) {
       throw new MikrotikNotFoundError('Profil User Manager', data.name);
     }
 
     this.logger.info('Mise à jour profil User Manager', { name: data.name });
     const payload: Record<string, unknown> = {};
-    if (data.validityDurationSeconds !== undefined) payload.validity = `${data.validityDurationSeconds}s`;
-    if (data.startsWhen !== undefined) payload['starts-when'] = data.startsWhen;
-    if (data.rateLimitRxBitsPerSecond !== undefined || data.rateLimitTxBitsPerSecond !== undefined) {
-      payload['rate-limit'] = this.buildRateLimitToken(
-        data.rateLimitRxBitsPerSecond,
-        data.rateLimitTxBitsPerSecond,
-      );
+    if (data.validityDurationSeconds !== undefined) {
+      payload.validity = UmMapper.formatValidity(data.validityDurationSeconds);
     }
-    if (data.transferLimitBytes !== undefined) payload['transfer-limit'] = data.transferLimitBytes;
+    if (data.startsWhen !== undefined) payload['starts-when'] = data.startsWhen;
+    if (data.price !== undefined) payload.price = data.price;
+    if (data.nameForUsers !== undefined) payload['name-for-users'] = data.nameForUsers;
+    if (data.sharedUsers !== undefined) payload['override-shared-users'] = data.sharedUsers;
+    if (data.comment !== undefined) payload.comment = data.comment;
 
-    const raw = await this.client.patch<any>(`/user-manager/profile-limitation/${target.id}`, payload);
-    return UmMapper.mapUserManagerLimitation(raw);
+    const raw = await this.client.patch<any>(`/user-manager/profile/${target.id}`, payload);
+    return UmMapper.mapUserManagerProfile(raw);
+  }
+
+  /** Suspension / réactivation d'un abonné sans perdre son compte ni son historique. */
+  async setUserManagerUserDisabled(username: string, disabled: boolean) {
+    const validUsername = validate(usernameParamSchema, username);
+    const existing = await this.findUserManagerUserByUsername(validUsername);
+    if (!existing) {
+      throw new MikrotikNotFoundError('Utilisateur User Manager', validUsername);
+    }
+
+    this.logger.info(disabled ? 'Suspension abonné User Manager' : 'Réactivation abonné User Manager', {
+      username: validUsername,
+    });
+    const raw = await this.client.patch<any>(`/user-manager/user/${existing.id}`, {
+      disabled: disabled ? 'true' : 'false',
+    });
+    return UmMapper.mapUserManagerUser(raw);
   }
 
   async assignProfile(input: AssignProfileDto) {
@@ -440,10 +473,4 @@ export class RouterOSMikrotikService implements IMikrotikService {
     return users.find((user) => user.username === username) ?? null;
   }
 
-  private buildRateLimitToken(rx?: number, tx?: number): string | undefined {
-    if (rx === undefined && tx === undefined) return undefined;
-    const rxToken = UmMapper.formatRateToken(rx) ?? 'unlimited';
-    const txToken = UmMapper.formatRateToken(tx) ?? 'unlimited';
-    return `${rxToken}/${txToken}`;
-  }
 }

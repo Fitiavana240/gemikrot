@@ -21,12 +21,13 @@ export const createUserManagerUserSchema = z.object({
 
 export const createProfileSchema = z.object({
   name: z.string().min(2).max(64),
-  validityDurationSeconds: z.number().int().positive(),
-  startsWhen: z.enum(['logon', 'creation']),
-  rateLimitRxBitsPerSecond: z.number().int().positive().optional(),
-  rateLimitTxBitsPerSecond: z.number().int().positive().optional(),
-  transferLimitBytes: z.number().int().positive().optional(),
+  // `null` = validité illimitée, valeur légitime côté RouterOS.
+  validityDurationSeconds: z.number().int().positive().nullable(),
+  startsWhen: z.enum(['first-auth', 'assigned']),
+  price: z.number().nonnegative().optional(),
+  nameForUsers: z.string().max(64).optional(),
   sharedUsers: z.number().int().positive().max(50).optional(),
+  comment: z.string().max(255).optional(),
 });
 
 export const updateProfileSchema = createProfileSchema.partial().extend({

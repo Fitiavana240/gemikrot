@@ -33,14 +33,14 @@ export class MikrotikClientFactory {
   ) {}
 
   async forRouter(routerId: string): Promise<IMikrotikService> {
-    const router = await this.prisma.router.findUnique({ where: { id: routerId } });
+    const router = await this.prisma.scoped.router.findUnique({ where: { id: routerId } });
     if (!router) throw new NotFoundException(`Routeur ${routerId} introuvable`);
     return this.build(router);
   }
 
   /** Routeur par défaut : le plus ancien enregistré (site unique actuel). */
   async forDefaultRouter(): Promise<IMikrotikService> {
-    const router = await this.prisma.router.findFirst({ orderBy: { createdAt: 'asc' } });
+    const router = await this.prisma.scoped.router.findFirst({ orderBy: { createdAt: 'asc' } });
     if (!router) {
       throw new NotFoundException('Aucun routeur enregistré — exécuter `npm run seed`');
     }
@@ -48,7 +48,7 @@ export class MikrotikClientFactory {
   }
 
   async getDefaultRouterId(): Promise<string> {
-    const router = await this.prisma.router.findFirst({ orderBy: { createdAt: 'asc' } });
+    const router = await this.prisma.scoped.router.findFirst({ orderBy: { createdAt: 'asc' } });
     if (!router) {
       throw new NotFoundException('Aucun routeur enregistré — exécuter `npm run seed`');
     }

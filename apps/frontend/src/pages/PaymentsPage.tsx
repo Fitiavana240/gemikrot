@@ -5,11 +5,12 @@ import { customersApi } from '../api/customers';
 import { plansApi } from '../api/plans';
 import { vouchersApi } from '../api/vouchers';
 import { useAuth } from '../auth/AuthContext';
+import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import type { Payment, PaymentMethod } from '../api/types';
 import { Badge, Button, Card, FormField, Input, Select, Table } from '../components/ui';
 
-const EMPTY_FORM: CreatePaymentInput = { customerId: '', planId: '', amountAr: 0, method: 'CASH', reference: '' };
+const EMPTY_FORM: CreatePaymentInput = { customerId: '', planId: '', amount: 0, method: 'CASH', reference: '' };
 
 const STATUS_TONE = {
   PENDING: 'amber',
@@ -21,6 +22,7 @@ const STATUS_TONE = {
 
 export function PaymentsPage() {
   const { canWrite } = useAuth();
+  const { currency, format } = useCurrency();
   const queryClient = useQueryClient();
   const { data: payments, isLoading } = useQuery({ queryKey: ['payments'], queryFn: paymentsApi.list });
   const { data: customers } = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
@@ -106,7 +108,7 @@ export function PaymentsPage() {
                 value={form.planId}
                 onChange={(e) => {
                   const plan = plans?.find((p) => p.id === e.target.value);
-                  setForm({ ...form, planId: e.target.value, amountAr: plan ? Number(plan.priceAr) : form.amountAr });
+                  setForm({ ...form, planId: e.target.value, amount: plan ? Number(plan.price) : form.amount });
                 }}
               >
                 <option value="">— choisir —</option>
@@ -117,12 +119,12 @@ export function PaymentsPage() {
                 ))}
               </Select>
             </FormField>
-            <FormField label="Montant (Ar)">
+            <FormField label={`Montant (${currency})`}>
               <Input
                 type="number"
                 min={0}
-                value={form.amountAr}
-                onChange={(e) => setForm({ ...form, amountAr: Number(e.target.value) })}
+                value={form.amount}
+                onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
               />
             </FormField>
             <FormField label="Méthode">
@@ -158,7 +160,7 @@ export function PaymentsPage() {
             <tr key={payment.id}>
               <td className="px-3 py-2 font-mono text-xs">{payment.reference}</td>
               <td className="px-3 py-2">{payment.method}</td>
-              <td className="px-3 py-2">{Number(payment.amountAr).toLocaleString('fr-FR')} Ar</td>
+              <td className="px-3 py-2">{format(payment.amount)}</td>
               <td className="px-3 py-2">
                 <Badge tone={STATUS_TONE[payment.status]}>{payment.status}</Badge>
               </td>

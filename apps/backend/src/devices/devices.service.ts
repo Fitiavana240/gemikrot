@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Device, DeviceType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 import { DeviceDetectionService } from './device-detection.service.js';
@@ -25,14 +26,15 @@ export class DevicesService {
     private readonly audit: AuditService,
     private readonly clients: MikrotikClientFactory,
     private readonly detection: DeviceDetectionService,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   findAll(filter: { customerId?: string; subscriptionId?: string } = {}): Promise<Device[]> {
-    return this.prisma.device.findMany({ where: filter, orderBy: { lastSeenAt: 'desc' } });
+    return this.prisma.scoped.device.findMany({ where: filter, orderBy: { lastSeenAt: 'desc' } });
   }
 
   async findOne(id: string): Promise<Device> {
-    const device = await this.prisma.device.findUnique({ where: { id } });
+    const device = await this.prisma.scoped.device.findUnique({ where: { id } });
     if (!device) throw new NotFoundException(`Appareil ${id} introuvable`);
     return device;
   }
@@ -49,7 +51,7 @@ export class DevicesService {
     const [leases, bindings, known] = await Promise.all([
       mikrotik.getDhcpLeases(),
       mikrotik.getIpBindings(),
-      this.prisma.device.findMany({ where: { routerId: resolvedRouterId } }),
+      this.prisma.scoped.device.findMany({ where: { routerId: resolvedRouterId } }),
     ]);
 
     const knownByMac = new Map(known.map((device) => [device.macAddress.toUpperCase(), device]));
@@ -81,8 +83,9 @@ export class DevicesService {
     const routerId = dto.routerId ?? (await this.clients.getDefaultRouterId());
     const detected = this.detection.detect({ macAddress: dto.macAddress, hostname: dto.hostname });
 
-    const device = await this.prisma.device.create({
+    const device = await this.prisma.scoped.device.create({
       data: {
+        tenantId: this.tenantContext.requireTenantId(),
         customerId: dto.customerId,
         subscriptionId: dto.subscriptionId,
         routerId,
@@ -139,7 +142,7 @@ export class DevicesService {
       await mikrotik.setIpBindingType(existing.id, 'bypassed');
     }
 
-    const updated = await this.prisma.device.update({
+    const updated = await this.prisma.scoped.device.update({
       where: { id: deviceId },
       data: { bypassEnabled: true, mikrotikBindingId: binding.id, routerId },
     });
@@ -166,7 +169,7 @@ export class DevicesService {
     const mikrotik = await this.clients.forRouter(routerId);
     await mikrotik.setIpBindingType(device.mikrotikBindingId, 'blocked');
 
-    const updated = await this.prisma.device.update({
+    const updated = await this.prisma.scoped.device.update({
       where: { id: deviceId },
       data: { bypassEnabled: false },
     });

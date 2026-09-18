@@ -10,7 +10,7 @@ export class CreatePlanDto {
   description?: string;
 
   @IsPositive()
-  priceAr!: number;
+  price!: number;
 
   @IsInt()
   @IsPositive()

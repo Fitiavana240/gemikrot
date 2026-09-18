@@ -1,7 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Payment, Subscription, SubscriptionStatus } from '@prisma/client';
-import { MikrotikNotFoundError } from '@wifitati/mikrotik-service';
+import { Payment, Prisma, Subscription, SubscriptionStatus } from '@prisma/client';
+import { MikrotikNotFoundError, type IMikrotikService } from '@wifitati/mikrotik-service';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 import type { CreateSubscriptionDto } from './dto/create-subscription.dto.js';
@@ -29,17 +30,18 @@ export class SubscriptionsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly clients: MikrotikClientFactory,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   findAll(filter: { status?: SubscriptionStatus; customerId?: string } = {}): Promise<Subscription[]> {
-    return this.prisma.subscription.findMany({
+    return this.prisma.scoped.subscription.findMany({
       where: filter,
       orderBy: { currentPeriodEnd: 'asc' },
     });
   }
 
   async findOne(id: string): Promise<Subscription> {
-    const subscription = await this.prisma.subscription.findUnique({ where: { id } });
+    const subscription = await this.prisma.scoped.subscription.findUnique({ where: { id } });
     if (!subscription) throw new NotFoundException(`Abonnement ${id} introuvable`);
     return subscription;
   }
@@ -51,8 +53,8 @@ export class SubscriptionsService {
    */
   async create(dto: CreateSubscriptionDto, adminUserId?: string): Promise<Subscription> {
     const [customer, plan] = await Promise.all([
-      this.prisma.customer.findUnique({ where: { id: dto.customerId } }),
-      this.prisma.plan.findUnique({ where: { id: dto.planId } }),
+      this.prisma.scoped.customer.findUnique({ where: { id: dto.customerId } }),
+      this.prisma.scoped.plan.findUnique({ where: { id: dto.planId } }),
     ]);
     if (!customer) throw new NotFoundException(`Client ${dto.customerId} introuvable`);
     if (!plan) throw new NotFoundException(`Offre ${dto.planId} introuvable`);
@@ -61,25 +63,39 @@ export class SubscriptionsService {
     }
 
     const routerId = dto.routerId ?? (await this.clients.getDefaultRouterId());
-    const duplicate = await this.prisma.subscription.findUnique({
-      where: { routerId_hotspotUsername: { routerId, hotspotUsername: dto.hotspotUsername } },
+    const duplicate = await this.prisma.scoped.subscription.findFirst({
+      where: { routerId, hotspotUsername: dto.hotspotUsername },
     });
     if (duplicate) {
       throw new ConflictException(`Le compte "${dto.hotspotUsername}" est déjà suivi sur ce routeur`);
     }
 
     const mikrotik = await this.clients.forRouter(routerId);
-    await mikrotik.createHotspotUser({
+
+    // L'abonnement passe par User Manager : sa validité est calendaire, donc
+    // un mois reste un mois même si le client se déconnecte et se reconnecte
+    // — ce que le `session-timeout` d'un profil HotSpot ne garantit pas.
+    await this.ensureUserManagerProfile(mikrotik, plan);
+    await mikrotik.createUserManagerUser({
       username: dto.hotspotUsername,
       password: dto.password,
-      profileName: plan.mikrotikProfileName,
       comment: customer.name,
+    });
+    const assignment = await mikrotik.assignProfile({
+      username: dto.hotspotUsername,
+      profileName: plan.mikrotikProfileName,
     });
 
     const start = new Date();
-    const end = addDays(start, plan.subscriptionPeriodDays);
-    const subscription = await this.prisma.subscription.create({
+    // `end-time` est calculé par le routeur : il fait autorité dès qu'il
+    // existe. Avec `starts-when=first-auth`, il n'apparaît qu'à la première
+    // connexion du client, d'où le repli sur la période commerciale.
+    const end = assignment.endTime
+      ? new Date(assignment.endTime)
+      : addDays(start, plan.subscriptionPeriodDays);
+    const subscription = await this.prisma.scoped.subscription.create({
       data: {
+        tenantId: this.tenantContext.requireTenantId(),
         customerId: customer.id,
         planId: plan.id,
         routerId,
@@ -108,7 +124,7 @@ export class SubscriptionsService {
    */
   async renew(subscriptionId: string, payment?: Payment, adminUserId?: string): Promise<Subscription> {
     const subscription = await this.findOne(subscriptionId);
-    const plan = await this.prisma.plan.findUnique({ where: { id: subscription.planId } });
+    const plan = await this.prisma.scoped.plan.findUnique({ where: { id: subscription.planId } });
     if (!plan?.subscriptionPeriodDays) {
       throw new ConflictException(`L'offre de l'abonnement ${subscriptionId} n'a pas de période définie`);
     }
@@ -121,7 +137,7 @@ export class SubscriptionsService {
       await this.pushAccessState(subscription, true, adminUserId);
     }
 
-    const renewed = await this.prisma.subscription.update({
+    const renewed = await this.prisma.scoped.subscription.update({
       where: { id: subscriptionId },
       data: {
         status: SubscriptionStatus.ACTIVE,
@@ -151,7 +167,7 @@ export class SubscriptionsService {
 
     await this.pushAccessState(subscription, false, adminUserId);
 
-    const updated = await this.prisma.subscription.update({
+    const updated = await this.prisma.scoped.subscription.update({
       where: { id },
       data: { status: SubscriptionStatus.SUSPENDED, suspendedAt: new Date() },
     });
@@ -170,7 +186,7 @@ export class SubscriptionsService {
     const subscription = await this.findOne(id);
     await this.pushAccessState(subscription, true, adminUserId);
 
-    const updated = await this.prisma.subscription.update({
+    const updated = await this.prisma.scoped.subscription.update({
       where: { id },
       data: { status: this.deriveStatus(subscription), suspendedAt: null },
     });
@@ -191,7 +207,7 @@ export class SubscriptionsService {
    * l'application se contente de la recommander.
    */
   async getRecommendations(): Promise<SubscriptionRecommendation[]> {
-    const candidates = await this.prisma.subscription.findMany({
+    const candidates = await this.prisma.scoped.subscription.findMany({
       where: {
         status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.GRACE] },
         currentPeriodEnd: { lte: addDays(new Date(), GRACE_PERIOD_DAYS) },
@@ -209,6 +225,51 @@ export class SubscriptionsService {
         return { subscription, daysRemaining, reason: 'IN_GRACE', recommendedAction: 'WARN_CUSTOMER' };
       }
       return { subscription, daysRemaining, reason: 'EXPIRING_SOON', recommendedAction: 'WARN_CUSTOMER' };
+    });
+  }
+
+  /**
+   * Crée au besoin le profil User Manager correspondant à l'offre. Les
+   * profils HotSpot existants ne portent pas de validité calendaire : il faut
+   * leur pendant côté User Manager pour que l'échéance soit tenue par le
+   * routeur.
+   */
+  private async ensureUserManagerProfile(
+    mikrotik: IMikrotikService,
+    plan: { mikrotikProfileName: string; subscriptionPeriodDays: number | null; maxSharedUsers: number | null; price: Prisma.Decimal },
+  ): Promise<void> {
+    const profiles = await mikrotik.getUserManagerProfiles();
+    if (profiles.some((profile) => profile.name === plan.mikrotikProfileName)) return;
+
+    await mikrotik.createProfile({
+      name: plan.mikrotikProfileName,
+      validityDurationSeconds: (plan.subscriptionPeriodDays ?? 30) * 86_400,
+      // La validité ne court qu'à la première connexion : un abonnement vendu
+      // à l'avance ne s'use pas tant que le client ne s'en sert pas.
+      startsWhen: 'first-auth',
+      price: Number(plan.price),
+      sharedUsers: plan.maxSharedUsers ?? undefined,
+    });
+  }
+
+  /**
+   * Relit l'échéance tenue par le routeur et l'aligne en base. RouterOS reste
+   * la référence : il applique l'expiration même application arrêtée.
+   */
+  async reconcile(subscriptionId: string): Promise<Subscription> {
+    const subscription = await this.findOne(subscriptionId);
+    const mikrotik = await this.clients.forRouter(subscription.routerId);
+
+    const assignments = await mikrotik.getUserManagerUserProfiles(subscription.hotspotUsername);
+    const current = assignments.find((a) => a.endTime);
+    if (!current?.endTime) return subscription;
+
+    const end = new Date(current.endTime);
+    if (end.getTime() === subscription.currentPeriodEnd.getTime()) return subscription;
+
+    return this.prisma.scoped.subscription.update({
+      where: { id: subscriptionId },
+      data: { currentPeriodEnd: end, graceEndsAt: addDays(end, GRACE_PERIOD_DAYS) },
     });
   }
 
@@ -234,7 +295,7 @@ export class SubscriptionsService {
     const mikrotik = await this.clients.forRouter(subscription.routerId);
 
     try {
-      await mikrotik.setHotspotUserDisabled(subscription.hotspotUsername, !allowed);
+      await mikrotik.setUserManagerUserDisabled(subscription.hotspotUsername, !allowed);
     } catch (error) {
       // Compte absent du routeur : on le signale sans bloquer la mise à jour
       // du suivi en base, sinon l'abonnement resterait éternellement actif.
@@ -245,17 +306,19 @@ export class SubscriptionsService {
         action: allowed ? 'RESUME_SUBSCRIPTION' : 'SUSPEND_SUBSCRIPTION',
         targetType: 'Subscription',
         targetId: subscription.id,
-        payloadDiff: { warning: `compte HotSpot "${subscription.hotspotUsername}" absent du routeur` },
+        payloadDiff: {
+          warning: `compte User Manager "${subscription.hotspotUsername}" absent du routeur`,
+        },
         result: 'FAILURE',
       });
     }
 
-    const devices = await this.prisma.device.findMany({
+    const devices = await this.prisma.scoped.device.findMany({
       where: { subscriptionId: subscription.id, mikrotikBindingId: { not: null } },
     });
     for (const device of devices) {
       await mikrotik.setIpBindingType(device.mikrotikBindingId!, allowed ? 'bypassed' : 'blocked');
-      await this.prisma.device.update({
+      await this.prisma.scoped.device.update({
         where: { id: device.id },
         data: { bypassEnabled: allowed },
       });

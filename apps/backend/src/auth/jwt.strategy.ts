@@ -8,12 +8,15 @@ export interface JwtPayload {
   sub: string;
   email: string;
   role: AdminRole;
+  /** `null` pour un SUPER_ADMIN, rattaché à aucun exploitant. */
+  tenantId: string | null;
 }
 
 export interface AuthenticatedUser {
   id: string;
   email: string;
   role: AdminRole;
+  tenantId: string | null;
 }
 
 @Injectable()
@@ -27,6 +30,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   validate(payload: JwtPayload): AuthenticatedUser {
-    return { id: payload.sub, email: payload.email, role: payload.role };
+    return {
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role,
+      tenantId: payload.tenantId ?? null,
+    };
   }
 }

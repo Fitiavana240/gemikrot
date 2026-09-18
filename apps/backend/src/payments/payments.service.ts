@@ -1,6 +1,7 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Payment, PaymentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { VouchersService } from '../vouchers/vouchers.service.js';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
@@ -15,28 +16,29 @@ export class PaymentsService {
     private readonly vouchers: VouchersService,
     private readonly subscriptions: SubscriptionsService,
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   findAll(): Promise<Payment[]> {
-    return this.prisma.payment.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.prisma.scoped.payment.findMany({ orderBy: { createdAt: 'desc' } });
   }
 
   async findOne(id: string): Promise<Payment> {
-    const payment = await this.prisma.payment.findUnique({ where: { id } });
+    const payment = await this.prisma.scoped.payment.findUnique({ where: { id } });
     if (!payment) throw new NotFoundException(`Paiement ${id} introuvable`);
     return payment;
   }
 
   async create(dto: CreatePaymentDto): Promise<Payment> {
     const [customer, plan] = await Promise.all([
-      this.prisma.customer.findUnique({ where: { id: dto.customerId } }),
-      this.prisma.plan.findUnique({ where: { id: dto.planId } }),
+      this.prisma.scoped.customer.findUnique({ where: { id: dto.customerId } }),
+      this.prisma.scoped.plan.findUnique({ where: { id: dto.planId } }),
     ]);
     if (!customer) throw new NotFoundException(`Client ${dto.customerId} introuvable`);
     if (!plan) throw new NotFoundException(`Plan ${dto.planId} introuvable`);
 
-    const duplicate = await this.prisma.payment.findUnique({
-      where: { method_reference: { method: dto.method, reference: dto.reference } },
+    const duplicate = await this.prisma.scoped.payment.findFirst({
+      where: { method: dto.method, reference: dto.reference },
     });
     if (duplicate) {
       throw new ConflictException(
@@ -44,12 +46,19 @@ export class PaymentsService {
       );
     }
 
-    return this.prisma.payment.create({
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: this.tenantContext.requireTenantId() },
+      select: { currency: true },
+    });
+
+    return this.prisma.scoped.payment.create({
       data: {
+        tenantId: this.tenantContext.requireTenantId(),
+        currency: tenant.currency,
         customerId: dto.customerId,
         planId: dto.planId,
         subscriptionId: dto.subscriptionId,
-        amountAr: dto.amountAr,
+        amount: dto.amount,
         method: dto.method,
         reference: dto.reference,
       },
@@ -69,7 +78,7 @@ export class PaymentsService {
       throw new ConflictException(`Paiement ${paymentId} déjà traité (${payment.status})`);
     }
 
-    const verification = await this.provider.verify(payment.reference, Number(payment.amountAr));
+    const verification = await this.provider.verify(payment.reference, Number(payment.amount));
     if (!verification.verified) {
       await this.markStatus(payment.id, PaymentStatus.REJECTED, adminUserId, 'FAILURE');
       throw new ConflictException(`Paiement refusé : ${verification.reason ?? 'non vérifié'}`);
@@ -89,7 +98,7 @@ export class PaymentsService {
       adminUserId,
     });
 
-    const claimed = await this.prisma.payment.updateMany({
+    const claimed = await this.prisma.scoped.payment.updateMany({
       where: { id: payment.id, status: PaymentStatus.PENDING },
       data: {
         status: PaymentStatus.VERIFIED,
@@ -110,7 +119,7 @@ export class PaymentsService {
       action: 'VERIFY_PAYMENT',
       targetType: 'Payment',
       targetId: payment.id,
-      payloadDiff: { voucherId: activated.id, amountAr: payment.amountAr.toString() },
+      payloadDiff: { voucherId: activated.id, amount: payment.amount.toString() },
     });
 
     return this.findOne(payment.id);
@@ -122,7 +131,7 @@ export class PaymentsService {
    * concurrentes de prolonger deux fois la même période.
    */
   private async verifySubscriptionPayment(payment: Payment, adminUserId: string): Promise<Payment> {
-    const claimed = await this.prisma.payment.updateMany({
+    const claimed = await this.prisma.scoped.payment.updateMany({
       where: { id: payment.id, status: PaymentStatus.PENDING },
       data: {
         status: PaymentStatus.VERIFIED,
@@ -143,7 +152,7 @@ export class PaymentsService {
       targetId: payment.id,
       payloadDiff: {
         subscriptionId: payment.subscriptionId,
-        amountAr: payment.amountAr.toString(),
+        amount: payment.amount.toString(),
       },
     });
     return this.findOne(payment.id);
@@ -164,7 +173,7 @@ export class PaymentsService {
     result: 'SUCCESS' | 'FAILURE',
     reason?: string,
   ): Promise<Payment> {
-    const updated = await this.prisma.payment.update({ where: { id }, data: { status } });
+    const updated = await this.prisma.scoped.payment.update({ where: { id }, data: { status } });
     await this.audit.log({
       adminUserId,
       action: 'REJECT_PAYMENT',

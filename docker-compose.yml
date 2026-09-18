@@ -6,7 +6,9 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: wifitati
-      POSTGRES_PASSWORD: 18245167
+      # Lu depuis le `.env` de la racine (non versionné) : un mot de passe en
+      # clair dans le dépôt reste un mot de passe exposé, même en local.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définir POSTGRES_PASSWORD dans .env — voir .env.example}
       POSTGRES_DB: wifitati
     ports:
       # 5432 est déjà pris par un Postgres natif sur cette machine — le

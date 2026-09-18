@@ -2,6 +2,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { ConflictException } from '@nestjs/common';
 import { GRACE_PERIOD_DAYS, SubscriptionsService } from './subscriptions.service.js';
 
+const tenantContext = { requireTenantId: () => 'tenant-1', get: () => ({ tenantId: 'tenant-1', isSuperAdmin: false }) };
+
 const DAY_MS = 86_400_000;
 
 function daysFromNow(days: number): Date {
@@ -23,7 +25,7 @@ function createFakePrisma(overrides: { periodEnd?: Date; graceEndsAt?: Date; sta
     suspendedAt: null,
   };
 
-  return {
+  const client: any = {
     _subscription: subscription,
     subscription: {
       findUnique: vi.fn(async () => subscription),
@@ -44,11 +46,14 @@ function createFakePrisma(overrides: { periodEnd?: Date; graceEndsAt?: Date; sta
       update: vi.fn(async () => ({})),
     },
   };
+  // `scoped` renvoie le même faux client : le cloisonnement a son propre test.
+  client.scoped = client;
+  return client;
 }
 
 function createFakeMikrotik() {
   return {
-    setHotspotUserDisabled: vi.fn(async () => ({})),
+    setUserManagerUserDisabled: vi.fn(async () => ({})),
     setIpBindingType: vi.fn(async () => ({})),
   };
 }
@@ -60,7 +65,12 @@ describe('SubscriptionsService', () => {
   let clients: Record<string, ReturnType<typeof vi.fn>>;
 
   function buildService(fakePrisma = prisma) {
-    return new SubscriptionsService(fakePrisma as any, audit as any, clients as any);
+    return new SubscriptionsService(
+      fakePrisma as any,
+      audit as any,
+      clients as any,
+      tenantContext as any,
+    );
   }
 
   beforeEach(() => {
@@ -73,13 +83,14 @@ describe('SubscriptionsService', () => {
     };
   });
 
-  it('suspend le compte HotSpot et bloque les appareils en contournement', async () => {
+  it('suspend le compte User Manager et bloque les appareils en contournement', async () => {
     const service = buildService();
 
     const suspended = await service.suspend('sub-1', 'admin-1');
 
     expect(suspended.status).toBe('SUSPENDED');
-    expect(mikrotik.setHotspotUserDisabled).toHaveBeenCalledWith('Mario', true);
+    // Suspension côté User Manager : le compte et son historique sont gardés.
+    expect(mikrotik.setUserManagerUserDisabled).toHaveBeenCalledWith('Mario', true);
     // Décision produit : un appareil suspendu est bloqué, pas seulement
     // renvoyé vers le portail captif.
     expect(mikrotik.setIpBindingType).toHaveBeenCalledWith('*1', 'blocked');
@@ -97,7 +108,7 @@ describe('SubscriptionsService', () => {
     const renewed = await service.renew('sub-1');
 
     expect(renewed.status).toBe('ACTIVE');
-    expect(mikrotik.setHotspotUserDisabled).toHaveBeenCalledWith('Mario', false);
+    expect(mikrotik.setUserManagerUserDisabled).toHaveBeenCalledWith('Mario', false);
     expect(mikrotik.setIpBindingType).toHaveBeenCalledWith('*1', 'bypassed');
   });
 
@@ -122,7 +133,7 @@ describe('SubscriptionsService', () => {
     expect(recommendation.reason).toBe('GRACE_ENDED');
     expect(recommendation.recommendedAction).toBe('SUSPEND');
     // Aucune action appliquée d'office : c'est l'administration qui décide.
-    expect(mikrotik.setHotspotUserDisabled).not.toHaveBeenCalled();
+    expect(mikrotik.setUserManagerUserDisabled).not.toHaveBeenCalled();
   });
 
   it('se contente d\'avertir tant que la période de grâce court', async () => {

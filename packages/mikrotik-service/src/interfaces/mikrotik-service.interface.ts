@@ -18,6 +18,7 @@ import {
 import {
   UserManagerLimitationDto,
   UserManagerProfileDto,
+  UserManagerProfileLimitationDto,
   UserManagerSessionDto,
   UserManagerUserDto,
   UserManagerUserProfileDto,
@@ -94,8 +95,11 @@ export interface IMikrotikService {
   // ---------- User Manager : lecture ----------
 
   getUserManagerUsers(): Promise<UserManagerUserDto[]>;
+  /** Les offres : c'est ici que vivent `validity` et `starts-when`. */
   getUserManagerProfiles(): Promise<UserManagerProfileDto[]>;
+  /** Les limitations de débit/quota, rattachées aux profils par jonction. */
   getUserManagerLimitations(): Promise<UserManagerLimitationDto[]>;
+  getUserManagerProfileLimitations(): Promise<UserManagerProfileLimitationDto[]>;
   /** Sans argument : toutes les associations. Avec `username` : filtré. */
   getUserManagerUserProfiles(username?: string): Promise<UserManagerUserProfileDto[]>;
   /** Sans argument : toutes les sessions. Avec `username` : filtré. */
@@ -105,8 +109,10 @@ export interface IMikrotikService {
 
   createUserManagerUser(input: CreateUserManagerUserDto): Promise<UserManagerUserDto>;
   deleteUserManagerUser(username: string): Promise<void>;
-  createProfile(input: CreateProfileDto): Promise<UserManagerLimitationDto>;
-  updateProfile(input: UpdateProfileDto): Promise<UserManagerLimitationDto>;
+  /** Suspension d'un abonné sans perdre son compte (Section 5). */
+  setUserManagerUserDisabled(username: string, disabled: boolean): Promise<UserManagerUserDto>;
+  createProfile(input: CreateProfileDto): Promise<UserManagerProfileDto>;
+  updateProfile(input: UpdateProfileDto): Promise<UserManagerProfileDto>;
   assignProfile(input: AssignProfileDto): Promise<UserManagerUserProfileDto>;
   removeProfile(input: RemoveProfileAssignmentDto): Promise<void>;
 }

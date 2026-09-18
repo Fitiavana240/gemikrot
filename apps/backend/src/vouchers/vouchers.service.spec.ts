@@ -3,6 +3,8 @@ import { Prisma, VoucherStatus } from '@prisma/client';
 import { VouchersService } from './vouchers.service.js';
 import * as voucherCode from './voucher-code.util.js';
 
+const tenantContext = { requireTenantId: () => 'tenant-1', get: () => ({ tenantId: 'tenant-1', isSuperAdmin: false }) };
+
 vi.mock('./voucher-code.util.js', () => ({ generateVoucherCode: vi.fn() }));
 
 function p2002(): Prisma.PrismaClientKnownRequestError {
@@ -24,7 +26,7 @@ function createFakePrisma() {
     mikrotikProfileName: '1JOUR-2000AR',
   };
 
-  return {
+  const client: any = {
     plan: { findUnique: vi.fn(async () => plan) },
     router: { findFirst: vi.fn(async () => ({ id: 'router-1' })) },
     voucherBatch: {
@@ -43,6 +45,9 @@ function createFakePrisma() {
     },
     _vouchers: vouchers,
   };
+  // `scoped` renvoie le même faux client : le cloisonnement a son propre test.
+  client.scoped = client;
+  return client;
 }
 
 describe('VouchersService.generateBatch', () => {
@@ -61,7 +66,7 @@ describe('VouchersService.generateBatch', () => {
     const codes = ['AAA', 'BBB', 'CCC', 'DDD'];
     vi.mocked(voucherCode.generateVoucherCode).mockImplementation(() => codes.shift()!);
 
-    const service = new VouchersService(prisma as any, audit as any, mikrotik as any);
+    const service = new VouchersService(prisma as any, audit as any, mikrotik as any, tenantContext as any);
     const result = await service.generateBatch(
       { planId: 'plan-1', quantity: 4 } as any,
       'admin-1',
@@ -76,7 +81,7 @@ describe('VouchersService.generateBatch', () => {
     const codes = ['DUP', 'DUP', 'UNIQUE'];
     vi.mocked(voucherCode.generateVoucherCode).mockImplementation(() => codes.shift()!);
 
-    const service = new VouchersService(prisma as any, audit as any, mikrotik as any);
+    const service = new VouchersService(prisma as any, audit as any, mikrotik as any, tenantContext as any);
     const first = await (service as any).createVoucherWithUniqueCode({ planId: 'plan-1', priceAr: 2000 });
     expect(first.code).toBe('DUP');
 

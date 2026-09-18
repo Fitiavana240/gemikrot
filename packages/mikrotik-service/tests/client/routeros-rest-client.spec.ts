@@ -26,7 +26,7 @@ function jsonResponse(status: number, body: unknown) {
 describe('RouterOSRestClient', () => {
   const baseConfig = {
     baseUrl: 'https://192.168.88.1',
-    username: 'wifitati-svc',
+    username: 'api-test',
     password: 'test-password',
     timeoutMs: 200,
     maxRetries: 2,

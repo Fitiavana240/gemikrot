@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { DeviceDetectionService } from '../devices/device-detection.service.js';
 import { MikrotikClientFactory } from './mikrotik-client.factory.js';
+import { TenantContextService } from '../tenancy/tenant-context.service.js';
 
 export interface ImportReport {
   routerId: string;
@@ -37,6 +38,7 @@ export class RouterImportService {
     private readonly audit: AuditService,
     private readonly clients: MikrotikClientFactory,
     private readonly detection: DeviceDetectionService,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   /**
@@ -47,6 +49,24 @@ export class RouterImportService {
   async importFromRouter(
     routerId: string,
     options: { dryRun?: boolean; adminUserId?: string } = {},
+  ): Promise<ImportReport> {
+    // Lancé par le SUPER_ADMIN, qui n'a pas d'exploitant courant : on se
+    // place explicitement sur celui du routeur importé, sinon les lignes
+    // créées seraient orphelines ou rattachées au mauvais exploitant.
+    const router = await this.prisma.router.findUniqueOrThrow({
+      where: { id: routerId },
+      select: { tenantId: true },
+    });
+
+    return this.tenantContext.runAsTenant(router.tenantId, () =>
+      this.runImport(routerId, router.tenantId, options),
+    );
+  }
+
+  private async runImport(
+    routerId: string,
+    tenantId: string,
+    options: { dryRun?: boolean; adminUserId?: string },
   ): Promise<ImportReport> {
     const dryRun = options.dryRun ?? false;
     const mikrotik = await this.clients.forRouter(routerId);
@@ -68,9 +88,9 @@ export class RouterImportService {
       skipped: [],
     };
 
-    const plansByProfile = await this.importProfiles(profiles, report, dryRun);
-    await this.importUsers(users, plansByProfile, routerId, report, dryRun);
-    await this.importBindings(bindings, leases, routerId, report, dryRun);
+    const plansByProfile = await this.importProfiles(profiles, tenantId, report, dryRun);
+    await this.importUsers(users, plansByProfile, routerId, tenantId, report, dryRun);
+    await this.importBindings(bindings, leases, routerId, tenantId, report, dryRun);
 
     if (!dryRun) {
       await this.audit.log({
@@ -87,6 +107,7 @@ export class RouterImportService {
 
   private async importProfiles(
     profiles: HotspotProfileDto[],
+    tenantId: string,
     report: ImportReport,
     dryRun: boolean,
   ): Promise<Map<string, ResolvedPlan>> {
@@ -100,18 +121,18 @@ export class RouterImportService {
         continue;
       }
 
-      const priceAr = this.guessPriceFromName(profile.name);
+      const price = this.guessPriceFromName(profile.name);
       const periodDays = this.guessSubscriptionPeriod(profile);
-      const existing = await this.prisma.plan.findUnique({
+      const existing = await this.prisma.scoped.plan.findFirst({
         where: { mikrotikProfileName: profile.name },
       });
 
-      if (priceAr === null) report.plans.needingPriceReview += 1;
+      if (price === null) report.plans.needingPriceReview += 1;
 
       const data = {
         name: profile.name,
-        priceAr: priceAr ?? 0,
-        priceNeedsReview: priceAr === null,
+        price: price ?? 0,
+        priceNeedsReview: price === null,
         validityDurationSeconds: profile.sessionTimeoutSeconds ?? 3600,
         sessionTimeoutSeconds: profile.sessionTimeoutSeconds,
         rateLimitRxBps: profile.rateLimitRxBitsPerSecond,
@@ -133,12 +154,12 @@ export class RouterImportService {
       }
 
       const plan = existing
-        ? await this.prisma.plan.update({
+        ? await this.prisma.scoped.plan.update({
             where: { id: existing.id },
             // Le prix saisi par un admin prime sur la déduction depuis le nom.
-            data: { ...data, priceAr: existing.priceNeedsReview ? data.priceAr : existing.priceAr },
+            data: { ...data, price: existing.priceNeedsReview ? data.price : existing.price },
           })
-        : await this.prisma.plan.create({ data });
+        : await this.prisma.scoped.plan.create({ data: { ...data, tenantId } });
 
       existing ? (report.plans.updated += 1) : (report.plans.created += 1);
       plansByProfile.set(profile.name, {
@@ -155,6 +176,7 @@ export class RouterImportService {
     users: HotspotUserDto[],
     plansByProfile: Map<string, ResolvedPlan>,
     routerId: string,
+    tenantId: string,
     report: ImportReport,
     dryRun: boolean,
   ): Promise<void> {
@@ -182,14 +204,14 @@ export class RouterImportService {
 
       const planId = plan.id;
       const customerName = user.comment?.trim() || user.username;
-      const customer = await this.findOrCreateCustomer(customerName, user.username, report);
+      const customer = await this.findOrCreateCustomer(customerName, user.username, tenantId, report);
 
-      const existing = await this.prisma.subscription.findUnique({
-        where: { routerId_hotspotUsername: { routerId, hotspotUsername: user.username } },
+      const existing = await this.prisma.scoped.subscription.findFirst({
+        where: { routerId, hotspotUsername: user.username },
       });
 
       if (existing) {
-        await this.prisma.subscription.update({
+        await this.prisma.scoped.subscription.update({
           where: { id: existing.id },
           data: { planId, status: user.disabled ? 'SUSPENDED' : existing.status },
         });
@@ -201,8 +223,9 @@ export class RouterImportService {
       // maintenant, à corriger par l'admin si la vraie échéance diffère.
       const start = new Date();
       const end = new Date(start.getTime() + (plan.periodDays ?? MONTH_DAYS) * 86_400_000);
-      await this.prisma.subscription.create({
+      await this.prisma.scoped.subscription.create({
         data: {
+          tenantId,
           customerId: customer.id,
           planId,
           routerId,
@@ -222,6 +245,7 @@ export class RouterImportService {
     bindings: { id: string; macAddress: string; type: string; comment: string | null }[],
     leases: { macAddress: string; hostName: string | null; address: string }[],
     routerId: string,
+    tenantId: string,
     report: ImportReport,
     dryRun: boolean,
   ): Promise<void> {
@@ -242,7 +266,7 @@ export class RouterImportService {
         comment: binding.comment,
       });
 
-      const existing = await this.prisma.device.findFirst({
+      const existing = await this.prisma.scoped.device.findFirst({
         where: { macAddress: binding.macAddress, routerId },
       });
 
@@ -258,19 +282,28 @@ export class RouterImportService {
       };
 
       if (existing) {
-        await this.prisma.device.update({ where: { id: existing.id }, data });
+        await this.prisma.scoped.device.update({ where: { id: existing.id }, data });
         report.devices.updated += 1;
       } else {
-        await this.prisma.device.create({
-          data: { ...data, type: detected.confidence === 'high' ? detected.type : DeviceType.OTHER },
+        await this.prisma.scoped.device.create({
+          data: {
+            ...data,
+            tenantId,
+            type: detected.confidence === 'high' ? detected.type : DeviceType.OTHER,
+          },
         });
         report.devices.created += 1;
       }
     }
   }
 
-  private async findOrCreateCustomer(name: string, username: string, report: ImportReport) {
-    const existing = await this.prisma.customer.findFirst({ where: { name } });
+  private async findOrCreateCustomer(
+    name: string,
+    username: string,
+    tenantId: string,
+    report: ImportReport,
+  ) {
+    const existing = await this.prisma.scoped.customer.findFirst({ where: { name } });
     if (existing) {
       report.customers.matched += 1;
       return existing;
@@ -278,8 +311,8 @@ export class RouterImportService {
     report.customers.created += 1;
     // Le routeur ne stocke aucun téléphone : un identifiant provisoire est
     // posé pour satisfaire la contrainte d'unicité, à compléter par l'admin.
-    return this.prisma.customer.create({
-      data: { name, phone: `import:${username}` },
+    return this.prisma.scoped.customer.create({
+      data: { tenantId, name, phone: `import:${username}` },
     });
   }
 

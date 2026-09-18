@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { vouchersApi, type GenerateBatchInput } from '../api/vouchers';
 import { plansApi } from '../api/plans';
 import { useAuth } from '../auth/AuthContext';
+import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import type { VoucherStatus } from '../api/types';
 import { Badge, Button, Card, FormField, Input, Select, Table } from '../components/ui';
@@ -18,6 +19,7 @@ const STATUS_TONE: Record<VoucherStatus, 'green' | 'amber' | 'slate' | 'red'> = 
 
 export function VouchersPage() {
   const { canWrite } = useAuth();
+  const { format } = useCurrency();
   const queryClient = useQueryClient();
   const { data: plans } = useQuery({ queryKey: ['plans'], queryFn: plansApi.list });
   const [statusFilter, setStatusFilter] = useState<VoucherStatus | ''>('');
@@ -118,7 +120,7 @@ export function VouchersPage() {
           {vouchers?.map((voucher) => (
             <tr key={voucher.id}>
               <td className="px-3 py-2 font-mono">{voucher.code}</td>
-              <td className="px-3 py-2">{Number(voucher.priceAr).toLocaleString('fr-FR')} Ar</td>
+              <td className="px-3 py-2">{format(voucher.price)}</td>
               <td className="px-3 py-2">
                 <Badge tone={STATUS_TONE[voucher.status]}>{voucher.status}</Badge>
               </td>

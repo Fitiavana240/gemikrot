@@ -35,24 +35,24 @@ export class DashboardService {
       recentCustomers,
       hotspotActiveUsers,
     ] = await Promise.all([
-      this.prisma.voucher.groupBy({ by: ['status'], _count: { _all: true } }),
+      this.prisma.scoped.voucher.groupBy({ by: ['status'], _count: { _all: true } }),
       this.sumVerifiedSince(startOfDay()),
       this.sumVerifiedSince(startOfWeek()),
       this.sumVerifiedSince(startOfMonth()),
-      this.prisma.payment.groupBy({
+      this.prisma.scoped.payment.groupBy({
         by: ['planId'],
         where: { status: PaymentStatus.VERIFIED },
-        _sum: { amountAr: true },
+        _sum: { amount: true },
         _count: { _all: true },
       }),
-      this.prisma.payment.groupBy({
+      this.prisma.scoped.payment.groupBy({
         by: ['method'],
         where: { status: PaymentStatus.VERIFIED },
-        _sum: { amountAr: true },
+        _sum: { amount: true },
         _count: { _all: true },
       }),
-      this.prisma.payment.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
-      this.prisma.customer.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
+      this.prisma.scoped.payment.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
+      this.prisma.scoped.customer.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
       // Le routeur peut être injoignable : le dashboard reste consultable.
       this.clients
         .forDefaultRouter()
@@ -72,10 +72,10 @@ export class DashboardService {
   }
 
   private async sumVerifiedSince(since: Date): Promise<string> {
-    const result = await this.prisma.payment.aggregate({
+    const result = await this.prisma.scoped.payment.aggregate({
       where: { status: PaymentStatus.VERIFIED, verifiedAt: { gte: since } },
-      _sum: { amountAr: true },
+      _sum: { amount: true },
     });
-    return (result._sum.amountAr ?? 0).toString();
+    return (result._sum.amount ?? 0).toString();
   }
 }

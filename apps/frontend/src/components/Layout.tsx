@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 
-const NAV = [
+const NAV: { to: string; label: string; end?: boolean }[] = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/sessions', label: 'Appareils actifs' },
   { to: '/subscriptions', label: 'Abonnements' },
@@ -11,7 +11,11 @@ const NAV = [
   { to: '/vouchers', label: 'Vouchers' },
   { to: '/payments', label: 'Paiements' },
   { to: '/routers', label: 'Routeurs' },
+  { to: '/settings', label: 'Paramètres' },
 ];
+
+/** Le SUPER_ADMIN pilote la plateforme, pas un réseau en particulier. */
+const SUPER_ADMIN_NAV: typeof NAV = [{ to: '/tenants', label: 'Exploitants' }];
 
 export function Layout() {
   const { user, logout } = useAuth();
@@ -21,7 +25,7 @@ export function Layout() {
       <aside className="w-56 shrink-0 border-r border-slate-200 bg-white p-4">
         <div className="mb-6 text-lg font-semibold text-sky-700">Zone WIFI-TATI</div>
         <nav className="space-y-1">
-          {NAV.map((item) => (
+          {[...NAV, ...(user?.role === 'SUPER_ADMIN' ? SUPER_ADMIN_NAV : [])].map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

@@ -3,26 +3,25 @@ import { ConflictException } from '@nestjs/common';
 import { PaymentStatus } from '@prisma/client';
 import { PaymentsService } from './payments.service.js';
 
+const tenantContext = { requireTenantId: () => 'tenant-1', get: () => ({ tenantId: 'tenant-1', isSuperAdmin: false }) };
+
 function createFakePrisma() {
   const payments = new Map<string, any>();
 
-  return {
+  const client: any = {
+    tenant: { findUniqueOrThrow: vi.fn(async () => ({ currency: 'MGA' })) },
     customer: { findUnique: vi.fn(async () => ({ id: 'customer-1' })) },
     plan: { findUnique: vi.fn(async () => ({ id: 'plan-1' })) },
     payment: {
       findUnique: vi.fn(async ({ where }: any) => {
         if (where.id) return payments.get(where.id) ?? null;
-        if (where.method_reference) {
-          return (
-            [...payments.values()].find(
-              (p) =>
-                p.method === where.method_reference.method &&
-                p.reference === where.method_reference.reference,
-            ) ?? null
-          );
-        }
         return null;
       }),
+      findFirst: vi.fn(async ({ where }: any) =>
+        [...payments.values()].find(
+          (p) => p.method === where.method && p.reference === where.reference,
+        ) ?? null,
+      ),
       create: vi.fn(async ({ data }: any) => {
         const record = {
           id: `pay-${payments.size + 1}`,
@@ -46,6 +45,9 @@ function createFakePrisma() {
     },
     _payments: payments,
   };
+  // `scoped` renvoie le même faux client : le cloisonnement a son propre test.
+  client.scoped = client;
+  return client;
 }
 
 describe('PaymentsService', () => {
@@ -72,6 +74,7 @@ describe('PaymentsService', () => {
       vouchers as any,
       subscriptions as any,
       provider as any,
+      tenantContext as any,
     );
   });
 
@@ -79,7 +82,7 @@ describe('PaymentsService', () => {
     await service.create({
       customerId: 'customer-1',
       planId: 'plan-1',
-      amountAr: 2000,
+      amount: 2000,
       method: 'MVOLA',
       reference: 'REF-001',
     } as any);
@@ -88,7 +91,7 @@ describe('PaymentsService', () => {
       service.create({
         customerId: 'customer-1',
         planId: 'plan-1',
-        amountAr: 2000,
+        amount: 2000,
         method: 'MVOLA',
         reference: 'REF-001',
       } as any),
@@ -99,7 +102,7 @@ describe('PaymentsService', () => {
     const payment = await service.create({
       customerId: 'customer-1',
       planId: 'plan-1',
-      amountAr: 2000,
+      amount: 2000,
       method: 'CASH',
       reference: 'REF-002',
     } as any);
@@ -120,7 +123,7 @@ describe('PaymentsService', () => {
       customerId: 'customer-1',
       planId: 'plan-1',
       subscriptionId: 'sub-1',
-      amountAr: 15000,
+      amount: 15000,
       method: 'MVOLA',
       reference: 'REF-ABO-001',
     } as any);

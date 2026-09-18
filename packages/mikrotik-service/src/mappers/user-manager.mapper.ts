@@ -1,16 +1,16 @@
 import {
-  ProfileStartsWhen,
   UserManagerLimitationDto,
   UserManagerProfileDto,
+  UserManagerProfileLimitationDto,
   UserManagerSessionDto,
   UserManagerUserDto,
   UserManagerUserProfileDto,
   UserManagerUserProfileState,
 } from '../dto/user-manager.dto';
-import { formatRateToken, parseRateToken, parseRouterOsDuration } from './hotspot.mapper';
+import { formatRateToken, parseRouterOsDuration, splitRateLimitToken } from './hotspot.mapper';
 
-// `formatRateToken` reste réexporté ici : le service l'importe déjà depuis ce
-// module, et les helpers de débit vivent désormais dans `hotspot.mapper`.
+// Les helpers de débit vivent dans `hotspot.mapper` (avec le parseur de
+// durées) ; réexportés ici car le service les consomme depuis ce module.
 export { formatRateToken };
 
 export function mapUserManagerUser(raw: any): UserManagerUserDto {
@@ -25,37 +25,66 @@ export function mapUserManagerUser(raw: any): UserManagerUserDto {
 }
 
 export function mapUserManagerProfile(raw: any): UserManagerProfileDto {
+  const validity = raw?.validity;
+  const sharedUsers = raw?.['override-shared-users'];
+
   return {
     id: raw?.['.id'] ?? '',
     name: raw?.name ?? '',
+    nameForUsers: raw?.['name-for-users'] ?? null,
+    comment: raw?.comment ?? null,
+    // "unlimited" est une valeur légitime, à distinguer d'une durée nulle.
+    validityDurationSeconds:
+      validity == null || validity === 'unlimited' ? null : parseRouterOsDuration(validity),
+    startsWhen: raw?.['starts-when'] === 'assigned' ? 'assigned' : 'first-auth',
+    price: Number(raw?.price ?? 0),
+    overrideSharedUsers:
+      sharedUsers == null || sharedUsers === 'off' ? null : Number(sharedUsers) || null,
   };
 }
 
 export function mapUserManagerLimitation(raw: any): UserManagerLimitationDto {
-  const startsWhen: ProfileStartsWhen = raw?.['starts-when'] === 'logon' ? 'logon' : 'creation';
-  const [rxToken, txToken] = String(raw?.['rate-limit'] ?? '').split('/');
+  const rateLimit = splitRateLimitToken(raw?.['rate-limit']);
 
   return {
     id: raw?.['.id'] ?? '',
     name: raw?.name ?? '',
-    validityDurationSeconds: raw?.validity != null ? parseRouterOsDuration(raw.validity) : null,
-    startsWhen,
-    rateLimit: {
-      rxBitsPerSecond: rxToken ? parseRateToken(rxToken) : null,
-      txBitsPerSecond: txToken ? parseRateToken(txToken) : null,
-    },
+    rateLimit: { rxBitsPerSecond: rateLimit.rx, txBitsPerSecond: rateLimit.tx },
     transferLimitBytes: raw?.['transfer-limit'] != null ? Number(raw['transfer-limit']) : null,
-    uptimeLimitSeconds: raw?.['uptime-limit'] != null ? parseRouterOsDuration(raw['uptime-limit']) : null,
+    uptimeLimitSeconds:
+      raw?.['uptime-limit'] != null ? parseRouterOsDuration(raw['uptime-limit']) : null,
   };
 }
 
+export function mapUserManagerProfileLimitation(raw: any): UserManagerProfileLimitationDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    profileName: raw?.profile ?? '',
+    limitationName: raw?.limitation ?? '',
+  };
+}
+
+/**
+ * `end-time` n'est pas toujours une date : RouterOS renvoie `unlimited` pour
+ * un profil sans échéance et `not-yet-running` tant que la validité
+ * `first-auth` n'a pas démarré (le client ne s'est pas encore connecté).
+ * Ces deux cas valent "pas d'échéance connue", et non une date invalide.
+ */
 export function mapUserManagerUserProfile(raw: any): UserManagerUserProfileDto {
+  const rawEndTime = raw?.['end-time'];
+  const endTime =
+    rawEndTime == null ||
+    rawEndTime === 'unlimited' ||
+    rawEndTime === 'not-yet-running' ||
+    Number.isNaN(Date.parse(String(rawEndTime)))
+      ? null
+      : String(rawEndTime);
+
   return {
     id: raw?.['.id'] ?? '',
     username: raw?.user ?? raw?.username ?? '',
     profileName: raw?.profile ?? '',
-    activatedAt: raw?.['activated-at'] ?? null,
-    expiresAt: raw?.['expires-at'] ?? null,
+    endTime,
     state: mapUserProfileState(raw?.state),
   };
 }
@@ -75,16 +104,22 @@ export function mapUserManagerSession(raw: any): UserManagerSessionDto {
   };
 }
 
+/** Valeurs relevées sur un hAP en 7.24.4 : `running-active`, `used`. */
 function mapUserProfileState(state: unknown): UserManagerUserProfileState {
   switch (state) {
-    case 'active':
-      return 'active';
-    case 'expired':
-      return 'expired';
-    case 'scheduled':
-      return 'scheduled';
+    case 'running-active':
+      return 'running-active';
+    case 'used':
+      return 'used';
+    case 'waiting':
+      return 'waiting';
     default:
       return 'unknown';
   }
 }
 
+/** Durée applicative → notation RouterOS ("2592000" secondes → "30d"). */
+export function formatValidity(seconds: number | null): string {
+  if (seconds == null) return 'unlimited';
+  return `${seconds}s`;
+}

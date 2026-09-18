@@ -4,7 +4,7 @@ import type { Plan, StartsWhen } from './types';
 export interface CreatePlanInput {
   name: string;
   description?: string;
-  priceAr: number;
+  price: number;
   validityDurationSeconds: number;
   startsWhen: StartsWhen;
   rateLimitRxBps?: number;

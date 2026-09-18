@@ -6,25 +6,30 @@ export interface CreateUserManagerUserDto {
   group?: string;
 }
 
+/**
+ * Offre User Manager. `validityDurationSeconds` est une durée **calendaire**
+ * (null = illimitée), et non une durée de session comme côté HotSpot.
+ */
 export interface CreateProfileDto {
   name: string;
-  validityDurationSeconds: number;
-  startsWhen: 'logon' | 'creation';
-  rateLimitRxBitsPerSecond?: number;
-  rateLimitTxBitsPerSecond?: number;
-  transferLimitBytes?: number;
+  validityDurationSeconds: number | null;
+  startsWhen: 'first-auth' | 'assigned';
+  price?: number;
+  nameForUsers?: string;
+  /** `override-shared-users` : nombre d'appareils simultanés autorisés. */
   sharedUsers?: number;
+  comment?: string;
 }
 
 export interface UpdateProfileDto {
   /** Nom du profil à modifier (identifiant métier). */
   name: string;
-  validityDurationSeconds?: number;
-  startsWhen?: 'logon' | 'creation';
-  rateLimitRxBitsPerSecond?: number;
-  rateLimitTxBitsPerSecond?: number;
-  transferLimitBytes?: number;
+  validityDurationSeconds?: number | null;
+  startsWhen?: 'first-auth' | 'assigned';
+  price?: number;
+  nameForUsers?: string;
   sharedUsers?: number;
+  comment?: string;
 }
 
 export interface AssignProfileDto {

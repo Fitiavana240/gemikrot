@@ -131,30 +131,63 @@ describe('RouterOSMikrotikService', () => {
   });
 
   describe('createProfile', () => {
-    it('crée le profile puis le profile-limitation avec le bon rate-limit', async () => {
-      client.put.mockResolvedValueOnce({}); // /user-manager/profile
+    it('écrit la validité et starts-when sur le profil lui-même', async () => {
+      client.get.mockResolvedValueOnce([]); // aucun profil existant
+      // Réponse calquée sur celle d'un hAP en 7.24.4.
       client.put.mockResolvedValueOnce({
         '.id': '*9',
-        name: 'forfait-7j',
-        validity: '604800s',
-        'starts-when': 'logon',
-        'rate-limit': '2M/1M',
+        name: 'forfait-30j',
+        'name-for-users': 'forfait-30j',
+        validity: '4w2d',
+        'starts-when': 'first-auth',
+        price: '15000',
+        'override-shared-users': 'off',
       });
 
       const result = await service.createProfile({
-        name: 'forfait-7j',
-        validityDurationSeconds: 604800,
-        startsWhen: 'logon',
-        rateLimitRxBitsPerSecond: 2_000_000,
-        rateLimitTxBitsPerSecond: 1_000_000,
+        name: 'forfait-30j',
+        validityDurationSeconds: 2_592_000,
+        startsWhen: 'first-auth',
+        price: 15000,
       });
 
-      expect(result.name).toBe('forfait-7j');
-      expect(result.rateLimit.rxBitsPerSecond).toBe(2_000_000);
-      expect(client.put).toHaveBeenNthCalledWith(2, '/user-manager/profile-limitation', expect.objectContaining({
-        'rate-limit': '2M/1M',
-        'starts-when': 'logon',
-      }));
+      expect(result.name).toBe('forfait-30j');
+      expect(result.validityDurationSeconds).toBe(2_592_000);
+      expect(result.startsWhen).toBe('first-auth');
+      expect(result.price).toBe(15000);
+      expect(result.overrideSharedUsers).toBeNull();
+      // La validité va sur /user-manager/profile, pas sur profile-limitation,
+      // qui ne sert qu'à rattacher une limitation de débit.
+      expect(client.put).toHaveBeenCalledWith(
+        '/user-manager/profile',
+        expect.objectContaining({ validity: '2592000s', 'starts-when': 'first-auth' }),
+      );
+    });
+
+    it('refuse de créer un profil déjà présent', async () => {
+      client.get.mockResolvedValueOnce([{ '.id': '*1', name: 'forfait-30j', validity: '4w2d' }]);
+
+      await expect(
+        service.createProfile({
+          name: 'forfait-30j',
+          validityDurationSeconds: 2_592_000,
+          startsWhen: 'first-auth',
+        }),
+      ).rejects.toBeInstanceOf(MikrotikConflictError);
+      expect(client.put).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setUserManagerUserDisabled', () => {
+    it('suspend un abonné sans supprimer son compte', async () => {
+      client.get.mockResolvedValueOnce([{ '.id': '*5', name: 'Mario', disabled: 'false' }]);
+      client.patch.mockResolvedValueOnce({ '.id': '*5', name: 'Mario', disabled: 'true' });
+
+      const result = await service.setUserManagerUserDisabled('Mario', true);
+
+      expect(result.disabled).toBe(true);
+      expect(client.patch).toHaveBeenCalledWith('/user-manager/user/*5', { disabled: 'true' });
+      expect(client.delete).not.toHaveBeenCalled();
     });
   });
 });

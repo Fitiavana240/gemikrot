@@ -7,42 +7,73 @@ export interface UserManagerUserDto {
   group: string | null;
 }
 
-export interface UserManagerProfileDto {
-  id: string;
-  name: string;
-}
-
 export interface RateLimitDto {
   rxBitsPerSecond: number | null;
   txBitsPerSecond: number | null;
 }
 
-export type ProfileStartsWhen = 'logon' | 'creation';
+/**
+ * Quand la validité démarre, valeurs telles que RouterOS les nomme :
+ *  - `first-auth` : à la première authentification du client — c'est ce qui
+ *    permet de vendre « un mois » sans que le compte s'use avant usage ;
+ *  - `assigned` : dès l'attribution du profil.
+ */
+export type ProfileStartsWhen = 'first-auth' | 'assigned';
 
 /**
- * Correspond à un `profile-limitation` RouterOS : c'est ici que vivent
- * validity, starts-when et les limites RX/TX (objectifs 8, 9, 10 du cahier
- * des charges applicatif).
+ * Offre User Manager (`/user-manager/profile`). Contrairement au HotSpot dont
+ * le `session-timeout` ne borne qu'une session, `validity` est une durée
+ * **calendaire** : c'est ce qui rend User Manager adapté aux abonnements.
+ */
+export interface UserManagerProfileDto {
+  id: string;
+  name: string;
+  nameForUsers: string | null;
+  comment: string | null;
+  /** `null` quand la validité est illimitée. */
+  validityDurationSeconds: number | null;
+  startsWhen: ProfileStartsWhen;
+  /** Prix porté par le profil côté routeur, dans l'unité de l'exploitant. */
+  price: number;
+  /** `null` quand `override-shared-users` vaut `off`. */
+  overrideSharedUsers: number | null;
+}
+
+/**
+ * Limitation de débit/quota (`/user-manager/limitation`), rattachée à un
+ * profil via `/user-manager/profile-limitation`. Distincte de la validité,
+ * qui vit sur le profil lui-même.
  */
 export interface UserManagerLimitationDto {
   id: string;
   name: string;
-  validityDurationSeconds: number | null;
-  startsWhen: ProfileStartsWhen;
   rateLimit: RateLimitDto;
   transferLimitBytes: number | null;
   uptimeLimitSeconds: number | null;
 }
 
-export type UserManagerUserProfileState = 'active' | 'expired' | 'scheduled' | 'unknown';
+/** Jonction profil ↔ limitation. */
+export interface UserManagerProfileLimitationDto {
+  id: string;
+  profileName: string;
+  limitationName: string;
+}
 
-/** Association utilisateur ↔ profil, porteuse de la date d'expiration réelle. */
+/** États réellement renvoyés par RouterOS pour une attribution de profil. */
+export type UserManagerUserProfileState = 'running-active' | 'used' | 'waiting' | 'unknown';
+
+/**
+ * Abonnement en cours : l'attribution d'un profil à un utilisateur
+ * (`/user-manager/user-profile`). `endTime` est calculé et tenu par le
+ * routeur — c'est la source de vérité de l'échéance, y compris si
+ * l'application est arrêtée.
+ */
 export interface UserManagerUserProfileDto {
   id: string;
   username: string;
   profileName: string;
-  activatedAt: string | null;
-  expiresAt: string | null;
+  /** `null` quand l'échéance est illimitée ou pas encore démarrée. */
+  endTime: string | null;
   state: UserManagerUserProfileState;
 }
 

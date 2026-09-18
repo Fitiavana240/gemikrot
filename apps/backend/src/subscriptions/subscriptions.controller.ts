@@ -54,4 +54,11 @@ export class SubscriptionsController {
   renew(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.subscriptions.renew(id, undefined, user.id);
   }
+
+  /** Réaligne l'échéance sur celle tenue par le routeur (source de vérité). */
+  @Roles(...CAN_MANAGE)
+  @Post(':id/reconcile')
+  reconcile(@Param('id') id: string) {
+    return this.subscriptions.reconcile(id);
+  }
 }

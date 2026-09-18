@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Plan } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 import type { CreatePlanDto } from './dto/create-plan.dto.js';
 import type { UpdatePlanDto } from './dto/update-plan.dto.js';
@@ -19,14 +20,15 @@ export class PlansService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly clients: MikrotikClientFactory,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   findAll(): Promise<Plan[]> {
-    return this.prisma.plan.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.prisma.scoped.plan.findMany({ orderBy: { createdAt: 'desc' } });
   }
 
   async findOne(id: string): Promise<Plan> {
-    const plan = await this.prisma.plan.findUnique({ where: { id } });
+    const plan = await this.prisma.scoped.plan.findUnique({ where: { id } });
     if (!plan) throw new NotFoundException(`Plan ${id} introuvable`);
     return plan;
   }
@@ -43,11 +45,12 @@ export class PlansService {
   async create(dto: CreatePlanDto): Promise<Plan> {
     const mikrotikProfileName = await this.reserveProfileName(dto.name);
 
-    const plan = await this.prisma.plan.create({
+    const plan = await this.prisma.scoped.plan.create({
       data: {
+        tenantId: this.tenantContext.requireTenantId(),
         name: dto.name,
         description: dto.description,
-        priceAr: dto.priceAr,
+        price: dto.price,
         validityDurationSeconds: dto.validityDurationSeconds,
         startsWhen: dto.startsWhen,
         rateLimitRxBps: dto.rateLimitRxBps,
@@ -71,7 +74,7 @@ export class PlansService {
         sharedUsers: dto.maxSharedUsers,
       });
     } catch (error) {
-      await this.prisma.plan.delete({ where: { id: plan.id } });
+      await this.prisma.scoped.plan.delete({ where: { id: plan.id } });
       throw error;
     }
 
@@ -90,11 +93,11 @@ export class PlansService {
       sharedUsers: dto.maxSharedUsers,
     });
 
-    return this.prisma.plan.update({
+    return this.prisma.scoped.plan.update({
       where: { id },
       data: {
         description: dto.description,
-        priceAr: dto.priceAr,
+        price: dto.price,
         validityDurationSeconds: dto.validityDurationSeconds,
         startsWhen: dto.startsWhen,
         rateLimitRxBps: dto.rateLimitRxBps,
@@ -109,13 +112,13 @@ export class PlansService {
 
   async archive(id: string): Promise<Plan> {
     await this.findOne(id);
-    return this.prisma.plan.update({ where: { id }, data: { status: 'ARCHIVED' } });
+    return this.prisma.scoped.plan.update({ where: { id }, data: { status: 'ARCHIVED' } });
   }
 
   /** Dérive un nom de profil RouterOS à partir du nom commercial. */
   private async reserveProfileName(planName: string): Promise<string> {
     const candidate = slugifyProfileName(planName);
-    const collision = await this.prisma.plan.findUnique({
+    const collision = await this.prisma.scoped.plan.findFirst({
       where: { mikrotikProfileName: candidate },
     });
     if (collision) {

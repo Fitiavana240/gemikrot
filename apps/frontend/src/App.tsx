@@ -8,6 +8,9 @@ import { SessionsPage } from './pages/SessionsPage';
 import { SubscriptionsPage } from './pages/SubscriptionsPage';
 import { DevicesPage } from './pages/DevicesPage';
 import { RoutersPage } from './pages/RoutersPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { TenantsPage } from './pages/TenantsPage';
+import { SignupPage } from './pages/SignupPage';
 import { PlansPage } from './pages/PlansPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { VouchersPage } from './pages/VouchersPage';
@@ -19,6 +22,7 @@ export function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
           <Route
             element={
               <RequireAuth>
@@ -31,6 +35,8 @@ export function App() {
             <Route path="/subscriptions" element={<SubscriptionsPage />} />
             <Route path="/devices" element={<DevicesPage />} />
             <Route path="/routers" element={<RoutersPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/tenants" element={<TenantsPage />} />
             <Route path="/plans" element={<PlansPage />} />
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/vouchers" element={<VouchersPage />} />

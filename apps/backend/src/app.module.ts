@@ -3,6 +3,9 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { TenancyModule } from './tenancy/tenancy.module.js';
+import { TenantsModule } from './tenants/tenants.module.js';
+import { AdminUsersModule } from './admin-users/admin-users.module.js';
 import { RoutersModule } from './routers/routers.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
@@ -17,7 +20,10 @@ import { DevicesModule } from './devices/devices.module.js';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    TenancyModule,
     PrismaModule,
+    TenantsModule,
+    AdminUsersModule,
     RoutersModule,
     AuditModule,
     AuthModule,

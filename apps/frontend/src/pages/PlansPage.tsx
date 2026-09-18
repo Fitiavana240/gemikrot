@@ -2,18 +2,20 @@ import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { plansApi, type CreatePlanInput } from '../api/plans';
 import { useAuth } from '../auth/AuthContext';
+import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, FormField, Input, Select, Table } from '../components/ui';
 
 const EMPTY_FORM: CreatePlanInput = {
   name: '',
-  priceAr: 0,
+  price: 0,
   validityDurationSeconds: 3600,
-  startsWhen: 'LOGON',
+  startsWhen: 'FIRST_AUTH',
 };
 
 export function PlansPage() {
   const { canWrite } = useAuth();
+  const { currency, format } = useCurrency();
   const queryClient = useQueryClient();
   const { data: plans, isLoading } = useQuery({ queryKey: ['plans'], queryFn: plansApi.list });
   const [form, setForm] = useState<CreatePlanInput>(EMPTY_FORM);
@@ -49,13 +51,13 @@ export function PlansPage() {
             <FormField label="Nom">
               <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </FormField>
-            <FormField label="Prix (Ar)">
+            <FormField label={`Prix (${currency})`}>
               <Input
                 type="number"
                 required
                 min={0}
-                value={form.priceAr}
-                onChange={(e) => setForm({ ...form, priceAr: Number(e.target.value) })}
+                value={form.price}
+                onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
               />
             </FormField>
             <FormField label="Validité (secondes)">
@@ -72,8 +74,8 @@ export function PlansPage() {
                 value={form.startsWhen}
                 onChange={(e) => setForm({ ...form, startsWhen: e.target.value as CreatePlanInput['startsWhen'] })}
               >
-                <option value="LOGON">À la première connexion (logon)</option>
-                <option value="CREATION">À la création (creation)</option>
+                <option value="FIRST_AUTH">À la première connexion</option>
+                <option value="ASSIGNED">Dès l'attribution</option>
               </Select>
             </FormField>
             <div className="col-span-2 md:col-span-4">
@@ -93,7 +95,7 @@ export function PlansPage() {
           {plans?.map((plan) => (
             <tr key={plan.id}>
               <td className="px-3 py-2">{plan.name}</td>
-              <td className="px-3 py-2">{Number(plan.priceAr).toLocaleString('fr-FR')} Ar</td>
+              <td className="px-3 py-2">{format(plan.price)}</td>
               <td className="px-3 py-2">{Math.round(plan.validityDurationSeconds / 3600)} h</td>
               <td className="px-3 py-2 font-mono text-xs text-slate-500">{plan.mikrotikProfileName}</td>
               <td className="px-3 py-2">

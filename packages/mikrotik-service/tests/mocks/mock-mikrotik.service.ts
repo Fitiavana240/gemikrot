@@ -19,6 +19,7 @@ import {
 import {
   UserManagerLimitationDto,
   UserManagerProfileDto,
+  UserManagerProfileLimitationDto,
   UserManagerSessionDto,
   UserManagerUserDto,
   UserManagerUserProfileDto,
@@ -50,6 +51,7 @@ import { MikrotikConflictError, MikrotikNotFoundError } from '../../src/errors/m
  */
 export class MockMikrotikService implements IMikrotikService {
   private users = new Map<string, UserManagerUserDto>();
+  private profiles = new Map<string, UserManagerProfileDto>();
   private limitations = new Map<string, UserManagerLimitationDto>();
   private userProfiles: UserManagerUserProfileDto[] = [];
   private activeHotspotUsers: HotspotActiveUserDto[] = [];
@@ -267,11 +269,15 @@ export class MockMikrotikService implements IMikrotikService {
   }
 
   async getUserManagerProfiles(): Promise<UserManagerProfileDto[]> {
-    return [...this.limitations.values()].map((l) => ({ id: l.id, name: l.name }));
+    return [...this.profiles.values()];
   }
 
   async getUserManagerLimitations(): Promise<UserManagerLimitationDto[]> {
     return [...this.limitations.values()];
+  }
+
+  async getUserManagerProfileLimitations(): Promise<UserManagerProfileLimitationDto[]> {
+    return [];
   }
 
   async getUserManagerUserProfiles(username?: string): Promise<UserManagerUserProfileDto[]> {
@@ -308,39 +314,52 @@ export class MockMikrotikService implements IMikrotikService {
     this.userProfiles = this.userProfiles.filter((p) => p.username !== username);
   }
 
-  async createProfile(input: CreateProfileDto): Promise<UserManagerLimitationDto> {
-    const limitation: UserManagerLimitationDto = {
-      id: this.nextId(),
-      name: input.name,
-      validityDurationSeconds: input.validityDurationSeconds,
-      startsWhen: input.startsWhen,
-      rateLimit: {
-        rxBitsPerSecond: input.rateLimitRxBitsPerSecond ?? null,
-        txBitsPerSecond: input.rateLimitTxBitsPerSecond ?? null,
-      },
-      transferLimitBytes: input.transferLimitBytes ?? null,
-      uptimeLimitSeconds: null,
-    };
-    this.limitations.set(input.name, limitation);
-    return limitation;
+  async setUserManagerUserDisabled(username: string, disabled: boolean): Promise<UserManagerUserDto> {
+    const user = this.users.get(username);
+    if (!user) {
+      throw new MikrotikNotFoundError('Utilisateur User Manager', username);
+    }
+    const updated: UserManagerUserDto = { ...user, disabled };
+    this.users.set(username, updated);
+    return updated;
   }
 
-  async updateProfile(input: UpdateProfileDto): Promise<UserManagerLimitationDto> {
-    const existing = this.limitations.get(input.name);
+  async createProfile(input: CreateProfileDto): Promise<UserManagerProfileDto> {
+    if (this.profiles.has(input.name)) {
+      throw new MikrotikConflictError(`Le profil User Manager "${input.name}" existe déjà`);
+    }
+    const profile: UserManagerProfileDto = {
+      id: this.nextId(),
+      name: input.name,
+      nameForUsers: input.nameForUsers ?? input.name,
+      comment: input.comment ?? null,
+      validityDurationSeconds: input.validityDurationSeconds,
+      startsWhen: input.startsWhen,
+      price: input.price ?? 0,
+      overrideSharedUsers: input.sharedUsers ?? null,
+    };
+    this.profiles.set(input.name, profile);
+    return profile;
+  }
+
+  async updateProfile(input: UpdateProfileDto): Promise<UserManagerProfileDto> {
+    const existing = this.profiles.get(input.name);
     if (!existing) {
       throw new MikrotikNotFoundError('Profil User Manager', input.name);
     }
-    const updated: UserManagerLimitationDto = {
+    const updated: UserManagerProfileDto = {
       ...existing,
-      validityDurationSeconds: input.validityDurationSeconds ?? existing.validityDurationSeconds,
+      validityDurationSeconds:
+        input.validityDurationSeconds !== undefined
+          ? input.validityDurationSeconds
+          : existing.validityDurationSeconds,
       startsWhen: input.startsWhen ?? existing.startsWhen,
-      rateLimit: {
-        rxBitsPerSecond: input.rateLimitRxBitsPerSecond ?? existing.rateLimit.rxBitsPerSecond,
-        txBitsPerSecond: input.rateLimitTxBitsPerSecond ?? existing.rateLimit.txBitsPerSecond,
-      },
-      transferLimitBytes: input.transferLimitBytes ?? existing.transferLimitBytes,
+      price: input.price ?? existing.price,
+      nameForUsers: input.nameForUsers ?? existing.nameForUsers,
+      overrideSharedUsers: input.sharedUsers ?? existing.overrideSharedUsers,
+      comment: input.comment ?? existing.comment,
     };
-    this.limitations.set(input.name, updated);
+    this.profiles.set(input.name, updated);
     return updated;
   }
 
@@ -348,13 +367,19 @@ export class MockMikrotikService implements IMikrotikService {
     if (!this.users.has(input.username)) {
       throw new MikrotikNotFoundError('Utilisateur User Manager', input.username);
     }
+    const profile = this.profiles.get(input.profileName);
+    // Reproduit le calcul du routeur : `end-time` dérive de la validité.
+    const endTime =
+      profile?.validityDurationSeconds != null
+        ? new Date(Date.now() + profile.validityDurationSeconds * 1000).toISOString()
+        : null;
+
     const assignment: UserManagerUserProfileDto = {
       id: this.nextId(),
       username: input.username,
       profileName: input.profileName,
-      activatedAt: new Date().toISOString(),
-      expiresAt: null,
-      state: 'active',
+      endTime,
+      state: 'running-active',
     };
     this.userProfiles.push(assignment);
     return assignment;

@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { Prisma, Voucher, VoucherStatus } from '@prisma/client';
 import { MikrotikNotFoundError } from '@wifitati/mikrotik-service';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 import type { CreateVoucherBatchDto } from './dto/create-voucher-batch.dto.js';
@@ -15,30 +16,31 @@ export class VouchersService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly clients: MikrotikClientFactory,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   findAll(filter: { status?: VoucherStatus; planId?: string } = {}): Promise<Voucher[]> {
-    return this.prisma.voucher.findMany({
+    return this.prisma.scoped.voucher.findMany({
       where: filter,
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async findOne(id: string): Promise<Voucher> {
-    const voucher = await this.prisma.voucher.findUnique({ where: { id } });
+    const voucher = await this.prisma.scoped.voucher.findUnique({ where: { id } });
     if (!voucher) throw new NotFoundException(`Voucher ${id} introuvable`);
     return voucher;
   }
 
   async findByCode(code: string): Promise<Voucher> {
-    const voucher = await this.prisma.voucher.findUnique({ where: { code } });
+    const voucher = await this.prisma.scoped.voucher.findUnique({ where: { code } });
     if (!voucher) throw new NotFoundException(`Voucher ${code} introuvable`);
     return voucher;
   }
 
   /** Un voucher CREATED déjà généré et pas encore attribué à un client. */
   findAvailableForPlan(planId: string): Promise<Voucher | null> {
-    return this.prisma.voucher.findFirst({
+    return this.prisma.scoped.voucher.findFirst({
       where: { planId, status: VoucherStatus.CREATED, customerId: null },
       orderBy: { createdAt: 'asc' },
     });
@@ -47,7 +49,7 @@ export class VouchersService {
   /** Génère un voucher à la volée, hors lot, pour attribution immédiate. */
   async generateSingle(planId: string): Promise<Voucher> {
     const plan = await this.getActivePlan(planId);
-    return this.createVoucherWithUniqueCode({ planId: plan.id, priceAr: plan.priceAr });
+    return this.createVoucherWithUniqueCode({ planId: plan.id, price: plan.price });
   }
 
   /** Génération synchrone d'un lot (Section 18). Adapté jusqu'à ~1000 vouchers. */
@@ -55,8 +57,9 @@ export class VouchersService {
     const plan = await this.getActivePlan(dto.planId);
     const routerId = dto.routerId ?? (await this.getDefaultRouterId());
 
-    const batch = await this.prisma.voucherBatch.create({
+    const batch = await this.prisma.scoped.voucherBatch.create({
       data: {
+        tenantId: this.tenantContext.requireTenantId(),
         routerId,
         planId: plan.id,
         quantity: dto.quantity,
@@ -74,15 +77,15 @@ export class VouchersService {
         vouchers.push(
           await this.createVoucherWithUniqueCode({
             planId: plan.id,
-            priceAr: plan.priceAr,
+            price: plan.price,
             batchId: batch.id,
             prefix: dto.prefix,
           }),
         );
       }
 
-      await this.prisma.voucherBatch.update({ where: { id: batch.id }, data: { status: 'COMPLETED' } });
-      await this.prisma.voucherJob.update({
+      await this.prisma.scoped.voucherBatch.update({ where: { id: batch.id }, data: { status: 'COMPLETED' } });
+      await this.prisma.scoped.voucherJob.update({
         where: { id: batch.jobs[0].id },
         data: { processed: vouchers.length, status: 'completed', finishedAt: new Date() },
       });
@@ -96,8 +99,8 @@ export class VouchersService {
 
       return vouchers;
     } catch (error) {
-      await this.prisma.voucherBatch.update({ where: { id: batch.id }, data: { status: 'FAILED' } });
-      await this.prisma.voucherJob.update({
+      await this.prisma.scoped.voucherBatch.update({ where: { id: batch.id }, data: { status: 'FAILED' } });
+      await this.prisma.scoped.voucherJob.update({
         where: { id: batch.jobs[0].id },
         data: { status: 'failed', errorMessage: String(error), finishedAt: new Date() },
       });
@@ -135,7 +138,7 @@ export class VouchersService {
     // connecté. La durée n'est donc décomptée qu'à partir de la connexion.
     const expiresAt = null;
 
-    const updated = await this.prisma.voucher.update({
+    const updated = await this.prisma.scoped.voucher.update({
       where: { id: voucher.id },
       data: {
         status: VoucherStatus.SOLD,
@@ -171,7 +174,7 @@ export class VouchersService {
       }
     }
 
-    const updated = await this.prisma.voucher.update({
+    const updated = await this.prisma.scoped.voucher.update({
       where: { id },
       data: { status: VoucherStatus.DISABLED },
     });
@@ -191,7 +194,7 @@ export class VouchersService {
         `Voucher ${voucher.code} déjà attribué : utiliser disable(), pas cancel()`,
       );
     }
-    const updated = await this.prisma.voucher.update({
+    const updated = await this.prisma.scoped.voucher.update({
       where: { id },
       data: { status: VoucherStatus.CANCELLED },
     });
@@ -200,14 +203,14 @@ export class VouchersService {
   }
 
   private async getActivePlan(planId: string) {
-    const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
+    const plan = await this.prisma.scoped.plan.findUnique({ where: { id: planId } });
     if (!plan) throw new NotFoundException(`Plan ${planId} introuvable`);
     if (plan.status !== 'ACTIVE') throw new ConflictException(`Plan ${plan.name} n'est plus actif`);
     return plan;
   }
 
   private async getDefaultRouterId(): Promise<string> {
-    const router = await this.prisma.router.findFirst({ orderBy: { createdAt: 'asc' } });
+    const router = await this.prisma.scoped.router.findFirst({ orderBy: { createdAt: 'asc' } });
     if (!router) {
       throw new ConflictException(
         'Aucun routeur enregistré en base — renseigner routerId ou exécuter le seed',
@@ -218,18 +221,19 @@ export class VouchersService {
 
   private async createVoucherWithUniqueCode(input: {
     planId: string;
-    priceAr: Prisma.Decimal | number;
+    price: Prisma.Decimal | number;
     batchId?: string;
     prefix?: string;
   }): Promise<Voucher> {
     for (let attempt = 0; attempt < MAX_CODE_COLLISION_RETRIES; attempt += 1) {
       const code = generateVoucherCode(10, input.prefix);
       try {
-        return await this.prisma.voucher.create({
+        return await this.prisma.scoped.voucher.create({
           data: {
+            tenantId: this.tenantContext.requireTenantId(),
             code,
             planId: input.planId,
-            priceAr: input.priceAr,
+            price: input.price,
             batchId: input.batchId,
           },
         });

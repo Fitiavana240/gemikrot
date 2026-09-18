@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Input } from '../components/ui';
 
@@ -47,6 +47,12 @@ export function LoginPage() {
         <Button type="submit" disabled={loading} className="w-full">
           {loading ? 'Connexion…' : 'Se connecter'}
         </Button>
+        <p className="text-center text-sm text-slate-500">
+          Vous exploitez un réseau Wi-Fi ?{' '}
+          <Link to="/signup" className="text-sky-700 hover:underline">
+            Créer un compte
+          </Link>
+        </p>
       </form>
     </div>
   );

@@ -8,7 +8,7 @@ export class UpdatePlanDto {
 
   @IsOptional()
   @IsPositive()
-  priceAr?: number;
+  price?: number;
 
   @IsOptional()
   @IsInt()

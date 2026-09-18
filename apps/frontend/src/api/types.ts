@@ -3,7 +3,7 @@
 // apps/backend/src/main.ts) : on les type `string` ici, pas `number`.
 
 export type AdminRole = 'SUPER_ADMIN' | 'ADMIN' | 'OPERATOR' | 'VIEWER';
-export type StartsWhen = 'LOGON' | 'CREATION';
+export type StartsWhen = 'FIRST_AUTH' | 'ASSIGNED';
 export type PlanStatus = 'ACTIVE' | 'ARCHIVED';
 export type CustomerStatus = 'ACTIVE' | 'DISABLED';
 export type VoucherStatus = 'CREATED' | 'SOLD' | 'ACTIVE' | 'EXPIRED' | 'DISABLED' | 'CANCELLED';
@@ -14,13 +14,15 @@ export interface AuthUser {
   id: string;
   email: string;
   role: AdminRole;
+  /** `null` pour le SUPER_ADMIN, rattaché à aucun exploitant. */
+  tenantId: string | null;
 }
 
 export interface Plan {
   id: string;
   name: string;
   description: string | null;
-  priceAr: string;
+  price: string;
   validityDurationSeconds: number;
   startsWhen: StartsWhen;
   rateLimitRxBps: number | null;
@@ -58,7 +60,7 @@ export interface Voucher {
   code: string;
   batchId: string | null;
   planId: string;
-  priceAr: string;
+  price: string;
   status: VoucherStatus;
   customerId: string | null;
   deviceId: string | null;
@@ -71,7 +73,7 @@ export interface Payment {
   id: string;
   customerId: string;
   planId: string;
-  amountAr: string;
+  amount: string;
   method: PaymentMethod;
   reference: string;
   status: PaymentStatus;
@@ -84,8 +86,8 @@ export interface Payment {
 export interface DashboardSummary {
   vouchersByStatus: { status: VoucherStatus; _count: { _all: number } }[];
   revenue: { today: string; thisWeek: string; thisMonth: string };
-  revenueByPlan: { planId: string; _sum: { amountAr: string | null }; _count: { _all: number } }[];
-  revenueByMethod: { method: PaymentMethod; _sum: { amountAr: string | null }; _count: { _all: number } }[];
+  revenueByPlan: { planId: string; _sum: { amount: string | null }; _count: { _all: number } }[];
+  revenueByMethod: { method: PaymentMethod; _sum: { amount: string | null }; _count: { _all: number } }[];
   recentPayments: Payment[];
   recentCustomers: Customer[];
   connectedClients: number;
