@@ -20,6 +20,7 @@ const TENANT_SCOPED_MODELS = new Set<string>([
   'TicketTemplate',
   'PaymentClaim',
   'RouterOperation',
+  'RouterEnrollment',
 ]);
 
 /** Opérations dont le `where` doit être restreint à l'exploitant courant. */

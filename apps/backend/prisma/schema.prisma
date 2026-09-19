@@ -44,6 +44,7 @@ model Tenant {
   adminUsers          AdminUser[]
   mobileMoneyAccounts MobileMoneyAccount[]
   routers             Router[]
+  routerEnrollments   RouterEnrollment[]
   plans               Plan[]
   customers           Customer[]
   subscriptions       Subscription[]
@@ -188,6 +189,13 @@ model Router {
   apiPort              Int       @default(8729) @map("api_port")
   credentialsEncrypted String    @map("credentials_encrypted")
   tlsFingerprint       String?   @map("tls_fingerprint")
+  /// Adresse /32 du routeur dans le tunnel. Renseignée à l'enrôlement ; c'est
+  /// elle qui sert d'hôte, `host` gardant l'adresse locale pour le labo.
+  tunnelAddress        String?   @unique @map("tunnel_address")
+  /// Clé publique WireGuard du routeur. La privée est générée par le routeur
+  /// et ne le quitte jamais.
+  tunnelPublicKey      String?   @map("tunnel_public_key")
+  enrolledAt           DateTime? @map("enrolled_at")
   status               String    @default("unknown")
   lastSeenAt           DateTime? @map("last_seen_at")
   createdAt            DateTime  @default(now()) @map("created_at")
@@ -201,6 +209,7 @@ model Router {
   subscriptions        Subscription[]
   devices              Device[]
   operations           RouterOperation[]
+  enrollment           RouterEnrollment?
 
   @@map("routers")
 }
@@ -578,4 +587,34 @@ model StatsCacheEntry {
 
   @@unique([routerId, scopeKey])
   @@map("stats_cache")
+}
+
+/// Enrôlement d'un routeur par tunnel WireGuard.
+///
+/// Le serveur ne configure jamais le routeur : il prépare une adresse, un mot
+/// de passe d'API et un jeton à usage unique, puis produit un script que
+/// l'exploitant colle dans le terminal Winbox. C'est le seul parcours tenable
+/// pour quelqu'un qui n'est pas informaticien, et le seul qui laisse la clé
+/// privée du routeur sur le routeur.
+model RouterEnrollment {
+  id                   String    @id @default(uuid())
+  tenantId             String    @map("tenant_id")
+  tenant               Tenant    @relation(fields: [tenantId], references: [id])
+  label                String
+  /// Empreinte SHA-256 du jeton. Le jeton en clair n'est montré qu'une fois,
+  /// au moment où le script est affiché : il vaut mot de passe.
+  tokenHash            String    @unique @map("token_hash")
+  /// Allouée à la création et réservée jusqu'à expiration, pour que deux
+  /// enrôlements simultanés ne se disputent pas la même adresse.
+  tunnelAddress        String    @unique @map("tunnel_address")
+  /// Identifiants du compte d'API dédié, créés par le script sur le routeur.
+  credentialsEncrypted String    @map("credentials_encrypted")
+  expiresAt            DateTime  @map("expires_at")
+  consumedAt           DateTime? @map("consumed_at")
+  /// Routeur créé par le rappel. Nul tant que le script n'a pas été exécuté.
+  routerId             String?   @unique @map("router_id")
+  router               Router?   @relation(fields: [routerId], references: [id])
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  @@map("router_enrollments")
 }

@@ -4,6 +4,9 @@ import { AuditModule } from '../audit/audit.module.js';
 import { DevicesModule } from '../devices/devices.module.js';
 import { RouterAccessService } from './router-access.service.js';
 import { RouterCredentialsService } from './router-credentials.service.js';
+import { RouterEnrollmentController } from './router-enrollment.controller.js';
+import { RouterEnrollmentService } from './router-enrollment.service.js';
+import { WireguardService } from './wireguard.service.js';
 import { RouterHealthService } from './router-health.service.js';
 import { RouterOperationQueue } from './router-operation.service.js';
 import { MikrotikClientFactory } from './mikrotik-client.factory.js';
@@ -20,9 +23,11 @@ import { RouterMonitoringController } from './router-monitoring.controller.js';
 @Global()
 @Module({
   imports: [ConfigModule, AuditModule, DevicesModule],
-  controllers: [RoutersController, RouterMonitoringController],
+  controllers: [RoutersController, RouterMonitoringController, RouterEnrollmentController],
   providers: [
     RouterAccessService,
+    WireguardService,
+    RouterEnrollmentService,
     RouterCredentialsService,
     RouterHealthService,
     RouterOperationQueue,
@@ -32,6 +37,8 @@ import { RouterMonitoringController } from './router-monitoring.controller.js';
   ],
   exports: [
     RouterAccessService,
+    WireguardService,
+    RouterEnrollmentService,
     RouterCredentialsService,
     RouterHealthService,
     RouterOperationQueue,

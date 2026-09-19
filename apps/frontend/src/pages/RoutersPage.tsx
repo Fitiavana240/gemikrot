@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  enrollmentsApi,
   OPERATION_LABEL,
   REACHABILITY_LABEL,
   routersApi,
   type ConnectionTest,
+  type EnrollmentInvitation,
   type ImportReport,
 } from '../api/routers';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, Table } from '../components/ui';
+import { Badge, Button, Card, FormField, Input, Table } from '../components/ui';
 
 export function RoutersPage() {
   const { canWrite } = useAuth();
@@ -17,6 +19,8 @@ export function RoutersPage() {
   const [test, setTest] = useState<ConnectionTest | null>(null);
   const [report, setReport] = useState<ImportReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [newRouterLabel, setNewRouterLabel] = useState('');
+  const [invitation, setInvitation] = useState<EnrollmentInvitation | null>(null);
 
   const routers = useQuery({ queryKey: ['routers'], queryFn: routersApi.list });
   const operations = useQuery({
@@ -51,6 +55,16 @@ export function RoutersPage() {
       setError(null);
       queryClient.invalidateQueries({ queryKey: ['router-operations'] });
       queryClient.invalidateQueries({ queryKey: ['vouchers'] });
+    },
+    onError,
+  });
+
+  const invite = useMutation({
+    mutationFn: enrollmentsApi.invite,
+    onSuccess: (result) => {
+      setError(null);
+      setInvitation(result);
+      setNewRouterLabel('');
     },
     onError,
   });
@@ -103,6 +117,60 @@ export function RoutersPage() {
               {report.skipped.length} comptes ignorés (tickets et comptes internes)
             </li>
           </ul>
+        </Card>
+      )}
+
+      {canWrite && (
+        <Card title="Raccorder un routeur">
+          <p className="mb-3 text-sm text-slate-600">
+            Le serveur ne touche jamais à votre routeur. Il prépare un script que vous collez
+            dans Winbox, dans <span className="font-medium">New Terminal</span>. Le routeur
+            ouvre alors lui-même le tunnel : rien à ouvrir chez votre fournisseur d'accès.
+          </p>
+          <div className="flex items-end gap-3">
+            <div className="w-64">
+              <FormField label="Nom du routeur">
+                <Input
+                  value={newRouterLabel}
+                  onChange={(event) => setNewRouterLabel(event.target.value)}
+                  placeholder="Routeur Sanfily"
+                />
+              </FormField>
+            </div>
+            <Button
+              onClick={() => invite.mutate(newRouterLabel.trim())}
+              disabled={newRouterLabel.trim().length < 2 || invite.isPending}
+            >
+              Préparer le script
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {invitation && (
+        <Card title={`Script pour « ${invitation.label} »`}>
+          <p className="mb-2 text-sm text-slate-600">
+            Adresse attribuée dans le tunnel : <code>{invitation.tunnelAddress}</code>. Valable
+            jusqu'à {new Date(invitation.expiresAt).toLocaleTimeString('fr-FR')}.
+          </p>
+          <p className="mb-3 text-sm text-amber-700">
+            Ce script contient un mot de passe. Il n'est affiché qu'une fois : si vous quittez
+            cette page, il faudra en préparer un autre.
+          </p>
+          <pre className="max-h-80 overflow-auto rounded bg-slate-900 p-3 text-xs text-slate-100">
+            {invitation.script}
+          </pre>
+          <div className="mt-3 flex gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => navigator.clipboard.writeText(invitation.script)}
+            >
+              Copier
+            </Button>
+            <Button variant="secondary" onClick={() => setInvitation(null)}>
+              J'ai terminé
+            </Button>
+          </div>
         </Card>
       )}
 

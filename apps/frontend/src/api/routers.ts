@@ -68,6 +68,31 @@ export const OPERATION_LABEL: Record<RouterOperation['kind'], string> = {
   BASCULER_COMPTE: "Changement d'état d'un compte",
 };
 
+/**
+ * Invitation à raccorder un routeur. Le script n'est rendu qu'à la création :
+ * il porte le jeton et le mot de passe d'API en clair, et n'est jamais relu.
+ */
+export interface EnrollmentInvitation {
+  id: string;
+  label: string;
+  tunnelAddress: string;
+  expiresAt: string;
+  script: string;
+}
+
+export interface PendingEnrollment {
+  id: string;
+  label: string;
+  tunnelAddress: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export const enrollmentsApi = {
+  pending: () => api.get<PendingEnrollment[]>('/router-enrollments'),
+  invite: (label: string) => api.post<EnrollmentInvitation>('/router-enrollments', { label }),
+};
+
 export const routersApi = {
   list: () => api.get<RouterView[]>('/routers'),
   pendingOperations: (routerId?: string) =>
