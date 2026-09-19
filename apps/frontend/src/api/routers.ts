@@ -1,5 +1,17 @@
 import { api } from './client';
 
+/** Ce que le disjoncteur a observé, par opposition au statut enregistré. */
+export type RouterReachability = 'JOIGNABLE' | 'INJOIGNABLE' | 'REPOND_MAL' | 'INCONNU';
+
+export interface RouterHealth {
+  state: RouterReachability;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  lastErrorMessage: string | null;
+  /** Les appels sont suspendus le temps du repos du disjoncteur. */
+  suspended: boolean;
+}
+
 export interface RouterView {
   id: string;
   label: string;
@@ -8,7 +20,16 @@ export interface RouterView {
   tlsFingerprint: string | null;
   status: string;
   lastSeenAt: string | null;
+  health: RouterHealth;
 }
+
+export const REACHABILITY_LABEL: Record<RouterReachability, { label: string; tone: 'green' | 'amber' | 'red' | 'slate' }> = {
+  JOIGNABLE: { label: 'joignable', tone: 'green' },
+  INJOIGNABLE: { label: 'injoignable', tone: 'red' },
+  // Le routeur répond mais refuse : identifiants, service REST, droits.
+  REPOND_MAL: { label: 'répond mal', tone: 'amber' },
+  INCONNU: { label: 'pas encore interrogé', tone: 'slate' },
+};
 
 export interface ConnectionTest {
   reachable: boolean;

@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AuditModule } from '../audit/audit.module.js';
 import { DevicesModule } from '../devices/devices.module.js';
 import { RouterCredentialsService } from './router-credentials.service.js';
+import { RouterHealthService } from './router-health.service.js';
 import { MikrotikClientFactory } from './mikrotik-client.factory.js';
 import { RouterImportService } from './router-import.service.js';
 import { RoutersService } from './routers.service.js';
@@ -18,7 +19,19 @@ import { RouterMonitoringController } from './router-monitoring.controller.js';
 @Module({
   imports: [ConfigModule, AuditModule, DevicesModule],
   controllers: [RoutersController, RouterMonitoringController],
-  providers: [RouterCredentialsService, MikrotikClientFactory, RoutersService, RouterImportService],
-  exports: [RouterCredentialsService, MikrotikClientFactory, RoutersService, RouterImportService],
+  providers: [
+    RouterCredentialsService,
+    RouterHealthService,
+    MikrotikClientFactory,
+    RoutersService,
+    RouterImportService,
+  ],
+  exports: [
+    RouterCredentialsService,
+    RouterHealthService,
+    MikrotikClientFactory,
+    RoutersService,
+    RouterImportService,
+  ],
 })
 export class RoutersModule {}

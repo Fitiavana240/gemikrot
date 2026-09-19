@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { routersApi, type ConnectionTest, type ImportReport } from '../api/routers';
+import { REACHABILITY_LABEL, routersApi, type ConnectionTest, type ImportReport } from '../api/routers';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, Table } from '../components/ui';
@@ -84,7 +84,7 @@ export function RoutersPage() {
         </Card>
       )}
 
-      <Table head={['Nom', 'Hôte', 'Port', 'TLS épinglé', 'Statut', '']}>
+      <Table head={['Nom', 'Hôte', 'Port', 'TLS épinglé', 'Joignabilité', '']}>
         {routers.data?.map((router) => (
           <tr key={router.id}>
             <td className="px-3 py-2">{router.label}</td>
@@ -96,7 +96,21 @@ export function RoutersPage() {
               </Badge>
             </td>
             <td className="px-3 py-2">
-              <Badge tone={router.status === 'online' ? 'green' : 'slate'}>{router.status}</Badge>
+              <div>
+                <Badge tone={REACHABILITY_LABEL[router.health.state].tone}>
+                  {REACHABILITY_LABEL[router.health.state].label}
+                </Badge>
+                {router.health.suspended && (
+                  <div className="mt-1 text-xs text-slate-500">
+                    appels suspendus, reprise automatique
+                  </div>
+                )}
+                {router.health.state !== 'JOIGNABLE' && router.health.lastErrorMessage && (
+                  <div className="mt-1 max-w-xs truncate text-xs text-slate-400" title={router.health.lastErrorMessage}>
+                    {router.health.lastErrorMessage}
+                  </div>
+                )}
+              </div>
             </td>
             <td className="space-x-2 px-3 py-2 text-right">
               <Button variant="secondary" onClick={() => testConnection.mutate(router.id)}>

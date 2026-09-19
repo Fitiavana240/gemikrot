@@ -5,15 +5,39 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { RouterCredentialsService } from './router-credentials.service.js';
+import type { RouterHealth, RouterReachability } from './router-health.service.js';
+import { RouterHealthService } from './router-health.service.js';
 import { MikrotikClientFactory } from './mikrotik-client.factory.js';
 import type { CreateRouterDto, UpdateRouterDto } from './dto/create-router.dto.js';
 
-/** Vue exposée par l'API : jamais d'identifiants, même chiffrés. */
-export type RouterView = Omit<Router, 'credentialsEncrypted'>;
+/**
+ * Vue exposée par l'API : jamais d'identifiants, même chiffrés, et l'état de
+ * joignabilité observé — sans lui le disjoncteur travaillerait en aveugle et
+ * l'exploitant verrait des erreurs sans savoir quel routeur est en cause.
+ */
+export type RouterView = Omit<Router, 'credentialsEncrypted'> & {
+  health: {
+    state: RouterReachability;
+    lastSuccessAt: Date | null;
+    lastFailureAt: Date | null;
+    lastErrorMessage: string | null;
+    /** Vrai quand les appels sont suspendus le temps du repos. */
+    suspended: boolean;
+  };
+};
 
-function toView(router: Router): RouterView {
+function toView(router: Router, health: RouterHealth): RouterView {
   const { credentialsEncrypted: _omit, ...view } = router;
-  return view;
+  return {
+    ...view,
+    health: {
+      state: health.state,
+      lastSuccessAt: health.lastSuccessAt,
+      lastFailureAt: health.lastFailureAt,
+      lastErrorMessage: health.lastErrorMessage,
+      suspended: health.openUntil !== null && health.openUntil.getTime() > Date.now(),
+    },
+  };
 }
 
 @Injectable()
@@ -23,16 +47,18 @@ export class RoutersService {
     private readonly credentials: RouterCredentialsService,
     private readonly clients: MikrotikClientFactory,
     private readonly audit: AuditService,
+    private readonly health: RouterHealthService,
     private readonly tenantContext: TenantContextService,
   ) {}
 
   async findAll(): Promise<RouterView[]> {
     const routers = await this.prisma.scoped.router.findMany({ orderBy: { createdAt: 'asc' } });
-    return routers.map(toView);
+    return routers.map((router) => toView(router, this.health.get(router.id)));
   }
 
   async findOne(id: string): Promise<RouterView> {
-    return toView(await this.requireRouter(id));
+    const router = await this.requireRouter(id);
+    return toView(router, this.health.get(router.id));
   }
 
   async create(dto: CreateRouterDto, adminUserId?: string): Promise<RouterView> {
@@ -57,7 +83,7 @@ export class RoutersService {
       targetId: router.id,
       payloadDiff: { label: dto.label, host: dto.host },
     });
-    return toView(router);
+    return toView(router, this.health.get(router.id));
   }
 
   async update(id: string, dto: UpdateRouterDto, adminUserId?: string): Promise<RouterView> {
@@ -93,7 +119,7 @@ export class RoutersService {
       targetId: id,
       payloadDiff: { label: dto.label, host: dto.host, credentialsChanged },
     });
-    return toView(router);
+    return toView(router, this.health.get(router.id));
   }
 
   /** Vérifie que le routeur répond et met à jour son statut en base. */

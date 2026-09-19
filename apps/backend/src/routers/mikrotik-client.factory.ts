@@ -10,6 +10,7 @@ import {
 } from '@wifitati/mikrotik-service';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RouterCredentialsService } from './router-credentials.service.js';
+import { RouterHealthService, RouterUnreachableException } from './router-health.service.js';
 
 interface CachedClient {
   service: IMikrotikService;
@@ -30,6 +31,7 @@ export class MikrotikClientFactory {
     private readonly prisma: PrismaService,
     private readonly credentials: RouterCredentialsService,
     private readonly config: ConfigService,
+    private readonly health: RouterHealthService,
   ) {}
 
   async forRouter(routerId: string): Promise<IMikrotikService> {
@@ -58,6 +60,9 @@ export class MikrotikClientFactory {
   /** Invalide le cache après modification d'un routeur (hôte, identifiants…). */
   invalidate(routerId: string): void {
     this.cache.delete(routerId);
+    // Les identifiants ou l'adresse ont changé : l'état de santé observé
+    // portait sur l'ancienne configuration et n'a plus de sens.
+    this.health.reset(routerId);
   }
 
   /**
@@ -73,6 +78,7 @@ export class MikrotikClientFactory {
     const signature = `${router.host}:${router.restPort}:${router.credentialsEncrypted}:${router.tlsFingerprint ?? ''}`;
     const cached = this.cache.get(router.id);
     if (cached?.signature === signature) return cached.service;
+
 
     const { username, password } = this.credentials.decrypt(router.credentialsEncrypted);
     const service = this.buildFromConfig(
@@ -90,7 +96,44 @@ export class MikrotikClientFactory {
       `mikrotik:${router.label}`,
     );
 
-    this.cache.set(router.id, { service, signature });
-    return service;
+    const guarded = this.withCircuitBreaker(service, router);
+    this.cache.set(router.id, { service: guarded, signature });
+    return guarded;
+  }
+
+  /**
+   * Enveloppe le service pour que chaque appel passe par le disjoncteur.
+   *
+   * Un proxy plutôt qu'une classe de délégation : l'interface porte une
+   * quarantaine de méthodes, toutes asynchrones, et une classe intermédiaire
+   * devrait être tenue à jour à chaque ajout — elle finirait par diverger.
+   */
+  private withCircuitBreaker(service: IMikrotikService, router: Router): IMikrotikService {
+    const health = this.health;
+
+    return new Proxy(service, {
+      get(target, property, receiver) {
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value !== 'function') return value;
+
+        return async (...args: unknown[]) => {
+          const blocked = health.blockedReason(router.id);
+          if (blocked) {
+            // Échec immédiat : inutile de repayer le budget complet de
+            // délais sur un routeur dont on sait qu'il ne répond pas.
+            throw new RouterUnreachableException(router.label, blocked);
+          }
+
+          try {
+            const result = await (value as (...a: unknown[]) => unknown).apply(target, args);
+            health.recordSuccess(router.id);
+            return result;
+          } catch (error) {
+            health.recordFailure(router.id, error);
+            throw error;
+          }
+        };
+      },
+    });
   }
 }
