@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatUptime, formatVolume, hotspotApi } from '../api/hotspot';
 import { formatDuration } from '../api/user-manager';
 import { useAuth } from '../auth/AuthContext';
+import { useRouterSelection } from '../routers/RouterContext';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, FormField, Input, Table } from '../components/ui';
 
@@ -63,7 +64,13 @@ function ErrorBanner({ children }: { children: ReactNode }) {
 // ==================== Serveurs ====================
 
 function ServersTab() {
-  const overview = useQuery({ queryKey: ['hotspot-overview'], queryFn: hotspotApi.overview });
+  const { currentId } = useRouterSelection();
+  const overview = useQuery({
+    // Le routeur fait partie de la clé : changer de routeur doit
+    // relire, pas réafficher les données du précédent.
+    queryKey: ['hotspot-overview', currentId],
+    queryFn: () => hotspotApi.overview(currentId),
+  });
 
   if (overview.isLoading) return <p className="text-slate-500">Chargement…</p>;
   const data = overview.data;
@@ -173,13 +180,17 @@ function WalledGardenTab() {
   const [address, setAddress] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const walledGarden = useQuery({ queryKey: ['walled-garden'], queryFn: hotspotApi.walledGarden });
+  const { currentId } = useRouterSelection();
+  const walledGarden = useQuery({
+    queryKey: ['walled-garden', currentId],
+    queryFn: () => hotspotApi.walledGarden(currentId),
+  });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['walled-garden'] });
   const onError = (err: unknown) =>
     setError(err instanceof ApiError ? err.message : 'Erreur inconnue');
 
   const addHost = useMutation({
-    mutationFn: hotspotApi.addHost,
+    mutationFn: (input: { dstHost: string }) => hotspotApi.addHost(input, currentId),
     onSuccess: () => {
       setError(null);
       setHost('');
@@ -188,7 +199,7 @@ function WalledGardenTab() {
     onError,
   });
   const addIp = useMutation({
-    mutationFn: hotspotApi.addIp,
+    mutationFn: (input: { dstAddress: string }) => hotspotApi.addIp(input, currentId),
     onSuccess: () => {
       setError(null);
       setAddress('');
@@ -196,8 +207,16 @@ function WalledGardenTab() {
     },
     onError,
   });
-  const removeHost = useMutation({ mutationFn: hotspotApi.removeHost, onSuccess: refresh, onError });
-  const removeIp = useMutation({ mutationFn: hotspotApi.removeIp, onSuccess: refresh, onError });
+  const removeHost = useMutation({
+    mutationFn: (id: string) => hotspotApi.removeHost(id, currentId),
+    onSuccess: refresh,
+    onError,
+  });
+  const removeIp = useMutation({
+    mutationFn: (id: string) => hotspotApi.removeIp(id, currentId),
+    onSuccess: refresh,
+    onError,
+  });
 
   function submitHost(e: FormEvent) {
     e.preventDefault();
@@ -331,7 +350,11 @@ function CookiesTab() {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
-  const cookies = useQuery({ queryKey: ['hotspot-cookies'], queryFn: hotspotApi.cookies });
+  const { currentId } = useRouterSelection();
+  const cookies = useQuery({
+    queryKey: ['hotspot-cookies', currentId],
+    queryFn: () => hotspotApi.cookies(currentId),
+  });
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['hotspot-cookies'] });
     queryClient.invalidateQueries({ queryKey: ['hotspot-overview'] });
@@ -339,8 +362,16 @@ function CookiesTab() {
   const onError = (err: unknown) =>
     setError(err instanceof ApiError ? err.message : 'Erreur inconnue');
 
-  const remove = useMutation({ mutationFn: hotspotApi.deleteCookie, onSuccess: refresh, onError });
-  const cut = useMutation({ mutationFn: hotspotApi.cutAccess, onSuccess: refresh, onError });
+  const remove = useMutation({
+    mutationFn: (id: string) => hotspotApi.deleteCookie(id, currentId),
+    onSuccess: refresh,
+    onError,
+  });
+  const cut = useMutation({
+    mutationFn: (username: string) => hotspotApi.cutAccess(username, currentId),
+    onSuccess: refresh,
+    onError,
+  });
 
   /** Un compte peut porter plusieurs cookies : un par appareil. */
   const byUser = new Map<string, number>();
@@ -394,7 +425,11 @@ function CookiesTab() {
 // ==================== Sessions ====================
 
 function SessionsTab() {
-  const sessions = useQuery({ queryKey: ['hotspot-sessions'], queryFn: hotspotApi.sessions });
+  const { currentId } = useRouterSelection();
+  const sessions = useQuery({
+    queryKey: ['hotspot-sessions', currentId],
+    queryFn: () => hotspotApi.sessions(currentId),
+  });
 
   if (sessions.isLoading) return <p className="text-slate-500">Chargement…</p>;
 

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { mikrotikApi } from '../api/mikrotik';
-import { useDefaultRouter } from '../api/use-default-router';
+import { useRouterSelection } from '../routers/RouterContext';
 import { useAuth } from '../auth/AuthContext';
 import { Badge, Button, Card, Table } from '../components/ui';
 
@@ -26,7 +26,7 @@ function formatDuration(seconds: number): string {
 export function SessionsPage() {
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
-  const { router } = useDefaultRouter();
+  const { current: router } = useRouterSelection();
   const routerId = router?.id;
 
   const statusQuery = useQuery({

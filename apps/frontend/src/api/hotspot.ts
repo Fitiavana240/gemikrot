@@ -1,4 +1,5 @@
 import { api } from './client';
+import { routerQuery } from '../routers/RouterContext';
 
 export interface HotspotServerProfile {
   id: string;
@@ -75,22 +76,30 @@ export interface SessionView {
 }
 
 export const hotspotApi = {
-  overview: () => api.get<HotspotOverview>('/hotspot/overview'),
-  walledGarden: () =>
-    api.get<{ hosts: WalledGardenEntry[]; ips: WalledGardenIpEntry[] }>('/hotspot/walled-garden'),
-  addHost: (input: { dstHost: string; comment?: string }) =>
-    api.post<WalledGardenEntry>('/hotspot/walled-garden', input),
-  removeHost: (id: string) => api.delete<void>(`/hotspot/walled-garden/${encodeURIComponent(id)}`),
-  addIp: (input: { dstAddress: string; comment?: string }) =>
-    api.post<WalledGardenIpEntry>('/hotspot/walled-garden/ip', input),
-  removeIp: (id: string) => api.delete<void>(`/hotspot/walled-garden/ip/${encodeURIComponent(id)}`),
-  cookies: () => api.get<HotspotCookie[]>('/hotspot/cookies'),
-  deleteCookie: (id: string) => api.delete<void>(`/hotspot/cookies/${encodeURIComponent(id)}`),
-  cutAccess: (username: string) =>
-    api.post<{ cookiesRemoved: number; sessionsClosed: number }>(
-      `/hotspot/cut-access/${encodeURIComponent(username)}`,
+  overview: (routerId?: string) =>
+    api.get<HotspotOverview>(`/hotspot/overview${routerQuery(routerId)}`),
+  walledGarden: (routerId?: string) =>
+    api.get<{ hosts: WalledGardenEntry[]; ips: WalledGardenIpEntry[] }>(
+      `/hotspot/walled-garden${routerQuery(routerId)}`,
     ),
-  sessions: () => api.get<SessionView[]>('/hotspot/sessions'),
+  addHost: (input: { dstHost: string; comment?: string }, routerId?: string) =>
+    api.post<WalledGardenEntry>(`/hotspot/walled-garden${routerQuery(routerId)}`, input),
+  removeHost: (id: string, routerId?: string) =>
+    api.delete<void>(`/hotspot/walled-garden/${encodeURIComponent(id)}${routerQuery(routerId)}`),
+  addIp: (input: { dstAddress: string; comment?: string }, routerId?: string) =>
+    api.post<WalledGardenIpEntry>(`/hotspot/walled-garden/ip${routerQuery(routerId)}`, input),
+  removeIp: (id: string, routerId?: string) =>
+    api.delete<void>(`/hotspot/walled-garden/ip/${encodeURIComponent(id)}${routerQuery(routerId)}`),
+  cookies: (routerId?: string) =>
+    api.get<HotspotCookie[]>(`/hotspot/cookies${routerQuery(routerId)}`),
+  deleteCookie: (id: string, routerId?: string) =>
+    api.delete<void>(`/hotspot/cookies/${encodeURIComponent(id)}${routerQuery(routerId)}`),
+  cutAccess: (username: string, routerId?: string) =>
+    api.post<{ cookiesRemoved: number; sessionsClosed: number }>(
+      `/hotspot/cut-access/${encodeURIComponent(username)}${routerQuery(routerId)}`,
+    ),
+  sessions: (routerId?: string) =>
+    api.get<SessionView[]>(`/hotspot/sessions${routerQuery(routerId)}`),
 };
 
 export function formatVolume(bytes: number): string {

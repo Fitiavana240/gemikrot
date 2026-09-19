@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Delete } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Delete, Query } from '@nestjs/common';
 import { AdminRole } from '@prisma/client';
 import { Roles } from '../auth/roles.decorator.js';
 import { PlansService } from './plans.service.js';
@@ -43,14 +43,14 @@ export class PlansController {
 
   /** État du profil User Manager de l'offre, vu du routeur. */
   @Get(':id/user-manager')
-  inspectUserManager(@Param('id') id: string) {
-    return this.provisioning.inspect(id);
+  inspectUserManager(@Param('id') id: string, @Query('routerId') routerId?: string) {
+    return this.provisioning.inspect(id, routerId);
   }
 
   /** Réaligne le routeur sur l'offre : profil, limitation et jonction. */
   @Roles(AdminRole.SUPER_ADMIN, AdminRole.ADMIN)
   @Post(':id/sync-user-manager')
-  syncUserManager(@Param('id') id: string) {
-    return this.provisioning.reconcile(id);
+  syncUserManager(@Param('id') id: string, @Query('routerId') routerId?: string) {
+    return this.provisioning.reconcile(id, routerId);
   }
 }

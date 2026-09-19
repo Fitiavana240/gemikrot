@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { RequireAuth } from './components/RequireAuth';
+import { RouterProvider } from './routers/RouterContext';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -32,7 +33,9 @@ export function App() {
           <Route
             element={
               <RequireAuth>
-                <Layout />
+                <RouterProvider>
+                  <Layout />
+                </RouterProvider>
               </RequireAuth>
             }
           >

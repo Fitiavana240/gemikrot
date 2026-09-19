@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { devicesApi, type DeviceType, type DiscoveredDevice } from '../api/devices';
-import { useDefaultRouter } from '../api/use-default-router';
+import { useRouterSelection } from '../routers/RouterContext';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, Select, Table } from '../components/ui';
@@ -14,7 +14,7 @@ const NEEDS_BYPASS: DeviceType[] = ['TV', 'CAMERA'];
 export function DevicesPage() {
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
-  const { router } = useDefaultRouter();
+  const { current: router } = useRouterSelection();
   const [error, setError] = useState<string | null>(null);
   const [typeChoice, setTypeChoice] = useState<Record<string, DeviceType>>({});
 

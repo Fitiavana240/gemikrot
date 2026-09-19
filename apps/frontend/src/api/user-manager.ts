@@ -1,4 +1,5 @@
 import { api } from './client';
+import { routerQuery } from '../routers/RouterContext';
 
 export type ProfileStartsWhen = 'first-auth' | 'assigned';
 export type AccountSource = 'TICKET' | 'ABONNEMENT' | 'HORS_APPLICATION';
@@ -70,38 +71,53 @@ export interface CreateAccountInput {
   comment?: string;
 }
 
+/**
+ * Chaque appel porte le routeur visé. Sans lui le backend retombe sur « le
+ * plus ancien routeur enregistré » : correct avec un seul routeur, faux dès
+ * qu'un exploitant en gère deux.
+ */
 export const userManagerApi = {
-  listProfiles: () => api.get<UserManagerProfile[]>('/user-manager/profiles'),
-  createProfile: (input: CreateProfileInput) =>
-    api.post<UserManagerProfile>('/user-manager/profiles', input),
-  deleteProfile: (name: string) =>
-    api.delete<void>(`/user-manager/profiles/${encodeURIComponent(name)}`),
-  attachLimitation: (profileName: string, limitationName: string) =>
-    api.post<void>(`/user-manager/profiles/${encodeURIComponent(profileName)}/limitations`, {
-      limitationName,
-    }),
-  detachLimitation: (profileName: string, limitationName: string) =>
+  listProfiles: (routerId?: string) =>
+    api.get<UserManagerProfile[]>(`/user-manager/profiles${routerQuery(routerId)}`),
+  createProfile: (input: CreateProfileInput, routerId?: string) =>
+    api.post<UserManagerProfile>(`/user-manager/profiles${routerQuery(routerId)}`, input),
+  deleteProfile: (name: string, routerId?: string) =>
+    api.delete<void>(`/user-manager/profiles/${encodeURIComponent(name)}${routerQuery(routerId)}`),
+  attachLimitation: (profileName: string, limitationName: string, routerId?: string) =>
+    api.post<void>(
+      `/user-manager/profiles/${encodeURIComponent(profileName)}/limitations${routerQuery(routerId)}`,
+      { limitationName },
+    ),
+  detachLimitation: (profileName: string, limitationName: string, routerId?: string) =>
     api.delete<void>(
-      `/user-manager/profiles/${encodeURIComponent(profileName)}/limitations/${encodeURIComponent(limitationName)}`,
+      `/user-manager/profiles/${encodeURIComponent(profileName)}/limitations/${encodeURIComponent(limitationName)}${routerQuery(routerId)}`,
     ),
 
-  listLimitations: () => api.get<UserManagerLimitation[]>('/user-manager/limitations'),
-  createLimitation: (input: CreateLimitationInput) =>
-    api.post<UserManagerLimitation>('/user-manager/limitations', input),
-  deleteLimitation: (name: string) =>
-    api.delete<void>(`/user-manager/limitations/${encodeURIComponent(name)}`),
+  listLimitations: (routerId?: string) =>
+    api.get<UserManagerLimitation[]>(`/user-manager/limitations${routerQuery(routerId)}`),
+  createLimitation: (input: CreateLimitationInput, routerId?: string) =>
+    api.post<UserManagerLimitation>(`/user-manager/limitations${routerQuery(routerId)}`, input),
+  deleteLimitation: (name: string, routerId?: string) =>
+    api.delete<void>(
+      `/user-manager/limitations/${encodeURIComponent(name)}${routerQuery(routerId)}`,
+    ),
 
-  listAccounts: () => api.get<UserManagerAccount[]>('/user-manager/users'),
-  createAccount: (input: CreateAccountInput) =>
-    api.post<UserManagerAccount>('/user-manager/users', input),
-  setAccountDisabled: (username: string, disabled: boolean) =>
-    api.patch<UserManagerAccount>(`/user-manager/users/${encodeURIComponent(username)}/disabled`, {
-      disabled,
-    }),
-  deleteAccount: (username: string) =>
-    api.delete<void>(`/user-manager/users/${encodeURIComponent(username)}`),
-  assignProfile: (username: string, profileName: string) =>
-    api.post<void>(`/user-manager/users/${encodeURIComponent(username)}/profiles`, { profileName }),
+  listAccounts: (routerId?: string) =>
+    api.get<UserManagerAccount[]>(`/user-manager/users${routerQuery(routerId)}`),
+  createAccount: (input: CreateAccountInput, routerId?: string) =>
+    api.post<UserManagerAccount>(`/user-manager/users${routerQuery(routerId)}`, input),
+  setAccountDisabled: (username: string, disabled: boolean, routerId?: string) =>
+    api.patch<UserManagerAccount>(
+      `/user-manager/users/${encodeURIComponent(username)}/disabled${routerQuery(routerId)}`,
+      { disabled },
+    ),
+  deleteAccount: (username: string, routerId?: string) =>
+    api.delete<void>(`/user-manager/users/${encodeURIComponent(username)}${routerQuery(routerId)}`),
+  assignProfile: (username: string, profileName: string, routerId?: string) =>
+    api.post<void>(
+      `/user-manager/users/${encodeURIComponent(username)}/profiles${routerQuery(routerId)}`,
+      { profileName },
+    ),
 };
 
 /** Durée RouterOS en clair : « 30 j », « 2 h », « 45 min ». */

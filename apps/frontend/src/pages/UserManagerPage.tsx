@@ -11,6 +11,7 @@ import {
   type CreateProfileInput,
 } from '../api/user-manager';
 import { useAuth } from '../auth/AuthContext';
+import { useRouterSelection } from '../routers/RouterContext';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, FormField, Input, Select, Table } from '../components/ui';
@@ -96,11 +97,15 @@ function ProfilesTab() {
   const { error, setError, onError } = useActionError();
   const [form, setForm] = useState<CreateProfileInput>(EMPTY_PROFILE);
 
-  const profiles = useQuery({ queryKey: ['um-profiles'], queryFn: userManagerApi.listProfiles });
+  const { currentId } = useRouterSelection();
+  const profiles = useQuery({
+    queryKey: ['um-profiles', currentId],
+    queryFn: () => userManagerApi.listProfiles(currentId),
+  });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['um-profiles'] });
 
   const create = useMutation({
-    mutationFn: userManagerApi.createProfile,
+    mutationFn: (input: CreateProfileInput) => userManagerApi.createProfile(input, currentId),
     onSuccess: () => {
       setError(null);
       setForm(EMPTY_PROFILE);
@@ -109,7 +114,7 @@ function ProfilesTab() {
     onError,
   });
   const remove = useMutation({
-    mutationFn: userManagerApi.deleteProfile,
+    mutationFn: (name: string) => userManagerApi.deleteProfile(name, currentId),
     onSuccess: () => {
       setError(null);
       refresh();
@@ -243,9 +248,10 @@ function LimitationsTab() {
   const { error, setError, onError } = useActionError();
   const [form, setForm] = useState<CreateLimitationInput>(EMPTY_LIMITATION);
 
+  const { currentId } = useRouterSelection();
   const limitations = useQuery({
-    queryKey: ['um-limitations'],
-    queryFn: userManagerApi.listLimitations,
+    queryKey: ['um-limitations', currentId],
+    queryFn: () => userManagerApi.listLimitations(currentId),
   });
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['um-limitations'] });
@@ -253,7 +259,8 @@ function LimitationsTab() {
   };
 
   const create = useMutation({
-    mutationFn: userManagerApi.createLimitation,
+    mutationFn: (input: CreateLimitationInput) =>
+      userManagerApi.createLimitation(input, currentId),
     onSuccess: () => {
       setError(null);
       setForm(EMPTY_LIMITATION);
@@ -262,7 +269,7 @@ function LimitationsTab() {
     onError,
   });
   const remove = useMutation({
-    mutationFn: userManagerApi.deleteLimitation,
+    mutationFn: (name: string) => userManagerApi.deleteLimitation(name, currentId),
     onSuccess: () => {
       setError(null);
       refresh();
@@ -398,12 +405,19 @@ function AccountsTab() {
   const [form, setForm] = useState<CreateAccountInput>(EMPTY_ACCOUNT);
   const [sourceFilter, setSourceFilter] = useState<AccountSource | ''>('');
 
-  const accounts = useQuery({ queryKey: ['um-accounts'], queryFn: userManagerApi.listAccounts });
-  const profiles = useQuery({ queryKey: ['um-profiles'], queryFn: userManagerApi.listProfiles });
+  const { currentId } = useRouterSelection();
+  const accounts = useQuery({
+    queryKey: ['um-accounts', currentId],
+    queryFn: () => userManagerApi.listAccounts(currentId),
+  });
+  const profiles = useQuery({
+    queryKey: ['um-profiles', currentId],
+    queryFn: () => userManagerApi.listProfiles(currentId),
+  });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['um-accounts'] });
 
   const create = useMutation({
-    mutationFn: userManagerApi.createAccount,
+    mutationFn: (input: CreateAccountInput) => userManagerApi.createAccount(input, currentId),
     onSuccess: () => {
       setError(null);
       setForm(EMPTY_ACCOUNT);
@@ -413,7 +427,7 @@ function AccountsTab() {
   });
   const toggle = useMutation({
     mutationFn: ({ username, disabled }: { username: string; disabled: boolean }) =>
-      userManagerApi.setAccountDisabled(username, disabled),
+      userManagerApi.setAccountDisabled(username, disabled, currentId),
     onSuccess: () => {
       setError(null);
       refresh();
