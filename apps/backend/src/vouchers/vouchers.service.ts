@@ -7,7 +7,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 import { parseRouterTime } from '../routers/router-time.util.js';
 import { PlanProvisioningService } from '../plans/plan-provisioning.service.js';
-import { VoucherAccessService } from './voucher-access.service.js';
+import { RouterAccessService } from '../routers/router-access.service.js';
 import type { CreateVoucherBatchDto } from './dto/create-voucher-batch.dto.js';
 import { generateVoucherCode } from './voucher-code.util.js';
 
@@ -20,7 +20,7 @@ export class VouchersService {
     private readonly audit: AuditService,
     private readonly clients: MikrotikClientFactory,
     private readonly provisioning: PlanProvisioningService,
-    private readonly access: VoucherAccessService,
+    private readonly access: RouterAccessService,
     private readonly tenantContext: TenantContextService,
   ) {}
 

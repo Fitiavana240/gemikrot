@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 import { parseRouterTime } from '../routers/router-time.util.js';
-import { VoucherAccessService } from '../vouchers/voucher-access.service.js';
+import { RouterAccessService } from '../routers/router-access.service.js';
 import type {
   CreateWalledGardenDto,
   CreateWalledGardenIpDto,
@@ -37,7 +37,7 @@ export class HotspotService {
     private readonly prisma: PrismaService,
     private readonly clients: MikrotikClientFactory,
     private readonly audit: AuditService,
-    private readonly access: VoucherAccessService,
+    private readonly access: RouterAccessService,
   ) {}
 
   /**

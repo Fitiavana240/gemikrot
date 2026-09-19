@@ -2,14 +2,18 @@ import { Injectable, Logger } from '@nestjs/common';
 import { VoucherStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
+import { ROUTER_OPERATIONS, RouterOperationQueue } from '../routers/router-operation.service.js';
+import { RouterUnreachableException } from '../routers/router-health.service.js';
 import { parseRouterTime } from '../routers/router-time.util.js';
-import { VoucherAccessService } from './voucher-access.service.js';
+import { RouterAccessService } from '../routers/router-access.service.js';
 
 export interface ReconcileVouchersReport {
   examined: number;
   expired: number;
   activated: number;
   accessCut: number;
+  /** Coupures mises en file faute de routeur joignable. */
+  deferred: number;
 }
 
 /**
@@ -30,7 +34,8 @@ export class VoucherReconciliationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly clients: MikrotikClientFactory,
-    private readonly access: VoucherAccessService,
+    private readonly access: RouterAccessService,
+    private readonly operations: RouterOperationQueue,
   ) {}
 
   /**
@@ -52,7 +57,7 @@ export class VoucherReconciliationService {
     });
 
     if (candidates.length === 0) {
-      return { examined: 0, expired: 0, activated: 0, accessCut: 0 };
+      return { examined: 0, expired: 0, activated: 0, accessCut: 0, deferred: 0 };
     }
 
     // Une seule lecture de la collection pour tout le lot : la filtrer par
@@ -75,6 +80,7 @@ export class VoucherReconciliationService {
       expired: 0,
       activated: 0,
       accessCut: 0,
+      deferred: 0,
     };
 
     for (const voucher of candidates) {
@@ -112,10 +118,24 @@ export class VoucherReconciliationService {
         report.expired += 1;
         // Le compte reste en place : c'est la trace de ce qui a été vendu.
         // Seul l'accès est coupé, cookies et session compris.
-        const cut = await this.access.revoke(mikrotik, voucher.umUsername!, {
-          disableAccount: false,
-        });
-        if (cut.cookiesRemoved || cut.sessionsClosed) report.accessCut += 1;
+        try {
+          const cut = await this.access.revoke(mikrotik, voucher.umUsername!, {
+            disableAccount: false,
+          });
+          if (cut.cookiesRemoved || cut.sessionsClosed) report.accessCut += 1;
+        } catch (error) {
+          // Le lien est tombé en pleine réconciliation. Le ticket est marqué
+          // expiré, mais son accès reste ouvert : sans mise en file, personne
+          // ne repasserait jamais le couper.
+          if (!(error instanceof RouterUnreachableException)) throw error;
+          await this.operations.enqueue(
+            routerId ?? (await this.clients.getDefaultRouterId()),
+            ROUTER_OPERATIONS.COUPER_ACCES,
+            { username: voucher.umUsername! },
+            `Ticket ${voucher.code} expiré alors que le routeur était injoignable`,
+          );
+          report.deferred += 1;
+        }
       } else if (status === VoucherStatus.ACTIVE && voucher.status !== VoucherStatus.ACTIVE) {
         report.activated += 1;
       }

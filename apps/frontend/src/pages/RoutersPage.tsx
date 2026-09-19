@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { REACHABILITY_LABEL, routersApi, type ConnectionTest, type ImportReport } from '../api/routers';
+import {
+  OPERATION_LABEL,
+  REACHABILITY_LABEL,
+  routersApi,
+  type ConnectionTest,
+  type ImportReport,
+} from '../api/routers';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, Table } from '../components/ui';
@@ -13,6 +19,10 @@ export function RoutersPage() {
   const [error, setError] = useState<string | null>(null);
 
   const routers = useQuery({ queryKey: ['routers'], queryFn: routersApi.list });
+  const operations = useQuery({
+    queryKey: ['router-operations'],
+    queryFn: () => routersApi.pendingOperations(),
+  });
 
   const onError = (err: unknown) =>
     setError(err instanceof ApiError ? err.message : 'Erreur inconnue');
@@ -34,6 +44,18 @@ export function RoutersPage() {
     },
     onError,
   });
+
+  const drain = useMutation({
+    mutationFn: routersApi.drainOperations,
+    onSuccess: () => {
+      setError(null);
+      queryClient.invalidateQueries({ queryKey: ['router-operations'] });
+      queryClient.invalidateQueries({ queryKey: ['vouchers'] });
+    },
+    onError,
+  });
+
+  const pending = operations.data ?? [];
 
   return (
     <div className="space-y-6">
@@ -80,6 +102,40 @@ export function RoutersPage() {
             <li className="text-slate-500">
               {report.skipped.length} comptes ignorés (tickets et comptes internes)
             </li>
+          </ul>
+        </Card>
+      )}
+
+      {pending.length > 0 && (
+        <Card title={`${pending.length} opération(s) en attente de reprise`}>
+          <p className="mb-3 text-sm text-slate-600">
+            Ces écritures n'ont pas pu partir vers le routeur. Elles repartiront seules dès qu'il
+            redeviendra joignable — rien n'est perdu.
+          </p>
+          <ul className="space-y-2 text-sm">
+            {pending.map((operation) => (
+              <li key={operation.id} className="flex items-start justify-between gap-3">
+                <span>
+                  <span className="font-medium">{OPERATION_LABEL[operation.kind]}</span>
+                  <span className="text-slate-500"> — {operation.reason}</span>
+                  {operation.attempts > 0 && (
+                    <span className="block text-xs text-slate-400">
+                      {operation.attempts} tentative(s)
+                      {operation.lastError && ` — ${operation.lastError}`}
+                    </span>
+                  )}
+                </span>
+                {canWrite && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => drain.mutate(operation.routerId)}
+                    disabled={drain.isPending}
+                  >
+                    Reprendre
+                  </Button>
+                )}
+              </li>
+            ))}
           </ul>
         </Card>
       )}

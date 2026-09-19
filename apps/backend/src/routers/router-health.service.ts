@@ -59,6 +59,18 @@ const COOLDOWN_MS = 30_000;
 export class RouterHealthService {
   private readonly logger = new Logger(RouterHealthService.name);
   private readonly health = new Map<string, RouterHealth>();
+  private readonly recoveryListeners: ((routerId: string) => void)[] = [];
+
+  /**
+   * Prévient quand un routeur redevient joignable après avoir été déclaré
+   * injoignable. C'est le signal qui vide la file des écritures différées.
+   *
+   * Un registre d'écoutes plutôt qu'un appel direct : la file dépend du
+   * disjoncteur pour savoir qui est joignable, l'inverse ferait un cycle.
+   */
+  onRecovered(listener: (routerId: string) => void): void {
+    this.recoveryListeners.push(listener);
+  }
 
   get(routerId: string): RouterHealth {
     const existing = this.health.get(routerId);
@@ -100,6 +112,7 @@ export class RouterHealthService {
 
   recordSuccess(routerId: string): void {
     const health = this.get(routerId);
+    const wasDown = health.state === 'INJOIGNABLE';
     if (health.state !== 'JOIGNABLE') {
       this.logger.log(`Routeur ${routerId} de nouveau joignable`);
     }
@@ -109,6 +122,18 @@ export class RouterHealthService {
     health.lastErrorCode = null;
     health.lastErrorMessage = null;
     health.openUntil = null;
+
+    // Le lien est revenu : ce qui n'avait pas pu partir peut repartir. Les
+    // écoutes ne doivent jamais faire échouer l'appel qui vient de réussir.
+    if (wasDown) {
+      for (const listener of this.recoveryListeners) {
+        try {
+          listener(routerId);
+        } catch (error) {
+          this.logger.error(`Écoute de reconnexion en échec : ${String(error)}`);
+        }
+      }
+    }
   }
 
   recordFailure(routerId: string, error: unknown): void {

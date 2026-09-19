@@ -49,8 +49,35 @@ export interface ImportReport {
   skipped: { name: string; reason: string }[];
 }
 
+/**
+ * Écriture vers le routeur qui n'a pas pu partir et sera rejouée. Le client
+ * final n'est pas coupé pour autant : le routeur applique seul les validités.
+ */
+export interface RouterOperation {
+  id: string;
+  routerId: string;
+  kind: 'COUPER_ACCES' | 'BASCULER_COMPTE';
+  reason: string;
+  attempts: number;
+  lastError: string | null;
+  createdAt: string;
+}
+
+export const OPERATION_LABEL: Record<RouterOperation['kind'], string> = {
+  COUPER_ACCES: "Coupure d'accès",
+  BASCULER_COMPTE: "Changement d'état d'un compte",
+};
+
 export const routersApi = {
   list: () => api.get<RouterView[]>('/routers'),
+  pendingOperations: (routerId?: string) =>
+    api.get<RouterOperation[]>(
+      `/routers/operations/pending${routerId ? `?routerId=${routerId}` : ''}`,
+    ),
+  drainOperations: (routerId: string) =>
+    api.post<{ done: number; failed: number; abandoned: number }>(
+      `/routers/${routerId}/operations/drain`,
+    ),
   testConnection: (id: string) => api.get<ConnectionTest>(`/routers/${id}/test-connection`),
   import: (id: string, dryRun: boolean) =>
     api.post<ImportReport>(`/routers/${id}/import?dryRun=${dryRun}`),

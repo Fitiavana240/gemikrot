@@ -54,6 +54,7 @@ model Tenant {
   auditLogs           AuditLog[]
   ticketTemplates     TicketTemplate[]
   paymentClaims       PaymentClaim[]
+  routerOperations    RouterOperation[]
 
   @@map("tenants")
 }
@@ -199,6 +200,7 @@ model Router {
   auditLogs            AuditLog[]
   subscriptions        Subscription[]
   devices              Device[]
+  operations           RouterOperation[]
 
   @@map("routers")
 }
@@ -486,6 +488,40 @@ model PaymentClaim {
 
   @@index([tenantId, phone])
   @@map("payment_claims")
+}
+
+/// Ce qu'une opération différée attend. Les états terminaux sont conservés :
+/// savoir qu'une coupure a fini par passer vaut autant que la coupure.
+enum RouterOperationStatus {
+  EN_ATTENTE
+  TERMINEE
+  ABANDONNEE
+}
+
+/// Écriture vers le routeur qui n'a pas pu partir, conservée pour être
+/// rejouée. Sans elle, une coupure de lien au mauvais moment laisse un accès
+/// ouvert que plus personne ne referme.
+model RouterOperation {
+  id            String                @id @default(uuid())
+  tenantId      String                @map("tenant_id")
+  tenant        Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  routerId      String                @map("router_id")
+  router        Router                @relation(fields: [routerId], references: [id], onDelete: Cascade)
+  /// Nature de l'opération — voir ROUTER_OPERATIONS côté service.
+  kind          String
+  /// Arguments de l'opération. Toutes doivent être rejouables sans dommage.
+  payload       Json
+  status        RouterOperationStatus @default(EN_ATTENTE)
+  attempts      Int                   @default(0)
+  lastError     String?               @map("last_error")
+  /// Motif de la mise en file, pour que l'exploitant sache pourquoi.
+  reason        String?
+  createdAt     DateTime              @default(now()) @map("created_at")
+  completedAt   DateTime?             @map("completed_at")
+
+  @@index([routerId, status])
+  @@index([tenantId])
+  @@map("router_operations")
 }
 
 model AuditLog {

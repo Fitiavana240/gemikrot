@@ -5,6 +5,7 @@ import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { AuthenticatedUser } from '../auth/jwt.strategy.js';
 import { RoutersService } from './routers.service.js';
 import { RouterImportService } from './router-import.service.js';
+import { RouterOperationQueue } from './router-operation.service.js';
 import { CreateRouterDto, ProbeFingerprintDto, UpdateRouterDto } from './dto/create-router.dto.js';
 
 /** La configuration des routeurs est réservée aux administrateurs. */
@@ -15,6 +16,7 @@ export class RoutersController {
   constructor(
     private readonly routersService: RoutersService,
     private readonly importService: RouterImportService,
+    private readonly operations: RouterOperationQueue,
   ) {}
 
   @Get()
@@ -25,6 +27,19 @@ export class RoutersController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.routersService.findOne(id);
+  }
+
+  /** Ce qui attend d'être réécrit sur le routeur, et pourquoi. */
+  @Get('operations/pending')
+  pendingOperations(@Query('routerId') routerId?: string) {
+    return this.operations.pending(routerId);
+  }
+
+  /** Rejoue la file sans attendre le prochain retour du routeur. */
+  @Roles(...CAN_CONFIGURE)
+  @Post(':id/operations/drain')
+  drainOperations(@Param('id') id: string) {
+    return this.operations.drain(id);
   }
 
   @Get(':id/test-connection')

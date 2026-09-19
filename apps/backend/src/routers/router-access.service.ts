@@ -16,8 +16,8 @@ import type { IMikrotikService } from '@wifitati/mikrotik-service';
  * expiré continue de servir jusqu'à trois jours.
  */
 @Injectable()
-export class VoucherAccessService {
-  private readonly logger = new Logger(VoucherAccessService.name);
+export class RouterAccessService {
+  private readonly logger = new Logger(RouterAccessService.name);
 
   /** Renvoie ce qui a été réellement coupé, pour l'audit et l'affichage. */
   async revoke(

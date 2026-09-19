@@ -2,8 +2,10 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuditModule } from '../audit/audit.module.js';
 import { DevicesModule } from '../devices/devices.module.js';
+import { RouterAccessService } from './router-access.service.js';
 import { RouterCredentialsService } from './router-credentials.service.js';
 import { RouterHealthService } from './router-health.service.js';
+import { RouterOperationQueue } from './router-operation.service.js';
 import { MikrotikClientFactory } from './mikrotik-client.factory.js';
 import { RouterImportService } from './router-import.service.js';
 import { RoutersService } from './routers.service.js';
@@ -20,15 +22,19 @@ import { RouterMonitoringController } from './router-monitoring.controller.js';
   imports: [ConfigModule, AuditModule, DevicesModule],
   controllers: [RoutersController, RouterMonitoringController],
   providers: [
+    RouterAccessService,
     RouterCredentialsService,
     RouterHealthService,
+    RouterOperationQueue,
     MikrotikClientFactory,
     RoutersService,
     RouterImportService,
   ],
   exports: [
+    RouterAccessService,
     RouterCredentialsService,
     RouterHealthService,
+    RouterOperationQueue,
     MikrotikClientFactory,
     RoutersService,
     RouterImportService,
