@@ -148,6 +148,16 @@ export const ipBindingTypeSchema = z.enum(['regular', 'bypassed', 'blocked']);
 
 // ---------- Walled Garden ----------
 
+/**
+ * Un port, ou une plage `3000-3010`. RouterOS **refuse** ici une liste
+ * séparée par des virgules — relevé sur le hAP : « invalid value 3000,5173
+ * for min, an integer required ». Ouvrir deux ports distincts demande donc
+ * deux entrées.
+ */
+const portSchema = z
+  .string()
+  .regex(/^\d{1,5}(-\d{1,5})?$/, 'Un port ou une plage (3000 ou 3000-3010)');
+
 export const createWalledGardenEntrySchema = z.object({
   // Un nom de domaine, éventuellement avec joker : `*.mvola.mg`.
   dstHost: z
@@ -156,7 +166,7 @@ export const createWalledGardenEntrySchema = z.object({
     .max(253)
     .regex(/^[a-zA-Z0-9*._-]+$/, 'Nom de domaine invalide'),
   action: z.enum(['allow', 'deny']).optional(),
-  dstPort: z.string().max(16).regex(/^[0-9,-]+$/).optional(),
+  dstPort: portSchema.optional(),
   comment: z.string().max(255).optional(),
 });
 
@@ -168,7 +178,7 @@ export const createWalledGardenIpEntrySchema = z.object({
     .max(43)
     .regex(/^[0-9a-fA-F:.]+(\/\d{1,3})?$/, 'Adresse invalide'),
   action: z.enum(['accept', 'drop', 'reject']).optional(),
-  dstPort: z.string().max(16).regex(/^[0-9,-]+$/).optional(),
+  dstPort: portSchema.optional(),
   protocol: z.enum(['tcp', 'udp', 'icmp']).optional(),
   comment: z.string().max(255).optional(),
 });

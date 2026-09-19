@@ -24,7 +24,7 @@ describe('Cloisonnement entre exploitants', () => {
       [tenantB, 'Test B'],
     ]) {
       await prisma.tenant.create({
-        data: { id, name, wifiName: name, currency: 'MGA', status: 'ACTIVE' },
+        data: { id, slug: id, name, wifiName: name, currency: 'MGA', status: 'ACTIVE' },
       });
     }
 

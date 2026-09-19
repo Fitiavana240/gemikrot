@@ -1,0 +1,92 @@
+/**
+ * La page de paiement s'adresse aux clients de Toliara, qui lisent plus
+ * facilement le malgache que le français. La console d'administration reste
+ * en français : elle s'adresse à l'exploitant.
+ */
+export type Lang = 'fr' | 'mg';
+
+export const TRANSLATIONS = {
+  fr: {
+    langName: 'Français',
+    chooseOffer: 'Choisissez votre forfait',
+    validity: 'Valable',
+    devices: 'appareil(s)',
+    payTitle: 'Payez par Mobile Money',
+    payIntro: 'Envoyez le montant exact au numéro ci-dessous, puis revenez ici.',
+    holder: 'Titulaire',
+    amountToSend: 'Montant à envoyer',
+    confirmTitle: 'Confirmez votre paiement',
+    confirmIntro:
+      'Saisissez le numéro qui a envoyé l\'argent et la référence figurant dans votre SMS de confirmation.',
+    yourPhone: 'Votre numéro',
+    reference: 'Référence du SMS',
+    submit: 'Valider mon paiement',
+    submitting: 'Envoi…',
+    back: 'Retour',
+    waitingTitle: 'Paiement en cours de vérification',
+    waitingBody:
+      'Votre paiement est en attente de confirmation. Cette page se met à jour toute seule.',
+    waitingHint: 'Gardez cette page ouverte, ou revenez avec votre numéro et votre référence.',
+    doneTitle: 'Votre accès est prêt',
+    doneBody: 'Connectez-vous au Wi-Fi et saisissez ce code :',
+    doneHint: 'Notez-le : c\'est à la fois votre identifiant et votre mot de passe.',
+    refusedTitle: 'Paiement non validé',
+    refusedBody: 'Contactez le vendeur avec votre référence.',
+    alreadyPaid: 'J\'ai déjà payé',
+    findAccess: 'Retrouver mon accès',
+    findIntro: 'Entrez le numéro qui a payé et la référence de votre SMS.',
+    search: 'Rechercher',
+    needHelp: 'Besoin d\'aide ?',
+    whatsapp: 'Écrire sur WhatsApp',
+    copied: 'Copié',
+    copy: 'Copier',
+  },
+  mg: {
+    langName: 'Malagasy',
+    chooseOffer: 'Safidio ny tolotra',
+    validity: 'Mandaitra',
+    devices: 'fitaovana',
+    payTitle: 'Aloa amin\'ny Mobile Money',
+    payIntro: 'Alefaso amin\'io laharana io ny vola marina, dia miverena eto.',
+    holder: 'Tompon\'ny laharana',
+    amountToSend: 'Vola alefa',
+    confirmTitle: 'Hamarino ny fandoavam-bola',
+    confirmIntro:
+      'Ampidiro ny laharana nandefa ny vola sy ny référence hita ao amin\'ny SMS fanamarinana.',
+    yourPhone: 'Ny laharanao',
+    reference: 'Référence ao amin\'ny SMS',
+    submit: 'Hamarino',
+    submitting: 'Andefa…',
+    back: 'Hiverina',
+    waitingTitle: 'Eo am-panamarinana',
+    waitingBody: 'Miandry fanamarinana ny fandoavam-bolanao. Mihavao ho azy ity pejy ity.',
+    waitingHint: 'Avelao misokatra ity pejy ity, na miverena amin\'ny laharana sy référence.',
+    doneTitle: 'Vonona ny fidiranao',
+    doneBody: 'Mifandraisa amin\'ny Wi-Fi dia ampidiro ity kaody ity :',
+    doneHint: 'Soraty : izy no anaranao sady tenimiafinao.',
+    refusedTitle: 'Tsy voamarina ny fandoavam-bola',
+    refusedBody: 'Mifandraisa amin\'ny mpivarotra miaraka amin\'ny référence-nao.',
+    alreadyPaid: 'Efa nandoa aho',
+    findAccess: 'Hitady ny fidirako',
+    findIntro: 'Ampidiro ny laharana nandoa sy ny référence ao amin\'ny SMS.',
+    search: 'Hitady',
+    needHelp: 'Mila fanampiana ?',
+    whatsapp: 'Hanoratra amin\'ny WhatsApp',
+    copied: 'Voadika',
+    copy: 'Adika',
+  },
+} as const satisfies Record<Lang, Record<string, string>>;
+
+export type Dictionary = (typeof TRANSLATIONS)['fr'];
+
+/** Durée en clair, dans la langue choisie. */
+export function formatValidity(seconds: number, lang: Lang): string {
+  const units =
+    lang === 'mg'
+      ? { d: 'andro', h: 'ora', m: 'minitra' }
+      : { d: 'jour(s)', h: 'heure(s)', m: 'minute(s)' };
+
+  if (seconds >= 86_400) return `${Math.round(seconds / 86_400)} ${units.d}`;
+  if (seconds >= 3600) return `${Math.round(seconds / 3600)} ${units.h}`;
+  return `${Math.round(seconds / 60)} ${units.m}`;
+}

@@ -156,7 +156,11 @@ export interface IMikrotikService {
   createUserManagerUsers(inputs: CreateUserManagerUserDto[]): Promise<UserManagerUserDto[]>;
   /** Rotation du mot de passe d'un compte existant, sans perdre son historique. */
   updateUserManagerUser(input: UpdateUserManagerUserDto): Promise<UserManagerUserDto>;
+  /** Supprime le compte **et ses attributions** : RouterOS laisse sinon des
+   *  orphelines qui bloquent la suppression du profil. */
   deleteUserManagerUser(username: string): Promise<void>;
+  /** Retire les attributions dont le compte n'existe plus. */
+  pruneOrphanAssignments(): Promise<number>;
   /** Suspension d'un abonné sans perdre son compte (Section 5). */
   setUserManagerUserDisabled(username: string, disabled: boolean): Promise<UserManagerUserDto>;
   createProfile(input: CreateProfileDto): Promise<UserManagerProfileDto>;

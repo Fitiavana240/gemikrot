@@ -440,6 +440,12 @@ export class MockMikrotikService implements IMikrotikService {
     this.userProfiles = this.userProfiles.filter((p) => p.username !== username);
   }
 
+  async pruneOrphanAssignments(): Promise<number> {
+    const before = this.userProfiles.length;
+    this.userProfiles = this.userProfiles.filter((p) => this.users.has(p.username));
+    return before - this.userProfiles.length;
+  }
+
   async setUserManagerUserDisabled(username: string, disabled: boolean): Promise<UserManagerUserDto> {
     const user = this.users.get(username);
     if (!user) {

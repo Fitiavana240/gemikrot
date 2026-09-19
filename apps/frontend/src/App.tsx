@@ -14,6 +14,7 @@ import { UserManagerPage } from './pages/UserManagerPage';
 import { HotspotPage } from './pages/HotspotPage';
 import { TicketPrintPage, TicketTemplatesPage } from './pages/TicketTemplatesPage';
 import { SignupPage } from './pages/SignupPage';
+import { PublicPaymentPage } from './pages/public/PublicPaymentPage';
 import { PlansPage } from './pages/PlansPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { VouchersPage } from './pages/VouchersPage';
@@ -26,6 +27,8 @@ export function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+          {/* Page client : hors du bloc authentifié, comme /login. */}
+          <Route path="/p/:slug" element={<PublicPaymentPage />} />
           <Route
             element={
               <RequireAuth>

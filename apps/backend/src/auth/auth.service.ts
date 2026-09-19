@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { LoginDto } from './dto/login.dto.js';
 import type { SignupDto } from './dto/signup.dto.js';
+import { reserveTenantSlug } from '../tenants/tenant-slug.util.js';
 
 export interface LoginResult {
   accessToken: string;
@@ -103,9 +104,15 @@ export class AuthService {
       throw new ConflictException('Un compte existe déjà avec cet email');
     }
 
+    const slug = await reserveTenantSlug(
+      dto.organizationName,
+      async (candidate) => (await this.prisma.tenant.count({ where: { slug: candidate } })) > 0,
+    );
+
     const created = await this.prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
+          slug,
           name: dto.organizationName,
           wifiName: dto.wifiName,
           domains: dto.domains ?? [],

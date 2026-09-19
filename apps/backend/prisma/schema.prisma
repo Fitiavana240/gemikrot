@@ -25,6 +25,10 @@ enum TenantStatus {
 /// voit l'ensemble.
 model Tenant {
   id        String       @id @default(uuid())
+  /// Identifiant public, utilisé dans l'adresse de la page de paiement
+  /// (`/p/zone-wifi-tati`). Déterministe, contrairement à une résolution par
+  /// domaine : il fonctionne aussi en développement, où l'hôte est localhost.
+  slug      String       @unique
   name      String
   /// Nom du réseau Wi-Fi affiché aux clients finaux.
   wifiName  String       @map("wifi_name")
@@ -49,6 +53,7 @@ model Tenant {
   devices             Device[]
   auditLogs           AuditLog[]
   ticketTemplates     TicketTemplate[]
+  paymentClaims       PaymentClaim[]
 
   @@map("tenants")
 }
@@ -433,6 +438,7 @@ model Payment {
   subscription       Subscription? @relation(fields: [subscriptionId], references: [id])
   verifiedByAdminId  String?       @map("verified_by_admin_id")
   verifiedByAdmin    AdminUser?    @relation(fields: [verifiedByAdminId], references: [id])
+  claim              PaymentClaim?
   createdAt          DateTime      @default(now()) @map("created_at")
   verifiedAt         DateTime?     @map("verified_at")
 
@@ -458,6 +464,28 @@ model TicketTemplate {
   @@unique([tenantId, name])
   @@index([tenantId])
   @@map("ticket_templates")
+}
+
+/// Demande de paiement d'un client, avant vérification. Le jeton est ce que
+/// le navigateur du client garde pour suivre l'avancement.
+model PaymentClaim {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  paymentId   String   @unique @map("payment_id")
+  payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  /// Aléatoire, porté par l'URL de suivi. Ne divulgue aucun identifiant :
+  /// le code d'accès n'est rendu qu'après vérification du paiement.
+  token       String   @unique
+  /// Téléphone et référence normalisés, tels qu'ils ont servi à retrouver
+  /// le paiement. La normalisation doit être la même que celle du lecteur
+  /// de SMS, sinon aucun rapprochement ne se fait.
+  phone       String
+  reference   String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, phone])
+  @@map("payment_claims")
 }
 
 model AuditLog {

@@ -19,6 +19,7 @@ import { DevicesModule } from './devices/devices.module.js';
 import { UserManagerModule } from './user-manager/user-manager.module.js';
 import { TicketsModule } from './tickets/tickets.module.js';
 import { HotspotModule } from './hotspot/hotspot.module.js';
+import { PublicModule } from './public/public.module.js';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { HotspotModule } from './hotspot/hotspot.module.js';
     UserManagerModule,
     TicketsModule,
     HotspotModule,
+    PublicModule,
   ],
   controllers: [AppController],
   providers: [AppService],

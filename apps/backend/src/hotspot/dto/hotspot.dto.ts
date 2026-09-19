@@ -1,5 +1,11 @@
 import { IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
+/**
+ * Un port ou une plage. RouterOS refuse une liste séparée par des virgules
+ * sur ces listes : ouvrir deux ports distincts demande deux entrées.
+ */
+const PORT = /^\d{1,5}(-\d{1,5})?$/;
+
 export class CreateWalledGardenDto {
   /** Nom de domaine, éventuellement avec joker : `*.mvola.mg`. */
   @IsString()
@@ -14,7 +20,7 @@ export class CreateWalledGardenDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^[0-9,-]+$/, { message: 'Port invalide' })
+  @Matches(PORT, { message: 'Un port ou une plage (3000 ou 3000-3010)' })
   dstPort?: string;
 
   @IsOptional()
@@ -37,7 +43,7 @@ export class CreateWalledGardenIpDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^[0-9,-]+$/, { message: 'Port invalide' })
+  @Matches(PORT, { message: 'Un port ou une plage (3000 ou 3000-3010)' })
   dstPort?: string;
 
   @IsOptional()

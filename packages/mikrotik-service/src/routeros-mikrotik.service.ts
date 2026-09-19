@@ -501,14 +501,55 @@ export class RouterOSMikrotikService implements IMikrotikService {
     return created;
   }
 
+  /**
+   * Supprime un compte **et ses attributions de profil**.
+   *
+   * RouterOS ne fait pas le ménage : il conserve les entrées de
+   * `/user-manager/user-profile` et y remplace simplement le nom du compte
+   * par son identifiant interne. Ces attributions orphelines empêchent
+   * ensuite définitivement de supprimer le profil, qui se croit encore
+   * utilisé. Relevé sur le hAP après une série de suppressions.
+   */
   async deleteUserManagerUser(username: string) {
     const validUsername = validate(usernameParamSchema, username);
     const existing = await this.findUserManagerUserByUsername(validUsername);
     if (!existing) {
       throw new MikrotikNotFoundError('Utilisateur User Manager', validUsername);
     }
-    this.logger.info('Suppression utilisateur User Manager', { username: validUsername });
+
+    const assignments = await this.getUserManagerUserProfiles(validUsername);
+    for (const assignment of assignments) {
+      await this.client.delete(`/user-manager/user-profile/${assignment.id}`);
+    }
+
+    this.logger.info('Suppression utilisateur User Manager', {
+      username: validUsername,
+      assignments: assignments.length,
+    });
     await this.client.delete(`/user-manager/user/${existing.id}`);
+  }
+
+  /**
+   * Retire les attributions dont le compte n'existe plus. Sans ce ménage, un
+   * profil reste indéfiniment « utilisé » par des comptes disparus.
+   */
+  async pruneOrphanAssignments(): Promise<number> {
+    const [assignments, users] = await Promise.all([
+      this.getUserManagerUserProfiles(),
+      this.getUserManagerUsers(),
+    ]);
+    const known = new Set(users.map((user) => user.username));
+
+    let removed = 0;
+    for (const assignment of assignments) {
+      if (known.has(assignment.username)) continue;
+      await this.client.delete(`/user-manager/user-profile/${assignment.id}`);
+      removed += 1;
+    }
+    if (removed > 0) {
+      this.logger.info('Attributions orphelines retirées', { count: removed });
+    }
+    return removed;
   }
 
   /**

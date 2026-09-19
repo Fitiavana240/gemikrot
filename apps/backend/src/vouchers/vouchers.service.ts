@@ -133,10 +133,24 @@ export class VouchersService {
     });
   }
 
-  /** Génère un voucher à la volée, hors lot, pour attribution immédiate. */
-  async generateSingle(planId: string): Promise<Voucher> {
+  /**
+   * Génère un ticket à la volée, hors lot, et le provisionne sur le routeur
+   * comme le fait un lot. C'est ce chemin qu'emprunte un paiement vérifié
+   * quand aucun ticket n'est disponible en stock : le client doit repartir
+   * avec un code qui fonctionne, pas avec une ligne en base.
+   */
+  async generateSingle(planId: string, routerId?: string): Promise<Voucher> {
     const plan = await this.getActivePlan(planId);
-    return this.createVoucherWithUniqueCode({ planId: plan.id, price: plan.price });
+    const voucher = await this.createVoucherWithUniqueCode({
+      planId: plan.id,
+      price: plan.price,
+    });
+    const [provisioned] = await this.provisionOnUserManager(
+      [voucher],
+      plan,
+      routerId ?? (await this.getDefaultRouterId()),
+    );
+    return provisioned;
   }
 
   /** Génération synchrone d'un lot (Section 18). Adapté jusqu'à ~1000 vouchers. */

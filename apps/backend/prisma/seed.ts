@@ -59,6 +59,7 @@ async function main() {
     update: {},
     create: {
       id: DEFAULT_TENANT_ID,
+      slug: 'zone-wifi-tati',
       name: 'Zone WIFI-TATI',
       wifiName: 'Zone WIFI-TATI',
       domains: ['wifitati.net'],

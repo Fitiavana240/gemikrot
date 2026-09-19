@@ -108,11 +108,46 @@ describe('RouterOSMikrotikService', () => {
     });
 
     it('supprime l\'utilisateur existant via son id RouterOS', async () => {
-      client.get.mockResolvedValueOnce([{ '.id': '*5', name: 'client05' }]);
+      client.get
+        .mockResolvedValueOnce([{ '.id': '*5', name: 'client05' }])
+        .mockResolvedValueOnce([]);
 
       await service.deleteUserManagerUser('client05');
 
       expect(client.delete).toHaveBeenCalledWith('/user-manager/user/*5');
+    });
+
+    it('retire les attributions avant le compte', async () => {
+      // RouterOS ne les efface pas : il y remplace le nom du compte par son
+      // identifiant interne, et le profil se croit alors utilisé pour
+      // toujours par un compte qui n'existe plus.
+      client.get
+        .mockResolvedValueOnce([{ '.id': '*5', name: 'client05' }])
+        .mockResolvedValueOnce([
+          { '.id': '*9', user: 'client05', profile: 'OFFRE', state: 'used' },
+        ]);
+
+      await service.deleteUserManagerUser('client05');
+
+      expect(client.delete).toHaveBeenNthCalledWith(1, '/user-manager/user-profile/*9');
+      expect(client.delete).toHaveBeenNthCalledWith(2, '/user-manager/user/*5');
+    });
+  });
+
+  describe('pruneOrphanAssignments', () => {
+    it('retire les attributions dont le compte a disparu', async () => {
+      client.get
+        .mockResolvedValueOnce([
+          { '.id': '*1', user: 'vivant', profile: 'OFFRE', state: 'used' },
+          { '.id': '*2', user: '*6', profile: 'OFFRE', state: 'waiting' },
+        ])
+        .mockResolvedValueOnce([{ '.id': '*5', name: 'vivant' }]);
+
+      const removed = await service.pruneOrphanAssignments();
+
+      expect(removed).toBe(1);
+      expect(client.delete).toHaveBeenCalledTimes(1);
+      expect(client.delete).toHaveBeenCalledWith('/user-manager/user-profile/*2');
     });
   });
 

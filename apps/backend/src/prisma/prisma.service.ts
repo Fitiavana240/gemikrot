@@ -18,6 +18,7 @@ const TENANT_SCOPED_MODELS = new Set<string>([
   'Payment',
   'MobileMoneyAccount',
   'TicketTemplate',
+  'PaymentClaim',
 ]);
 
 /** Opérations dont le `where` doit être restreint à l'exploitant courant. */
