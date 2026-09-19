@@ -3,3 +3,12 @@
 body {
   @apply bg-slate-50 text-slate-900;
 }
+
+/* À l'impression, seule la feuille de tickets doit rester : la navigation et
+   l'en-tête de la console n'ont rien à faire sur une planche à découper. */
+@media print {
+  body { background: #ffffff; }
+  aside, header { display: none !important; }
+  main { padding: 0 !important; }
+  iframe { width: 100% !important; height: auto !important; min-height: 100vh; border: 0 !important; }
+}

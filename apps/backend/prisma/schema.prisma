@@ -48,6 +48,7 @@ model Tenant {
   payments            Payment[]
   devices             Device[]
   auditLogs           AuditLog[]
+  ticketTemplates     TicketTemplate[]
 
   @@map("tenants")
 }
@@ -437,6 +438,26 @@ model Payment {
 
   @@unique([tenantId, method, reference])
   @@map("payments")
+}
+
+/// Modèle d'impression des tickets, propre à chaque exploitant. Le HTML est
+/// écrit par l'admin et rendu dans une iframe cloisonnée : voir
+/// `ticket-render.service.ts` pour les quatre couches de protection.
+model TicketTemplate {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  html      String   @db.Text
+  /// Nombre de tickets par page A4 — détermine la grille d'impression.
+  perPage   Int      @default(30) @map("per_page")
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("ticket_templates")
 }
 
 model AuditLog {

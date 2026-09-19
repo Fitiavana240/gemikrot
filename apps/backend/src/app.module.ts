@@ -17,6 +17,7 @@ import { DashboardModule } from './dashboard/dashboard.module.js';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module.js';
 import { DevicesModule } from './devices/devices.module.js';
 import { UserManagerModule } from './user-manager/user-manager.module.js';
+import { TicketsModule } from './tickets/tickets.module.js';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { UserManagerModule } from './user-manager/user-manager.module.js';
     SubscriptionsModule,
     DevicesModule,
     UserManagerModule,
+    TicketsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
