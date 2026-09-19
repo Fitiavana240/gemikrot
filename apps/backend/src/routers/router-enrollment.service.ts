@@ -242,10 +242,16 @@ export class RouterEnrollmentService {
    * Chaque ligne est commentée en français parce qu'un exploitant doit
    * pouvoir lire ce qu'il exécute sur son propre matériel avant de le faire.
    *
-   * À éprouver sur un routeur réel avant mise en service : la syntaxe suit la
-   * documentation RouterOS v7, mais ce projet a déjà retenu quatre erreurs
-   * écrites de bonne foi sur la documentation seule. Tant que ce script n'a
-   * pas tourné sur le hAP, il est à considérer comme non vérifié.
+   * Chaque nom de propriété a été confronté à la documentation RouterOS v7 :
+   * les propriétés des pairs (`endpoint-address`, `allowed-address`,
+   * `persistent-keepalive`), `output=none` de `/tool/fetch`, la forme de
+   * l'en-tête HTTP, les politiques de groupe (`rest-api` en est bien une), et
+   * `public-key` comme propriété en lecture seule de l'interface.
+   *
+   * Deux points restent à éprouver sur un routeur réel, et ne peuvent pas
+   * l'être autrement : que les politiques retenues suffisent réellement à
+   * l'API REST, et que l'ensemble s'exécute d'une traite. Ce projet a déjà
+   * retenu quatre erreurs écrites de bonne foi sur la documentation seule.
    */
   private buildScript(params: {
     token: string;
@@ -265,6 +271,9 @@ export class RouterEnrollmentService {
 # 1. Le tunnel. La clé privée est créée ici et ne quitte jamais ce routeur.
 /interface/wireguard/add name=${WG_INTERFACE} listen-port=13231 comment="GeMikrot"
 /ip/address/add address=${params.tunnelAddress}/32 interface=${WG_INTERFACE} comment="GeMikrot"
+# Une adresse en /32 ne crée aucune route : sans celle-ci, ce routeur saurait
+# recevoir les appels du serveur mais pas lui répondre.
+/ip/route/add dst-address=${subnet} gateway=${WG_INTERFACE} comment="GeMikrot"
 
 # 2. Le serveur, comme pair. C'est ce routeur qui appelle, jamais l'inverse :
 #    aucun port à ouvrir, aucune adresse fixe nécessaire côté routeur.
@@ -272,7 +281,7 @@ export class RouterEnrollmentService {
     public-key="${publicKey}" \\
     endpoint-address=${endpointHost} endpoint-port=${endpointPort} \\
     allowed-address=${subnet} \\
-    persistent-keepalive=25s comment="GeMikrot"
+    persistent-keepalive=25 comment="GeMikrot"
 
 # 3. Un compte dédié à l'application, aux droits limités. Jamais « admin ».
 /user/group/add name=gemikrot policy=read,write,api,rest-api,test \\
@@ -288,7 +297,7 @@ export class RouterEnrollmentService {
 :local pub [/interface/wireguard/get [find name=${WG_INTERFACE}] public-key]
 :local nom [/system/identity/get name]
 /tool/fetch url="${callbackUrl}" http-method=post \\
-    http-header-field="content-type: application/json" \\
+    http-header-field="Content-Type:application/json" \\
     http-data="{\\"publicKey\\":\\"$pub\\",\\"identity\\":\\"$nom\\"}" \\
     output=none
 :put "Routeur raccorde. Retournez dans la console GeMikrot."

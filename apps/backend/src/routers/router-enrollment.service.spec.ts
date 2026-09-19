@@ -79,10 +79,21 @@ describe('RouterEnrollmentService', () => {
       // L'API ne doit plus écouter que dans le tunnel.
       expect(invitation.script).toContain('/ip/service/set www-ssl address=10.88.0.1/32');
 
-      // Le rappel, avec le jeton — qui n'existe qu'ici.
+      // Le rappel, avec le jeton — qui n'existe qu'ici. Il part par Internet
+      // et non par le tunnel : le serveur ne connaîtra la clé publique de ce
+      // routeur qu'en le recevant, donc le tunnel ne peut pas encore être
+      // monté à cet instant.
       expect(invitation.script).toContain(
         'https://vps.gemikrot.mg/router-enrollments/callback/',
       );
+
+      // Une adresse en /32 ne crée aucune route : sans celle-ci, le routeur
+      // recevrait les appels du serveur sans savoir lui répondre.
+      expect(invitation.script).toContain('/ip/route/add dst-address=10.88.0.0/24');
+
+      // Documenté comme un entier : « 25s » serait refusé sous cette lecture,
+      // « 25 » vaut 25 secondes dans les deux cas.
+      expect(invitation.script).toContain('persistent-keepalive=25 ');
     });
 
     it('stocke le jeton haché, jamais en clair', async () => {
