@@ -20,6 +20,7 @@
  * joindre tel quel au test des correspondances. Les mots de passe des comptes
  * PPPoE sont remplacés avant écriture : un relevé finit dans le dépôt.
  */
+import { Agent, buildConnector, fetch as undiciFetch } from 'undici';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,9 +45,11 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Le certificat du routeur est auto-signé tant qu'il n'est pas épinglé ;
-  // c'est un relevé manuel sur le réseau local, pas un chemin de production.
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  // Le certificat du routeur est auto-signé tant qu'il n'est pas épinglé.
+  // Même transport que l'application : `fetch` global n'honore pas toujours
+  // la variable d'environnement, et un relevé qui échoue pour une raison de
+  // TLS ne dit rien du routeur.
+  const dispatcher = new Agent({ connect: buildConnector({ rejectUnauthorized: false }) });
   const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
 
   const relevé: Record<string, unknown> = {
@@ -56,8 +59,9 @@ async function main(): Promise<void> {
 
   for (const endpoint of ENDPOINTS) {
     try {
-      const response = await fetch(`${baseUrl}/rest${endpoint}`, {
+      const response = await undiciFetch(`${baseUrl}/rest${endpoint}`, {
         headers: { authorization },
+        dispatcher,
         signal: AbortSignal.timeout(15_000),
       });
 

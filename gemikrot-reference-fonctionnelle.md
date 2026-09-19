@@ -1,7 +1,7 @@
 # GEMIKROT — Document de référence fonctionnel du SaaS
 # Gestion de réseaux Wi-Fi MikroTik · Tickets, abonnements et paiement mobile — Madagascar
 
-**Date de rédaction :** 2026-09-19 · **Statut :** v0.1 — socle multi-exploitants livré, tickets sur User Manager livrés, page de paiement publique livrée en validation manuelle. Reconnaissance automatique des SMS non commencée. Voir §16 Journal.
+**Date de rédaction :** 2026-09-19 · **Statut :** v0.2 — socle multi-exploitants livré, tickets sur User Manager livrés, page de paiement publique livrée en validation manuelle, console multi-routeurs et tolérance aux pannes livrées (lot du 2026-09-19 ci-dessous). Reconnaissance automatique des SMS non commencée, PPPoE non couvert. Voir §16 Journal.
 **Objet :** remplacer Winbox et le carnet de tickets par une console web multi-exploitants qui pilote **plusieurs routeurs MikroTik à distance**, vend des accès Wi-Fi (tickets et abonnements), encaisse par Mobile Money et coupe réellement les accès expirés.
 
 > **Impact :** ⭐ Utile · ⭐⭐ Important · ⭐⭐⭐ Critique
@@ -94,6 +94,22 @@ Conséquences observées sur le parc réel (hAP ac², 646 comptes HotSpot, Route
 14. [Ordre de bataille](#14-ordre-de-bataille)
 15. [Risques & questions à trancher](#15-risques--questions-à-trancher)
 16. [Journal de livraison](#16-journal-de-livraison)
+
+### Lot du 2026-09-19 — routeurs distants et tolérance aux pannes
+
+| Item | Intitulé | État |
+|------|----------|------|
+| SOC-9 | Multi-routeurs réel dans la console | ✅ livré |
+| RTR-11 | Disjoncteur par routeur | ✅ livré |
+| RTR-12 | File d'opérations différées | ✅ livré |
+| RTR-13 | Enrôlement par tunnel WireGuard | 🟡 côté application livré, script à éprouver sur le matériel |
+| RTR-14 | PPPoE | ⬜ **bloqué** — voir ci-dessous |
+
+**Vérifié** : 91 tests backend (13 fichiers), `tsc` propre sur les deux espaces, migrations appliquées, application démarrée sans erreur d'injection et les routes d'enrôlement exposées. Commits `819a801`, `46792f1`, `1bc69ee`, `98de1a4`, `91ba350`, `0cc6198`.
+
+**Ce qui bloque RTR-14** : `www-ssl` du routeur coupe la connexion avant la poignée de main TLS, alors que le port 443 est ouvert et que le routeur répond au ping. Le port 8729 négocie puis refuse (alerte TLS 40) — la différence montre que ce n'est pas un problème de certificat mais un refus d'adresse. Le poste est passé de `192.168.88.250` à `192.168.88.47` : vérifier `/ip/service/print` dans Winbox, champ `address` de `www-ssl`. Une fois l'accès rétabli, `npm run probe:ppp https://192.168.88.1 <compte> <motdepasse>` relève les charges utiles PPP et le reste s'écrit contre ce relevé.
+
+*Livré par Claude Opus 5, le 2026-09-19. La colonne « Implémenté » de ce lot n'a été cochée que pour ce qui compile, passe les tests et démarre ; rien de ce lot n'a été éprouvé contre le routeur réel, et c'est dit à chaque ligne concernée.*
 
 ---
 

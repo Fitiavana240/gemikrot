@@ -1,0 +1,22 @@
+{
+  "relevéLe": "2026-09-19T13:12:05.999Z",
+  "routeur": "https://192.168.88.1",
+  "/ppp/secret": {
+    "erreur": "TypeError: fetch failed"
+  },
+  "/ppp/profile": {
+    "erreur": "TypeError: fetch failed"
+  },
+  "/ppp/active": {
+    "erreur": "TypeError: fetch failed"
+  },
+  "/interface/pppoe-server/server": {
+    "erreur": "TypeError: fetch failed"
+  },
+  "/ppp/aaa": {
+    "erreur": "TypeError: fetch failed"
+  },
+  "/ip/pool": {
+    "erreur": "TypeError: fetch failed"
+  }
+}
