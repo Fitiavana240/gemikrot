@@ -13,9 +13,13 @@ import {
   HotspotCookieDto,
   HotspotHostDto,
   HotspotProfileDto,
+  HotspotServerDto,
+  HotspotServerProfileDto,
   HotspotUserDto,
   IpBindingDto,
   IpBindingType,
+  WalledGardenEntryDto,
+  WalledGardenIpEntryDto,
 } from '../../src/dto/hotspot.dto';
 import {
   UserManagerLimitationDto,
@@ -34,6 +38,8 @@ import {
   CreateLimitationDto,
   CreateProfileDto,
   CreateUserManagerUserDto,
+  CreateWalledGardenEntryDto,
+  CreateWalledGardenIpEntryDto,
   DisconnectHotspotUserDto,
   RemoveProfileAssignmentDto,
   UpdateHotspotProfileDto,
@@ -65,6 +71,8 @@ export class MockMikrotikService implements IMikrotikService {
   private hotspotProfiles = new Map<string, HotspotProfileDto>();
   private ipBindings: IpBindingDto[] = [];
   private cookies: HotspotCookieDto[] = [];
+  private walledGarden: WalledGardenEntryDto[] = [];
+  private walledGardenIps: WalledGardenIpEntryDto[] = [];
   private dhcpLeases: DhcpLeaseDto[] = [];
   private idCounter = 1;
 
@@ -296,6 +304,92 @@ export class MockMikrotikService implements IMikrotikService {
   }
 
   // ---------- User Manager : écriture ----------
+
+  async getHotspotServers(): Promise<HotspotServerDto[]> {
+    return [
+      {
+        id: '*1',
+        name: 'hotspot-tati',
+        interfaceName: 'HOTSPOT',
+        addressPool: 'pool-hotspot',
+        profileName: 'hsprof-tati',
+        idleTimeoutSeconds: 900,
+        addressesPerMac: 1,
+        disabled: false,
+      },
+    ];
+  }
+
+  async getHotspotServerProfiles(): Promise<HotspotServerProfileDto[]> {
+    return [
+      {
+        id: '*1',
+        name: 'hsprof-tati',
+        dnsName: 'wifitati.net',
+        hotspotAddress: '192.168.88.1',
+        htmlDirectory: 'flash/hotspot',
+        loginBy: ['mac', 'cookie', 'http-chap', 'https', 'http-pap', 'mac-cookie'],
+        httpCookieLifetimeSeconds: 259_200,
+        useRadius: true,
+        radiusAccounting: true,
+      },
+    ];
+  }
+
+  async getWalledGarden(): Promise<WalledGardenEntryDto[]> {
+    return [...this.walledGarden];
+  }
+
+  async createWalledGardenEntry(input: CreateWalledGardenEntryDto): Promise<WalledGardenEntryDto> {
+    const entry: WalledGardenEntryDto = {
+      id: this.nextId(),
+      action: input.action ?? 'allow',
+      dstHost: input.dstHost,
+      dstPort: input.dstPort ?? null,
+      path: null,
+      comment: input.comment ?? null,
+      disabled: false,
+      hits: 0,
+    };
+    this.walledGarden.push(entry);
+    return entry;
+  }
+
+  async deleteWalledGardenEntry(id: string): Promise<void> {
+    const before = this.walledGarden.length;
+    this.walledGarden = this.walledGarden.filter((entry) => entry.id !== id);
+    if (this.walledGarden.length === before) {
+      throw new MikrotikNotFoundError('Entrée Walled Garden', id);
+    }
+  }
+
+  async getWalledGardenIps(): Promise<WalledGardenIpEntryDto[]> {
+    return [...this.walledGardenIps];
+  }
+
+  async createWalledGardenIpEntry(
+    input: CreateWalledGardenIpEntryDto,
+  ): Promise<WalledGardenIpEntryDto> {
+    const entry: WalledGardenIpEntryDto = {
+      id: this.nextId(),
+      action: input.action ?? 'accept',
+      dstAddress: input.dstAddress,
+      dstPort: input.dstPort ?? null,
+      protocol: input.protocol ?? null,
+      comment: input.comment ?? null,
+      disabled: false,
+    };
+    this.walledGardenIps.push(entry);
+    return entry;
+  }
+
+  async deleteWalledGardenIpEntry(id: string): Promise<void> {
+    const before = this.walledGardenIps.length;
+    this.walledGardenIps = this.walledGardenIps.filter((entry) => entry.id !== id);
+    if (this.walledGardenIps.length === before) {
+      throw new MikrotikNotFoundError('Entrée Walled Garden IP', id);
+    }
+  }
 
   async getHotspotCookies(): Promise<HotspotCookieDto[]> {
     return [...this.cookies];

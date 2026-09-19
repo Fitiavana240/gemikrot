@@ -1,5 +1,6 @@
 import {
   mapUserManagerProfile,
+  mapUserManagerSession,
   mapUserManagerUserProfile,
 } from '../../src/mappers/user-manager.mapper';
 
@@ -83,5 +84,47 @@ describe('mappers User Manager', () => {
       expect(assignment.endTime).toBeNull();
       expect(assignment.state).toBe('running-active');
     });
+  });
+});
+
+/**
+ * Charge utile d'une session, relevée telle quelle sur le hAP. La première
+ * version du mapper lisait `start-time`, `stop-time` et `session-time` —
+ * trois champs qui n'existent pas : toutes les sessions ressortaient vides,
+ * à zéro seconde, et jamais terminées.
+ */
+describe('mapper de session User Manager', () => {
+  const RAW = {
+    '.id': '*1',
+    'acct-session-id': '80401105',
+    active: 'false',
+    'calling-station-id': 'BC:1D:89:91:4A:5E',
+    download: '92325484',
+    ended: '2026-09-17 14:18:15',
+    'nas-ip-address': '127.0.0.1',
+    started: '2026-09-17 13:48:58',
+    'terminate-cause': 'lost-service',
+    upload: '47093621',
+    uptime: '29m18s',
+    user: 'test1h',
+  };
+
+  it('lit les champs que le routeur envoie vraiment', () => {
+    const session = mapUserManagerSession(RAW);
+
+    expect(session.username).toBe('test1h');
+    expect(session.startTime).toBe('2026-09-17 13:48:58');
+    expect(session.stopTime).toBe('2026-09-17 14:18:15');
+    expect(session.sessionTimeSeconds).toBe(29 * 60 + 18);
+    expect(session.bytesIn).toBe(92_325_484);
+    expect(session.bytesOut).toBe(47_093_621);
+    expect(session.terminateCause).toBe('lost-service');
+  });
+
+  it("prend l'état actif du routeur plutôt que de le déduire", () => {
+    // Une session close dont la date de fin manquerait passerait sinon pour
+    // encore en cours.
+    expect(mapUserManagerSession(RAW).active).toBe(false);
+    expect(mapUserManagerSession({ ...RAW, active: 'true', ended: null }).active).toBe(true);
   });
 });

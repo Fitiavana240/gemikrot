@@ -16,6 +16,7 @@ const NAV: { to: string; label: string; end?: boolean }[] = [
   { to: '/ticket-templates', label: 'Modèles de ticket' },
   { to: '/payments', label: 'Paiements' },
   { to: '/routers', label: 'Routeurs' },
+  { to: '/hotspot', label: 'HotSpot' },
   { to: '/user-manager', label: 'User Manager' },
   { to: '/settings', label: 'Paramètres' },
 ];

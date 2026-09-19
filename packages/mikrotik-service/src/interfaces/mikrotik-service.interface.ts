@@ -12,9 +12,13 @@ import {
   HotspotCookieDto,
   HotspotHostDto,
   HotspotProfileDto,
+  HotspotServerDto,
+  HotspotServerProfileDto,
   HotspotUserDto,
   IpBindingDto,
   IpBindingType,
+  WalledGardenEntryDto,
+  WalledGardenIpEntryDto,
 } from '../dto/hotspot.dto';
 import {
   UserManagerLimitationDto,
@@ -33,6 +37,8 @@ import {
   CreateLimitationDto,
   CreateProfileDto,
   CreateUserManagerUserDto,
+  CreateWalledGardenEntryDto,
+  CreateWalledGardenIpEntryDto,
   DisconnectHotspotUserDto,
   RemoveProfileAssignmentDto,
   UpdateHotspotProfileDto,
@@ -104,6 +110,27 @@ export interface IMikrotikService {
 
   /** Baux DHCP — seule source côté routeur pour deviner le type d'appareil. */
   getDhcpLeases(): Promise<DhcpLeaseDto[]>;
+
+  // ---------- Serveurs HotSpot (lecture) ----------
+
+  getHotspotServers(): Promise<HotspotServerDto[]>;
+  /** Porte `login-by` et la durée de vie des cookies : la portée réelle
+   *  d'une suspension en dépend. */
+  getHotspotServerProfiles(): Promise<HotspotServerProfileDto[]>;
+
+  // ---------- Walled Garden ----------
+
+  /**
+   * Ce qu'un client peut joindre avant de s'authentifier. Sans entrée, une
+   * page de paiement hébergée hors du routeur est inatteignable pour qui
+   * n'a pas encore de code d'accès.
+   */
+  getWalledGarden(): Promise<WalledGardenEntryDto[]>;
+  createWalledGardenEntry(input: CreateWalledGardenEntryDto): Promise<WalledGardenEntryDto>;
+  deleteWalledGardenEntry(id: string): Promise<void>;
+  getWalledGardenIps(): Promise<WalledGardenIpEntryDto[]>;
+  createWalledGardenIpEntry(input: CreateWalledGardenIpEntryDto): Promise<WalledGardenIpEntryDto>;
+  deleteWalledGardenIpEntry(id: string): Promise<void>;
 
   // ---------- User Manager : lecture ----------
 

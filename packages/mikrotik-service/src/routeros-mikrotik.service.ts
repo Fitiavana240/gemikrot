@@ -12,6 +12,8 @@ import {
   createHotspotUserSchema,
   createIpBindingSchema,
   createLimitationSchema,
+  createWalledGardenEntrySchema,
+  createWalledGardenIpEntrySchema,
   createProfileSchema,
   createUserManagerUserSchema,
   disconnectHotspotUserSchema,
@@ -20,6 +22,7 @@ import {
   limitationNameParamSchema,
   profileNameParamSchema,
   removeProfileAssignmentSchema,
+  routerosIdSchema,
   updateHotspotProfileSchema,
   updateHotspotUserSchema,
   updateLimitationSchema,
@@ -36,6 +39,8 @@ import {
   CreateLimitationDto,
   CreateProfileDto,
   CreateUserManagerUserDto,
+  CreateWalledGardenEntryDto,
+  CreateWalledGardenIpEntryDto,
   DisconnectHotspotUserDto,
   RemoveProfileAssignmentDto,
   UpdateHotspotProfileDto,
@@ -331,6 +336,69 @@ export class RouterOSMikrotikService implements IMikrotikService {
   async getDhcpLeases() {
     const raw = await this.client.get<any[]>('/ip/dhcp-server/lease');
     return raw.map(HotspotMapper.mapDhcpLease);
+  }
+
+  // ============ Serveurs HotSpot et Walled Garden ============
+
+  async getHotspotServers() {
+    const raw = await this.client.get<any[]>('/ip/hotspot');
+    return raw.map(HotspotMapper.mapHotspotServer);
+  }
+
+  async getHotspotServerProfiles() {
+    const raw = await this.client.get<any[]>('/ip/hotspot/profile');
+    return raw.map(HotspotMapper.mapHotspotServerProfile);
+  }
+
+  async getWalledGarden() {
+    const raw = await this.client.get<any[]>('/ip/hotspot/walled-garden');
+    return raw.map(HotspotMapper.mapWalledGardenEntry);
+  }
+
+  async createWalledGardenEntry(input: CreateWalledGardenEntryDto) {
+    const data = validate(createWalledGardenEntrySchema, input);
+    this.logger.info('Ouverture Walled Garden', { host: data.dstHost });
+    const raw = await this.client.put<any>('/ip/hotspot/walled-garden', {
+      'dst-host': data.dstHost,
+      action: data.action ?? 'allow',
+      'dst-port': data.dstPort,
+      comment: data.comment,
+    });
+    return HotspotMapper.mapWalledGardenEntry(raw);
+  }
+
+  async deleteWalledGardenEntry(id: string) {
+    const validId = validate(routerosIdSchema, id);
+    this.logger.info('Retrait Walled Garden', { id: validId });
+    await this.client.delete(`/ip/hotspot/walled-garden/${encodeURIComponent(validId)}`);
+  }
+
+  async getWalledGardenIps() {
+    const raw = await this.client.get<any[]>('/ip/hotspot/walled-garden/ip');
+    return raw.map(HotspotMapper.mapWalledGardenIpEntry);
+  }
+
+  /**
+   * La liste par adresse n'emploie pas le même vocabulaire que la liste par
+   * domaine : l'action y est `accept`, pas `allow`. Relevé sur le routeur.
+   */
+  async createWalledGardenIpEntry(input: CreateWalledGardenIpEntryDto) {
+    const data = validate(createWalledGardenIpEntrySchema, input);
+    this.logger.info('Ouverture Walled Garden IP', { address: data.dstAddress });
+    const raw = await this.client.put<any>('/ip/hotspot/walled-garden/ip', {
+      'dst-address': data.dstAddress,
+      action: data.action ?? 'accept',
+      'dst-port': data.dstPort,
+      protocol: data.protocol,
+      comment: data.comment,
+    });
+    return HotspotMapper.mapWalledGardenIpEntry(raw);
+  }
+
+  async deleteWalledGardenIpEntry(id: string) {
+    const validId = validate(routerosIdSchema, id);
+    this.logger.info('Retrait Walled Garden IP', { id: validId });
+    await this.client.delete(`/ip/hotspot/walled-garden/ip/${encodeURIComponent(validId)}`);
   }
 
   // ==================== User Manager : lecture ====================

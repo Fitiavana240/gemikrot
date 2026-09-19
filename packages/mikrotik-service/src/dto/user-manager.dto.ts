@@ -88,4 +88,6 @@ export interface UserManagerSessionDto {
   bytesIn: number;
   bytesOut: number;
   terminateCause: string | null;
+  /** Porté par le routeur, pas déduit d'une date de fin manquante. */
+  active: boolean;
 }

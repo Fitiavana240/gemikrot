@@ -18,6 +18,7 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module.js';
 import { DevicesModule } from './devices/devices.module.js';
 import { UserManagerModule } from './user-manager/user-manager.module.js';
 import { TicketsModule } from './tickets/tickets.module.js';
+import { HotspotModule } from './hotspot/hotspot.module.js';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { TicketsModule } from './tickets/tickets.module.js';
     DevicesModule,
     UserManagerModule,
     TicketsModule,
+    HotspotModule,
   ],
   controllers: [AppController],
   providers: [AppService],

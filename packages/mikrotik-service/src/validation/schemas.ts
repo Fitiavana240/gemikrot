@@ -145,3 +145,32 @@ export const createIpBindingSchema = z.object({
 });
 
 export const ipBindingTypeSchema = z.enum(['regular', 'bypassed', 'blocked']);
+
+// ---------- Walled Garden ----------
+
+export const createWalledGardenEntrySchema = z.object({
+  // Un nom de domaine, éventuellement avec joker : `*.mvola.mg`.
+  dstHost: z
+    .string()
+    .min(3)
+    .max(253)
+    .regex(/^[a-zA-Z0-9*._-]+$/, 'Nom de domaine invalide'),
+  action: z.enum(['allow', 'deny']).optional(),
+  dstPort: z.string().max(16).regex(/^[0-9,-]+$/).optional(),
+  comment: z.string().max(255).optional(),
+});
+
+export const createWalledGardenIpEntrySchema = z.object({
+  // Adresse ou réseau : `192.0.2.7` ou `192.0.2.0/24`.
+  dstAddress: z
+    .string()
+    .min(7)
+    .max(43)
+    .regex(/^[0-9a-fA-F:.]+(\/\d{1,3})?$/, 'Adresse invalide'),
+  action: z.enum(['accept', 'drop', 'reject']).optional(),
+  dstPort: z.string().max(16).regex(/^[0-9,-]+$/).optional(),
+  protocol: z.enum(['tcp', 'udp', 'icmp']).optional(),
+  comment: z.string().max(255).optional(),
+});
+
+export const routerosIdSchema = z.string().min(1).max(64).regex(/^\*?[0-9A-Fa-f]+$/);

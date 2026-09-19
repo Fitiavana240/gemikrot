@@ -111,18 +111,29 @@ export function mapUserManagerUserProfile(raw: any): UserManagerUserProfileDto {
   };
 }
 
+/**
+ * Session comptabilisée par RADIUS. Les champs sont ceux relevés sur un hAP
+ * en 7.24.4 : `started`, `ended`, `uptime` — et non `start-time`,
+ * `stop-time`, `session-time` comme le supposait la première version, qui
+ * renvoyait donc des sessions vides et jamais terminées.
+ *
+ * `active` est porté par le routeur : le déduire de l'absence de date de fin
+ * ferait passer pour en cours une session close dont la date manque.
+ */
 export function mapUserManagerSession(raw: any): UserManagerSessionDto {
+  const ended = raw?.ended ?? raw?.['stop-time'] ?? null;
   return {
     id: raw?.['.id'] ?? '',
     username: raw?.user ?? raw?.username ?? '',
     nasIpAddress: raw?.['nas-ip-address'] ?? null,
     callingStationId: raw?.['calling-station-id'] ?? null,
-    startTime: raw?.['start-time'] ?? '',
-    stopTime: raw?.['stop-time'] ?? null,
-    sessionTimeSeconds: parseRouterOsDuration(raw?.['session-time']),
+    startTime: raw?.started ?? raw?.['start-time'] ?? '',
+    stopTime: ended,
+    sessionTimeSeconds: parseRouterOsDuration(raw?.uptime ?? raw?.['session-time']),
     bytesIn: Number(raw?.download ?? raw?.['bytes-in'] ?? 0),
     bytesOut: Number(raw?.upload ?? raw?.['bytes-out'] ?? 0),
     terminateCause: raw?.['terminate-cause'] ?? null,
+    active: raw?.active === 'true' || raw?.active === true,
   };
 }
 

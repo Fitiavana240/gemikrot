@@ -5,8 +5,12 @@ import {
   HotspotHostDto,
   HotspotProfileDto,
   HotspotUserDto,
+  HotspotServerDto,
+  HotspotServerProfileDto,
   IpBindingDto,
   IpBindingType,
+  WalledGardenEntryDto,
+  WalledGardenIpEntryDto,
 } from '../dto/hotspot.dto';
 
 export function mapHotspotActiveUser(raw: any): HotspotActiveUserDto {
@@ -189,4 +193,65 @@ export function parseRouterOsDuration(value: unknown): number {
 
   // Valeur nue ("3600") : RouterOS la donne déjà en secondes.
   return matched ? Math.round(total) : Number(str) || 0;
+}
+
+export function mapWalledGardenEntry(raw: any): WalledGardenEntryDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    action: raw?.action === 'deny' ? 'deny' : 'allow',
+    dstHost: raw?.['dst-host'] ?? null,
+    dstPort: raw?.['dst-port'] ?? null,
+    path: raw?.path ?? null,
+    comment: raw?.comment ?? null,
+    disabled: raw?.disabled === 'true' || raw?.disabled === true,
+    hits: Number(raw?.hits ?? 0),
+  };
+}
+
+export function mapWalledGardenIpEntry(raw: any): WalledGardenIpEntryDto {
+  const action = raw?.action;
+  return {
+    id: raw?.['.id'] ?? '',
+    action: action === 'drop' || action === 'reject' ? action : 'accept',
+    dstAddress: raw?.['dst-address'] ?? null,
+    dstPort: raw?.['dst-port'] ?? null,
+    protocol: raw?.protocol ?? null,
+    comment: raw?.comment ?? null,
+    disabled: raw?.disabled === 'true' || raw?.disabled === true,
+  };
+}
+
+export function mapHotspotServer(raw: any): HotspotServerDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    name: raw?.name ?? '',
+    interfaceName: raw?.interface ?? null,
+    addressPool: raw?.['address-pool'] ?? null,
+    profileName: raw?.profile ?? null,
+    idleTimeoutSeconds:
+      raw?.['idle-timeout'] && raw['idle-timeout'] !== 'none'
+        ? parseRouterOsDuration(raw['idle-timeout'])
+        : null,
+    addressesPerMac:
+      raw?.['addresses-per-mac'] != null && raw['addresses-per-mac'] !== 'unlimited'
+        ? Number(raw['addresses-per-mac'])
+        : null,
+    disabled: raw?.disabled === 'true' || raw?.disabled === true,
+  };
+}
+
+export function mapHotspotServerProfile(raw: any): HotspotServerProfileDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    name: raw?.name ?? '',
+    dnsName: raw?.['dns-name'] || null,
+    hotspotAddress: raw?.['hotspot-address'] || null,
+    htmlDirectory: raw?.['html-directory'] ?? null,
+    loginBy: typeof raw?.['login-by'] === 'string' ? raw['login-by'].split(',') : [],
+    httpCookieLifetimeSeconds: raw?.['http-cookie-lifetime']
+      ? parseRouterOsDuration(raw['http-cookie-lifetime'])
+      : null,
+    useRadius: raw?.['use-radius'] === 'true' || raw?.['use-radius'] === true,
+    radiusAccounting: raw?.['radius-accounting'] === 'true' || raw?.['radius-accounting'] === true,
+  };
 }

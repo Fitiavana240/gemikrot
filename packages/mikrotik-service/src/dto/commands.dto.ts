@@ -125,3 +125,20 @@ export interface CreateIpBindingDto {
   address?: string;
   comment?: string;
 }
+
+/** Ouverture d'un domaine avant authentification. */
+export interface CreateWalledGardenEntryDto {
+  dstHost: string;
+  action?: 'allow' | 'deny';
+  dstPort?: string;
+  comment?: string;
+}
+
+/** Ouverture d'une adresse avant authentification. */
+export interface CreateWalledGardenIpEntryDto {
+  dstAddress: string;
+  action?: 'accept' | 'drop' | 'reject';
+  dstPort?: string;
+  protocol?: string;
+  comment?: string;
+}

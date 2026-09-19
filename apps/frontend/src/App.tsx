@@ -11,6 +11,7 @@ import { RoutersPage } from './pages/RoutersPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { TenantsPage } from './pages/TenantsPage';
 import { UserManagerPage } from './pages/UserManagerPage';
+import { HotspotPage } from './pages/HotspotPage';
 import { TicketPrintPage, TicketTemplatesPage } from './pages/TicketTemplatesPage';
 import { SignupPage } from './pages/SignupPage';
 import { PlansPage } from './pages/PlansPage';
@@ -37,6 +38,7 @@ export function App() {
             <Route path="/subscriptions" element={<SubscriptionsPage />} />
             <Route path="/devices" element={<DevicesPage />} />
             <Route path="/routers" element={<RoutersPage />} />
+            <Route path="/hotspot" element={<HotspotPage />} />
             <Route path="/user-manager" element={<UserManagerPage />} />
             <Route path="/ticket-templates" element={<TicketTemplatesPage />} />
             <Route path="/ticket-print" element={<TicketPrintPage />} />
