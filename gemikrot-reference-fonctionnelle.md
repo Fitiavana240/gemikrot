@@ -109,7 +109,7 @@ Conséquences observées sur le parc réel (hAP ac², 646 comptes HotSpot, Route
 | SOC-6 | **Audit de toutes les opérations** (qui, quand, quoi, depuis quelle IP) : connexions, paiements, tickets, écritures routeur. Écrit ; **jamais consulté** — aucun écran ne l'expose | ⭐⭐⭐ | 🟢 | 🟡 |
 | SOC-7 | **Devise par exploitant**, formatage `Intl.NumberFormat`, devise figée sur chaque paiement pour que l'historique reste lisible après changement | ⭐⭐ | 🟢 | ✅ |
 | SOC-8 | **i18n de la console** FR (+ MG/EN). La console est en français en dur ; seule la page client est bilingue | ⭐ | 🟡 | ⬜ |
-| SOC-9 | **Multi-routeurs réel** : sélecteur de routeur dans la console et propagation partout. Les points d'entrée acceptent déjà `?routerId=`, mais l'interface ne s'en sert pas : tout retombe sur « le plus ancien routeur enregistré » | ⭐⭐⭐ | 🟡 | 🟡 |
+| SOC-9 | **Multi-routeurs réel** : sélecteur de routeur dans la console et propagation partout, via un contexte React et un choix mémorisé. Le repli sur « le plus ancien routeur enregistré » a disparu de l'interface | ⭐⭐⭐ | 🟡 | ✅ |
 
 ---
 
@@ -127,10 +127,10 @@ Conséquences observées sur le parc réel (hAP ac², 646 comptes HotSpot, Route
 | RTR-8 | **Walled Garden** : ce qu'un client joint avant authentification, par domaine et par adresse. Indispensable pour que la page de paiement soit atteignable | ⭐⭐⭐ | 🟢 | ✅ |
 | RTR-9 | **Cookies HotSpot** : liste, durée restante, purge par compte. C'est la faille d'expiration du parc — un cookie vivant rouvre une session sans consulter la validité | ⭐⭐⭐ | 🟡 | ✅ |
 | RTR-10 | **Serveurs et profils de serveur** en lecture, avec mise en évidence de `login-by` et de la durée de vie des cookies | ⭐⭐ | 🟢 | ✅ |
-| RTR-11 | **Reconnexion et tolérance aux pannes** : le routeur injoignable ne doit jamais faire échouer une opération commerciale de façon opaque. Aujourd'hui une écriture routeur en échec remonte telle quelle à l'écran | ⭐⭐⭐ | 🟡 | 🟡 |
-| RTR-12 | **File d'opérations différées** : réécrire sur le routeur ce qui n'a pas pu l'être (coupure), avec reprise idempotente. Rien n'existe : une génération de lot interrompue laisse un état mixte | ⭐⭐⭐ | 🔴 | ⬜ |
-| RTR-13 | **Accès distant** au routeur sans IP publique (VPN sortant type WireGuard, ou tunnel inverse). Aujourd'hui la console doit être sur le réseau du routeur | ⭐⭐⭐ | 🔴 | ⬜ |
-| RTR-14 | **PPPoE** en plus du HotSpot : comptes, profils, sessions. Domaine entier non couvert — le concurrent local le couvre | ⭐⭐ | 🔴 | ⬜ |
+| RTR-11 | **Reconnexion et tolérance aux pannes** : disjoncteur par routeur. Trois échecs réseau d'affilée suspendent les appels trente secondes, puis un appel sonde le retour. Mesuré : 16 153 ms → 2 ms pour un routeur mort. Seules les erreurs de réseau l'ouvrent — un mot de passe refusé n'a rien à voir avec la joignabilité | ⭐⭐⭐ | 🟡 | ✅ |
+| RTR-12 | **File d'opérations différées** : ce qui n'a pas pu partir est mis en file et rejoué dès que le disjoncteur constate le retour du routeur. N'accepte que des opérations rejouables sans dommage ; abandonne au bout de dix tentatives, mais en le disant. La console affiche ce qui attend | ⭐⭐⭐ | 🔴 | ✅ |
+| RTR-13 | **Accès distant** : le routeur ouvre un tunnel WireGuard vers le serveur. Jeton d'enrôlement à usage unique, script à coller dans Winbox, clé privée jamais transmise, compte d'API dédié, `www-ssl` restreint au tunnel. Côté application terminé ; **le script reste à éprouver sur un routeur réel** | ⭐⭐⭐ | 🔴 | 🟡 |
+| RTR-14 | **PPPoE** en plus du HotSpot : comptes, profils, sessions. Domaine entier non couvert — le concurrent local le couvre. **Bloqué par la règle du projet** : sonder avant d'écrire. Le script de relevé est prêt (`npm run probe:ppp`), il manque un routeur joignable | ⭐⭐ | 🔴 | ⬜ |
 
 ---
 
@@ -341,6 +341,19 @@ Facturer les exploitants, piloter plusieurs routeurs pour de bon, atteindre un r
 ---
 
 ## 16. Journal de livraison
+
+### 2026-09-19 — Le routeur peut tomber, et être ailleurs
+
+**Vérification** : 91 tests backend (13 fichiers), `tsc` propre sur les deux espaces, migrations appliquées. Le routeur du parc étant hors d'atteinte depuis ce poste, rien de ce lot n'a été éprouvé contre le matériel — c'est dit là où ça compte.
+
+- **RTR-11 ✅** — disjoncteur par routeur. Un routeur mort coûtait le budget complet à chaque appel : 5 s de délai, trois tentatives, backoff, soit ~16 s. Un écran qui interroge trois fois en parallèle mettait près d'une minute à afficher une erreur, et l'exploitant en concluait que la console était cassée. Mesuré après : 2 ms. Seules les erreurs de réseau ouvrent le disjoncteur — confondre un mot de passe refusé avec une panne de lien couperait l'accès à un routeur parfaitement joignable, et masquerait la vraie cause.
+- **SOC-9 ✅** — sélecteur de routeur porté par un contexte React, choix mémorisé, repli sur le premier routeur quand celui retenu disparaît. L'ancien `use-default-router` est supprimé : son propre commentaire annonçait son remplacement.
+- **RTR-12 ✅** — file d'opérations différées. Le cas qui la justifie : un ticket expire pendant que le lien est coupé ; il était marqué expiré en base mais son accès restait ouvert, jusqu'à trois jours de cookie. La file garantit **au moins** une exécution, jamais exactement une : seules les opérations rejouables sans dommage y entrent. Elle s'arrête dès que le lien retombe plutôt que d'épuiser les tentatives de toute la file contre un routeur mort, et abandonne au bout de dix essais en conservant le motif. Déclenchée par le disjoncteur, sans tâche planifiée.
+- **Coupure d'accès dédupliquée** — la coupure différée appelait une copie du code de coupure immédiate. Le trou des cookies ayant déjà été bouché une fois, une copie divergente l'aurait rouvert. Le service passe côté routeurs (`RouterAccessService`), où le HotSpot s'en servait déjà.
+- **RTR-13 🟡** — enrôlement par tunnel WireGuard, côté application. Le routeur appelle le serveur : derrière la 4G ou un NAT d'opérateur, il n'a ni adresse fixe ni port ouvrable, et exiger l'inverse condamnerait la moitié du parc. La clé privée est créée par le routeur et ne le quitte jamais ; le jeton vaut mot de passe (256 bits, 30 min, usage unique, stocké haché) ; un jeton inconnu, expiré ou déjà servi donnent la même réponse. Là où le serveur ne porte pas l'interface, il rend la commande `wg` à passer au lieu de faire croire le tunnel monté. **Le script Winbox n'a pas encore tourné sur un routeur réel** : quatre correspondances de ce projet, écrites de bonne foi sur la documentation seule, se sont révélées fausses au contact du matériel.
+- **RTR-14 ⬜** — non livré, et délibérément. La règle inscrite au §15.7 dit de sonder avant d'écrire et de figer la charge relevée dans un test ; PPPoE n'a jamais été sondé, et le routeur est injoignable depuis ce poste (réseau `hotspot-tati` quitté). Écrire les correspondances maintenant reviendrait à répéter exactement l'erreur qui a coûté quatre correctifs. Le relevé est préparé : `npm run probe:ppp <url> <compte> <motdepasse>` depuis le réseau du routeur écrit les charges utiles brutes de `/ppp/secret`, `/ppp/profile`, `/ppp/active` et des collections voisines, mots de passe caviardés, prêtes à servir de référence au test.
+
+**Deux réglages serveur à ne pas manquer au déploiement** : interdire le routage entre pairs WireGuard (`wg0` vers `wg0` rejeté en forward), sans quoi le routeur d'un exploitant atteint l'administration de celui d'un autre ; et sauvegarder `/etc/wireguard` séparément du dump de la base.
 
 ### 2026-09-18 — Socle multi-exploitants (Phase 4)
 
