@@ -717,6 +717,47 @@ hAP réel (2 profils PPP, bassin `pool-hotspot` 245 adresses dont 37 utilisées)
   internes de test d'un autre espace de travail. Remplacé par un routeur de laboratoire
   local, qui sait aussi *refuser de changer tout en répondant sans erreur*.
 
+### 2026-09-20 — La coque, et les boutons qui manquaient
+
+**Défaut de disposition, mesuré puis corrigé.** Sur la table des 646 comptes, le document
+fait **33 000 px**. La barre latérale, en `static`, s'étirait sur toute cette hauteur : son
+`overflow-y-auto` n'entrait jamais en jeu, si bien qu'à mi-page la navigation avait disparu
+vers le haut et qu'il fallait tout remonter pour changer d'écran. L'en-tête partait avec,
+emportant le sélecteur de routeur et la déconnexion — les deux commandes dont on peut
+justement avoir besoin au milieu d'une longue liste. Les deux sont désormais collés ;
+vérifié à 4 000 px de défilement, et le tiroir mobile s'ouvre toujours.
+
+*Au passage, une leçon de méthode* : `getBoundingClientRect()` a rendu `-224` sur un élément
+dont le style calculé disait `left: 0, transform: none`. Les deux ne peuvent pas être vrais.
+La capture d'écran a tranché — le tiroir s'ouvrait correctement. Deuxième fois dans ce
+projet qu'une mesure prise isolément contredit ce que l'écran montre : **quand un chiffre et
+une image divergent, c'est l'image qui décide.**
+
+**Les boutons manquants du User Manager.** Le backend servait déjà toutes les routes ;
+l'interface n'avait pas les commandes. Ajoutés : changer le code d'un compte (rotation sans
+perdre le nom, les attributions ni la validité déjà courue), supprimer un compte, modifier
+la validité d'un profil, modifier le débit d'une limitation.
+
+Chaque question dit ce que le geste change **vraiment**, parce que les deux modifications
+n'ont pas la même portée : changer la validité d'un profil ne touche pas les comptes déjà
+attribués — RouterOS fige l'échéance à l'attribution — alors que changer le débit d'une
+limitation s'applique à tous ceux qui l'utilisent dès leur prochaine connexion. Et les
+suppressions de profil ou de limitation encore rattachées n'ont pas de bouton du tout :
+RouterOS refuserait, et un échec est moins clair qu'une absence.
+
+**Éprouvé sur le routeur** : le changement de code sur le compte de test `test1` a rendu
+`PATCH /user-manager/user/*2` → **200**. Cela achève la distinction du jour — le PATCH vaut
+pour les **collections**, où il y a un `.id` à viser ; c'est sur les **singletons** qu'il
+faut `POST <menu>/set`. Les deux formes sont maintenant confirmées sur matériel. Le routeur
+masque les mots de passe (`*****`) en lecture, ce qui interdit de relire la valeur : c'est
+le journal qui fait foi. 646 comptes HotSpot à la mesure suivante.
+
+**Non fait, et pourquoi** : la création et la modification de comptes HotSpot n'ont pas de
+route HTTP — seule la suspension et la suppression en ont. Le paquet sait les faire. Ce
+n'est pas un oubli à combler mécaniquement : le produit vend des tickets User Manager, et
+les 646 comptes HotSpot sont l'existant importé. Ouvrir une écriture qu'aucun parcours
+n'emprunte ajouterait une surface sans usage.
+
 ---
 
 > ⚠️ **Règle d'or** : chaque item livré → vérification sur le routeur réel avec nettoyage,

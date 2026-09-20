@@ -10,6 +10,8 @@ import {
   type CreateAccountInput,
   type CreateLimitationInput,
   type CreateProfileInput,
+  type UpdateLimitationInput,
+  type UpdateProfileInput,
 } from '../api/user-manager';
 import { useAuth } from '../auth/AuthContext';
 import { useRouterSelection } from '../routers/RouterContext';
@@ -124,6 +126,23 @@ function ProfilesTab() {
     },
     onError,
   });
+  /**
+   * Modifier la validité d'un profil.
+   *
+   * Sans effet sur les comptes déjà attribués : RouterOS fige l'échéance au
+   * moment de l'attribution. L'annoncer dans la question évite de croire
+   * qu'on vient de prolonger des tickets déjà vendus.
+   */
+  const modifier = useMutation({
+    mutationFn: ({ name, input }: { name: string; input: UpdateProfileInput }) =>
+      userManagerApi.updateProfile(name, input, currentId),
+    onSuccess: () => {
+      setError(null);
+      queryClient.invalidateQueries({ queryKey: ['um-profiles'] });
+    },
+    onError,
+  });
+
   const remove = useMutation({
     mutationFn: (name: string) => userManagerApi.deleteProfile(name, currentId),
     onSuccess: () => {
@@ -227,11 +246,43 @@ function ProfilesTab() {
                   <Badge tone="slate">hors offre</Badge>
                 )}
               </td>
-              <td className="px-3 py-2 text-right">
-                {canWrite && profile.accountCount === 0 && (
-                  <Button variant="danger" onClick={() => remove.mutate(profile.name)}>
-                    Supprimer
-                  </Button>
+              <td className="px-3 py-2">
+                {canWrite && (
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        const saisie = window.prompt(
+                          `Nouvelle validité de « ${profile.name} », en jours ?\n\n` +
+                            `Les comptes déjà attribués gardent la leur : RouterOS fige ` +
+                            `l'échéance à l'attribution. Le changement ne vaut que pour les suivants.`,
+                          profile.validityDurationSeconds
+                            ? String(profile.validityDurationSeconds / 86_400)
+                            : '',
+                        );
+                        if (saisie === null) return;
+                        const jours = Number(saisie.replace(',', '.'));
+                        if (!Number.isFinite(jours) || jours <= 0) {
+                          setError('La validité doit être un nombre de jours supérieur à zéro.');
+                          return;
+                        }
+                        modifier.mutate({
+                          name: profile.name,
+                          input: { validityDurationSeconds: Math.round(jours * 86_400) },
+                        });
+                      }}
+                    >
+                      Modifier
+                    </Button>
+                    {/* Supprimer reste interdit tant qu'un compte s'y
+                        rattache : RouterOS refuserait, et l'échec serait
+                        moins clair que l'absence du bouton. */}
+                    {profile.accountCount === 0 && (
+                      <Button variant="danger" onClick={() => remove.mutate(profile.name)}>
+                        Supprimer
+                      </Button>
+                    )}
+                  </div>
                 )}
               </td>
             </tr>
@@ -275,6 +326,24 @@ function LimitationsTab() {
     },
     onError,
   });
+  /**
+   * Modifier le débit d'une limitation.
+   *
+   * Contrairement à la validité d'un profil, ceci **s'applique tout de
+   * suite** : la limitation est lue à chaque session. Changer le débit
+   * change ce que reçoivent les abonnés déjà connectés dès leur prochaine
+   * connexion — dit dans la question, pour qu'on le sache avant de valider.
+   */
+  const modifier = useMutation({
+    mutationFn: ({ name, input }: { name: string; input: UpdateLimitationInput }) =>
+      userManagerApi.updateLimitation(name, input, currentId),
+    onSuccess: () => {
+      setError(null);
+      refresh();
+    },
+    onError,
+  });
+
   const remove = useMutation({
     mutationFn: (name: string) => userManagerApi.deleteLimitation(name, currentId),
     onSuccess: () => {
@@ -379,11 +448,41 @@ function LimitationsTab() {
               <td className="px-3 py-2 text-slate-500">
                 {limitation.profileNames.length ? limitation.profileNames.join(', ') : '—'}
               </td>
-              <td className="px-3 py-2 text-right">
-                {canWrite && limitation.profileNames.length === 0 && (
-                  <Button variant="danger" onClick={() => remove.mutate(limitation.name)}>
-                    Supprimer
-                  </Button>
+              <td className="px-3 py-2">
+                {canWrite && (
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        const actuel = limitation.rateLimit.rxBitsPerSecond;
+                        const saisie = window.prompt(
+                          `Nouveau débit descendant de « ${limitation.name} », en Mb/s ?\n\n` +
+                            `Contrairement à la validité d'un profil, ceci s'applique à tous ` +
+                            `les abonnés qui l'utilisent, dès leur prochaine connexion.`,
+                          actuel ? String(actuel / 1_000_000) : '',
+                        );
+                        if (saisie === null) return;
+                        const mbps = Number(saisie.replace(',', '.'));
+                        if (!Number.isFinite(mbps) || mbps <= 0) {
+                          setError('Le débit doit être un nombre de Mb/s supérieur à zéro.');
+                          return;
+                        }
+                        modifier.mutate({
+                          name: limitation.name,
+                          input: { rateLimitRxBitsPerSecond: Math.round(mbps * 1_000_000) },
+                        });
+                      }}
+                    >
+                      Modifier
+                    </Button>
+                    {/* RouterOS refuse de supprimer une limitation rattachée
+                        à un profil : mieux vaut pas de bouton qu'un échec. */}
+                    {limitation.profileNames.length === 0 && (
+                      <Button variant="danger" onClick={() => remove.mutate(limitation.name)}>
+                        Supprimer
+                      </Button>
+                    )}
+                  </div>
                 )}
               </td>
             </tr>
@@ -436,6 +535,32 @@ function AccountsTab() {
   const toggle = useMutation({
     mutationFn: ({ username, disabled }: { username: string; disabled: boolean }) =>
       userManagerApi.setAccountDisabled(username, disabled, currentId),
+    onSuccess: () => {
+      setError(null);
+      refresh();
+    },
+    onError,
+  });
+
+  /**
+   * Rotation du mot de passe.
+   *
+   * Le compte garde son nom, ses attributions et son historique — c'est
+   * justement l'intérêt : un code lu à voix haute au comptoir se change sans
+   * refaire le ticket ni perdre la validité déjà courue.
+   */
+  const changerCode = useMutation({
+    mutationFn: ({ username, password }: { username: string; password: string }) =>
+      userManagerApi.updateAccount(username, { password }, currentId),
+    onSuccess: () => {
+      setError(null);
+      refresh();
+    },
+    onError,
+  });
+
+  const supprimer = useMutation({
+    mutationFn: (username: string) => userManagerApi.deleteAccount(username, currentId),
     onSuccess: () => {
       setError(null);
       refresh();
@@ -559,16 +684,55 @@ function AccountsTab() {
                   <Badge tone="slate">{account.state ?? 'sans profil'}</Badge>
                 )}
               </td>
-              <td className="px-3 py-2 text-right">
+              <td className="px-3 py-2">
                 {canWrite && (
-                  <Button
-                    variant={account.disabled ? 'secondary' : 'danger'}
-                    onClick={() =>
-                      toggle.mutate({ username: account.username, disabled: !account.disabled })
-                    }
-                  >
-                    {account.disabled ? 'Réactiver' : 'Suspendre'}
-                  </Button>
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        const code = window.prompt(
+                          `Nouveau code pour « ${account.username} » ?\n\nLe compte garde son nom, ses attributions et sa validité déjà courue.`,
+                        );
+                        // `null` = annulé, chaîne vide = rien saisi. Les deux
+                        // doivent laisser le compte tranquille.
+                        if (code && code.trim()) {
+                          changerCode.mutate({
+                            username: account.username,
+                            password: code.trim(),
+                          });
+                        }
+                      }}
+                    >
+                      Changer le code
+                    </Button>
+                    <Button
+                      variant={account.disabled ? 'secondary' : 'danger'}
+                      onClick={() =>
+                        toggle.mutate({ username: account.username, disabled: !account.disabled })
+                      }
+                    >
+                      {account.disabled ? 'Réactiver' : 'Suspendre'}
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={() => {
+                        // Suspendre garde le compte ; supprimer l'efface avec
+                        // son historique de sessions. Le rappeler ici évite
+                        // qu'on prenne l'un pour l'autre au comptoir.
+                        if (
+                          window.confirm(
+                            `Supprimer définitivement « ${account.username} » ?\n\n` +
+                              `Son historique de sessions part avec. Pour couper l'accès sans ` +
+                              `rien perdre, utilisez plutôt Suspendre.`,
+                          )
+                        ) {
+                          supprimer.mutate(account.username);
+                        }
+                      }}
+                    >
+                      Supprimer
+                    </Button>
+                  </div>
                 )}
               </td>
             </tr>

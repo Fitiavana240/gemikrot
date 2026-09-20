@@ -72,6 +72,21 @@ export interface CreateAccountInput {
 }
 
 /**
+ * Les modifications.
+ *
+ * Aucune ne porte le nom : sur RouterOS, le nom **est** l'identifiant. Le
+ * changer reviendrait à créer un autre objet en abandonnant le premier —
+ * avec, pour un compte, tout son historique de sessions.
+ *
+ * Tout y est facultatif, et seuls les champs envoyés sont écrits : un
+ * formulaire qui renverrait l'objet entier écraserait ce qu'un autre a réglé
+ * entre-temps.
+ */
+export type UpdateProfileInput = Partial<Omit<CreateProfileInput, 'name'>>;
+export type UpdateLimitationInput = Partial<Omit<CreateLimitationInput, 'name'>>;
+export type UpdateAccountInput = Partial<Omit<CreateAccountInput, 'username'>>;
+
+/**
  * Chaque appel porte le routeur visé. Sans lui le backend retombe sur « le
  * plus ancien routeur enregistré » : correct avec un seul routeur, faux dès
  * qu'un exploitant en gère deux.
@@ -81,6 +96,11 @@ export const userManagerApi = {
     api.get<UserManagerProfile[]>(`/user-manager/profiles${routerQuery(routerId)}`),
   createProfile: (input: CreateProfileInput, routerId?: string) =>
     api.post<UserManagerProfile>(`/user-manager/profiles${routerQuery(routerId)}`, input),
+  updateProfile: (name: string, input: UpdateProfileInput, routerId?: string) =>
+    api.patch<UserManagerProfile>(
+      `/user-manager/profiles/${encodeURIComponent(name)}${routerQuery(routerId)}`,
+      input,
+    ),
   deleteProfile: (name: string, routerId?: string) =>
     api.delete<void>(`/user-manager/profiles/${encodeURIComponent(name)}${routerQuery(routerId)}`),
   attachLimitation: (profileName: string, limitationName: string, routerId?: string) =>
@@ -97,6 +117,11 @@ export const userManagerApi = {
     api.get<UserManagerLimitation[]>(`/user-manager/limitations${routerQuery(routerId)}`),
   createLimitation: (input: CreateLimitationInput, routerId?: string) =>
     api.post<UserManagerLimitation>(`/user-manager/limitations${routerQuery(routerId)}`, input),
+  updateLimitation: (name: string, input: UpdateLimitationInput, routerId?: string) =>
+    api.patch<UserManagerLimitation>(
+      `/user-manager/limitations/${encodeURIComponent(name)}${routerQuery(routerId)}`,
+      input,
+    ),
   deleteLimitation: (name: string, routerId?: string) =>
     api.delete<void>(
       `/user-manager/limitations/${encodeURIComponent(name)}${routerQuery(routerId)}`,
@@ -106,6 +131,11 @@ export const userManagerApi = {
     api.get<UserManagerAccount[]>(`/user-manager/users${routerQuery(routerId)}`),
   createAccount: (input: CreateAccountInput, routerId?: string) =>
     api.post<UserManagerAccount>(`/user-manager/users${routerQuery(routerId)}`, input),
+  updateAccount: (username: string, input: UpdateAccountInput, routerId?: string) =>
+    api.patch<UserManagerAccount>(
+      `/user-manager/users/${encodeURIComponent(username)}${routerQuery(routerId)}`,
+      input,
+    ),
   setAccountDisabled: (username: string, disabled: boolean, routerId?: string) =>
     api.patch<UserManagerAccount>(
       `/user-manager/users/${encodeURIComponent(username)}/disabled${routerQuery(routerId)}`,
@@ -117,6 +147,16 @@ export const userManagerApi = {
     api.post<void>(
       `/user-manager/users/${encodeURIComponent(username)}/profiles${routerQuery(routerId)}`,
       { profileName },
+    ),
+  /**
+   * Retire l'attribution d'un profil à un compte.
+   *
+   * Ce n'est pas la même chose que supprimer le compte : il reste, sans
+   * forfait, donc sans validité — il peut recevoir une nouvelle attribution.
+   */
+  removeAssignment: (username: string, profileName: string, routerId?: string) =>
+    api.delete<void>(
+      `/user-manager/users/${encodeURIComponent(username)}/profiles/${encodeURIComponent(profileName)}${routerQuery(routerId)}`,
     ),
 };
 
