@@ -60,6 +60,7 @@ export function App() {
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/customers/:id" element={<CustomerSheetPage />} />
             <Route path="/vouchers" element={<VouchersPage />} />
+            <Route path="/vouchers/:tab" element={<VouchersPage />} />
             <Route path="/batches" element={<BatchesPage />} />
             <Route path="/payments" element={<PaymentsPage />} />
           </Route>

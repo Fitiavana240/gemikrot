@@ -1,15 +1,37 @@
+import { useParams } from 'react-router-dom';
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { vouchersApi, type GenerateBatchInput } from '../api/vouchers';
 import { plansApi } from '../api/plans';
 import { formatDuration } from '../api/user-manager';
 import { useAuth } from '../auth/AuthContext';
+import { TabBar, type TabDef } from '../components/TabBar';
+import { userManagerApi } from '../api/user-manager';
+import { BatchesPage } from './BatchesPage';
+import { TicketPrintPage } from './TicketTemplatesPage';
+import { useRouterSelection } from '../routers/RouterContext';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
-import type { Voucher, VoucherStatus } from '../api/types';
+import type { Plan, Voucher, VoucherStatus } from '../api/types';
 import { Badge, Button, Card, FormField, Input, PageHeader, Select, Table, TableSkeleton } from '../components/ui';
 
-type Tab = 'par-offre' | 'tous' | 'expires' | 'historique';
+/**
+ * Un onglet par façon de regarder les tickets, plus les deux écrans qui les
+ * accompagnent. Les regrouper ici plutôt que de les éparpiller dans le menu :
+ * générer, suivre le lot et imprimer sont trois moments de la même tâche.
+ */
+const ONGLETS = {
+  'par-offre': { titre: 'Par offre', rendu: () => <ByPlanTab /> },
+  tous: { titre: 'Tous', rendu: () => <ListTab generator /> },
+  expires: { titre: 'Expirés', rendu: () => <ExpiredTab /> },
+  lots: { titre: 'Lots', rendu: () => <BatchesPage /> },
+  impression: { titre: 'Imprimer', rendu: () => <TicketPrintPage /> },
+  historique: { titre: 'Historique HotSpot', rendu: () => <ListTab scope="legacy" /> },
+} as const;
+
+const BARRE: TabDef[] = Object.entries(ONGLETS).map(([to, { titre }]) => ({ to, label: titre }));
+
+type Tab = keyof typeof ONGLETS;
 
 const STATUS_TONE: Record<VoucherStatus, 'green' | 'amber' | 'slate' | 'red'> = {
   CREATED: 'slate',
@@ -38,7 +60,8 @@ function expiryLabel(voucher: Voucher): string {
 }
 
 export function VouchersPage() {
-  const [tab, setTab] = useState<Tab>('par-offre');
+  const { tab } = useParams();
+  const courant: Tab = tab && tab in ONGLETS ? (tab as Tab) : 'par-offre';
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
   const [notice, setNotice] = useState<string | null>(null);
@@ -56,28 +79,22 @@ export function VouchersPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <PageHeader
+    <div className="space-y-5">
+      <PageHeader
         title="Tickets"
-        description="Les accès vendus à l'unité. Leur validité est tenue par le routeur : elle court même si cette console est fermée."
+        description="Les accès vendus à l'unité. L'échéance est tenue par le routeur : elle court à partir de la première connexion du client, et s'applique même cette console fermée."
+        actions={
+          canWrite && (
+            <Button
+              variant="secondary"
+              onClick={() => reconcile.mutate()}
+              disabled={reconcile.isPending}
+            >
+              {reconcile.isPending ? 'Lecture…' : 'Actualiser depuis le routeur'}
+            </Button>
+          )
+        }
       />
-          <p className="mt-1 text-sm text-slate-500">
-            L'échéance est tenue par le routeur : elle court à partir de la première connexion du
-            client, et s'applique même cette console fermée.
-          </p>
-        </div>
-        {canWrite && (
-          <Button
-            variant="secondary"
-            onClick={() => reconcile.mutate()}
-            disabled={reconcile.isPending}
-          >
-            {reconcile.isPending ? 'Lecture…' : 'Actualiser depuis le routeur'}
-          </Button>
-        )}
-      </div>
 
       {notice && (
         <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-800">
@@ -85,33 +102,8 @@ export function VouchersPage() {
         </div>
       )}
 
-      <div className="flex gap-1 border-b border-slate-200">
-        {(
-          [
-            ['par-offre', 'Par offre'],
-            ['tous', 'Tous'],
-            ['expires', 'Expirés'],
-            ['historique', 'Historique HotSpot'],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            onClick={() => setTab(value)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-              tab === value
-                ? 'border-sky-600 text-sky-700'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'par-offre' && <ByPlanTab />}
-      {tab === 'tous' && <ListTab scope="um" generator />}
-      {tab === 'expires' && <ExpiredTab />}
-      {tab === 'historique' && <LegacyTab />}
+      <TabBar base="/vouchers" tabs={BARRE} />
+      {ONGLETS[courant].rendu()}
     </div>
   );
 }
@@ -167,6 +159,83 @@ function ByPlanTab() {
 }
 
 // ==================== Liste ====================
+
+/**
+ * Ce que la génération va réellement faire, dit avant de la lancer.
+ *
+ * Deux questions qu'un exploitant doit pouvoir se poser : **où** les comptes
+ * seront créés, et **sous quel profil**. Les tickets vendus vivent dans User
+ * Manager, seul capable de faire expirer une validité calendaire — le HotSpot
+ * ne borne qu'une session, et la borne repart à chaque reconnexion. L'écran
+ * le dit au lieu de le supposer connu.
+ *
+ * Le profil est vérifié sur le routeur, pas seulement lu en base : une offre
+ * dont le profil a été renommé dans WinBox produirait des comptes orphelins,
+ * et l'erreur n'apparaîtrait qu'à la première connexion d'un client.
+ */
+function CibleGeneration({ plan }: { plan: Plan | undefined }) {
+  const { currentId } = useRouterSelection();
+  const profils = useQuery({
+    queryKey: ['um-profiles-check', currentId],
+    queryFn: () => userManagerApi.listProfiles(currentId),
+    enabled: Boolean(plan),
+    retry: false,
+  });
+
+  if (!plan) {
+    return (
+      <p className="text-xs text-slate-500">
+        Choisissez une offre pour voir où les comptes seront créés.
+      </p>
+    );
+  }
+
+  const attendu = plan.mikrotikProfileName;
+  const trouvé = profils.data?.some((p) => p.name === attendu);
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+        <span>
+          <span className="text-slate-500">Créés dans </span>
+          <Badge tone="green">User Manager</Badge>
+        </span>
+        <span>
+          <span className="text-slate-500">Profil </span>
+          <span className="font-mono text-xs">{attendu}</span>
+        </span>
+        <span>
+          <span className="text-slate-500">Validité </span>
+          {formatDuration(plan.validityDurationSeconds)}
+        </span>
+      </div>
+
+      {profils.isPending && (
+        <p className="mt-1.5 text-xs text-slate-400">Vérification du profil sur le routeur…</p>
+      )}
+      {profils.isError && (
+        <p className="mt-1.5 text-xs text-amber-700">
+          Le routeur n'a pas répondu : impossible de vérifier que le profil existe.
+        </p>
+      )}
+      {trouvé === false && (
+        <p className="mt-1.5 text-xs text-red-600">
+          Ce profil n'existe pas sur le routeur. Les comptes seraient créés sans validité —
+          synchronisez l'offre depuis l'écran Offres avant de générer.
+        </p>
+      )}
+      {trouvé === true && (
+        <p className="mt-1.5 text-xs text-emerald-700">Profil trouvé sur le routeur.</p>
+      )}
+
+      <p className="mt-2 text-xs text-slate-500">
+        Le HotSpot garde sa propre table de comptes, visible sous « Historique HotSpot ». On n'y
+        crée plus : un compte HotSpot n'expire pas à une date, seul son profil borne la session et
+        la borne repart à chaque reconnexion.
+      </p>
+    </div>
+  );
+}
 
 function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; generator?: boolean }) {
   const { canWrite } = useAuth();
@@ -242,6 +311,9 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
               </Button>
             </div>
             {error && <p className="col-span-2 text-sm text-red-600 md:col-span-4">{error}</p>}
+            <div className="col-span-2 md:col-span-4">
+              <CibleGeneration plan={plans?.find((p) => p.id === form.planId)} />
+            </div>
           </form>
           <p className="mt-3 text-xs text-slate-500">
             Les comptes sont créés sur le routeur dès la génération : un ticket imprimé fonctionne
@@ -312,30 +384,6 @@ function ExpiredTab() {
   );
 }
 
-function LegacyTab() {
-  const { format } = useCurrency();
-  const legacy = useQuery({
-    queryKey: ['vouchers', 'legacy', ''],
-    queryFn: () => vouchersApi.list({ scope: 'legacy' }),
-  });
-
-  if (legacy.isLoading) return <TableSkeleton columns={4} />;
-
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-slate-500">
-        Tickets d'avant la bascule, servis par le HotSpot local. Ils n'ont pas d'échéance : leur
-        durée repart à zéro à chaque reconnexion du client. Ils restent en place tels quels.
-      </p>
-      <VoucherTable
-        vouchers={legacy.data ?? []}
-        format={format}
-        canWrite={false}
-        emptyLabel="Aucun ticket historique."
-      />
-    </div>
-  );
-}
 
 function VoucherTable({
   vouchers,

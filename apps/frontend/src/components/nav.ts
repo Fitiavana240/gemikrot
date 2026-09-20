@@ -37,9 +37,11 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Vendre',
     items: [
       { to: '/', label: "Vue d'ensemble", end: true, hint: 'Ventes du jour et état du réseau' },
-      { to: '/vouchers', label: 'Tickets', hint: 'Générer, vendre, couper' },
-      { to: '/batches', label: 'Lots', hint: 'Ce qui a été généré, et ce qu\'il en reste' },
-      { to: '/ticket-print', label: 'Imprimer', hint: 'Planche de tickets à découper' },
+      {
+        to: '/vouchers',
+        label: 'Tickets',
+        hint: 'Générer, suivre les lots, imprimer, couper',
+      },
       { to: '/payments', label: 'Paiements', hint: 'Encaissements et validations' },
     ],
   },
