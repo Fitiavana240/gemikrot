@@ -46,6 +46,12 @@ export class CustomersController {
     return this.customersService.enable(id);
   }
 
+  /** La fiche complete : tickets, abonnements, appareils, paiements. */
+  @Get(':id/fiche')
+  fiche(@Param('id') id: string) {
+    return this.customersService.fiche(id);
+  }
+
   @Get(':id/devices')
   listDevices(@Param('id') id: string) {
     return this.customersService.listDevices(id);

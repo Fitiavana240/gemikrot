@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { customersApi, type CreateCustomerInput } from '../api/customers';
 import { useAuth } from '../auth/AuthContext';
@@ -77,7 +78,16 @@ export function CustomersPage() {
         <Table head={['Nom', 'Téléphone', 'Email', 'Statut', '']}>
           {customers?.map((customer) => (
             <tr key={customer.id}>
-              <td className="px-3 py-2">{customer.name}</td>
+              <td className="px-3 py-2">
+                {/* Le nom ouvre la fiche : c'est le geste attendu, et il évite
+                    d'ajouter une colonne d'action de plus. */}
+                <Link
+                  to={`/customers/${customer.id}`}
+                  className="font-medium text-sky-700 hover:underline"
+                >
+                  {customer.name}
+                </Link>
+              </td>
               <td className="px-3 py-2">{customer.phone}</td>
               <td className="px-3 py-2 text-slate-500">{customer.email ?? '—'}</td>
               <td className="px-3 py-2">
