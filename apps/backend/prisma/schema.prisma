@@ -137,6 +137,18 @@ enum VoucherBatchStatus {
   FAILED
 }
 
+/// Ou vit le compte qui sert un ticket.
+///
+/// `null` sur les lignes anterieures a ce champ : ce sont les tickets
+/// historiques, qui n'ont aucun compte tant qu'ils ne sont pas vendus et
+/// que le HotSpot provisionne a la vente. Les distinguer d'un ticket
+/// HotSpot pre-cree est indispensable : pour les premiers il faut creer le
+/// compte a la vente, pour les seconds il existe deja.
+enum VoucherTarget {
+  USER_MANAGER
+  HOTSPOT
+}
+
 enum PaymentMethod {
   CASH
   ORANGE_MONEY
@@ -377,6 +389,8 @@ model VoucherBatch {
   plan        Plan                @relation(fields: [tenantId, planId], references: [tenantId, id])
   quantity    Int
   prefix      String?
+  /// Ou les comptes de ce lot ont ete crees. `null` sur les lots anterieurs.
+  target      VoucherTarget?
   status      VoucherBatchStatus  @default(PENDING)
   createdByAdminId String         @map("created_by_admin_id")
   createdByAdmin   AdminUser      @relation(fields: [createdByAdminId], references: [id])
@@ -436,6 +450,10 @@ model Voucher {
   umUsername  String?       @map("um_username")
   /// Dernier état relu sur le routeur : waiting, running-active, used.
   umState     String?       @map("um_state")
+  /// Où vit le compte de ce ticket. `null` = ticket historique, sans compte
+  /// tant qu'il n'est pas vendu — à ne pas confondre avec un ticket HotSpot
+  /// pré-créé, dont le compte existe dès la génération.
+  target      VoucherTarget?
   lastReconciledAt DateTime? @map("last_reconciled_at")
 
   @@index([status])

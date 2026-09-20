@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, Voucher, VoucherStatus } from '@prisma/client';
+import { Prisma, Voucher, VoucherStatus, VoucherTarget } from '@prisma/client';
 import { MikrotikNotFoundError } from '@wifitati/mikrotik-service';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
@@ -158,6 +158,11 @@ export class VouchersService {
     const plan = await this.getActivePlan(dto.planId);
     const routerId = dto.routerId ?? (await this.getDefaultRouterId());
 
+    // User Manager par défaut : lui seul tient une validité calendaire, qui
+    // continue de courir client déconnecté. Le HotSpot reste possible pour
+    // les routeurs qui n'ont pas le paquet, et pour les tickets courts.
+    const target = dto.target ?? VoucherTarget.USER_MANAGER;
+
     const batch = await this.prisma.scoped.voucherBatch.create({
       data: {
         tenantId: this.tenantContext.requireTenantId(),
@@ -165,6 +170,7 @@ export class VouchersService {
         planId: plan.id,
         quantity: dto.quantity,
         prefix: dto.prefix,
+        target,
         createdByAdminId: adminUserId,
         status: 'PENDING',
         jobs: { create: { total: dto.quantity, status: 'running', startedAt: new Date() } },
@@ -189,7 +195,10 @@ export class VouchersService {
       // imprimé fonctionne immédiatement, sans qu'un vendeur ait à l'activer
       // dans la console. La validité ne court qu'à la première connexion, un
       // ticket invendu ne s'use donc pas.
-      const provisioned = await this.provisionOnUserManager(vouchers, plan, routerId);
+      const provisioned =
+        target === VoucherTarget.USER_MANAGER
+          ? await this.provisionOnUserManager(vouchers, plan, routerId)
+          : await this.provisionOnHotspot(vouchers, plan, routerId);
 
       await this.prisma.scoped.voucherBatch.update({ where: { id: batch.id }, data: { status: 'COMPLETED' } });
       await this.prisma.scoped.voucherJob.update({
@@ -249,7 +258,12 @@ export class VouchersService {
       const current = assignments.find((a) => a.profileName === plan.umProfileName) ?? assignments[0];
       expiresAt = parseRouterTime(current?.endTime, clock.gmtOffset);
       umState = current?.state ?? umState;
-    } else {
+    } else if (voucher.target !== VoucherTarget.HOTSPOT) {
+      // Ticket historique : aucun compte n'existe tant qu'il n'est pas
+      // vendu, il est créé maintenant. Un ticket HotSpot **pré-créé** au
+      // contraire porte déjà son compte depuis la génération — le recréer
+      // ici échouerait en conflit, et c'est pour distinguer ces deux cas
+      // que `target` existe.
       const mikrotik = await this.clients.forDefaultRouter();
       await mikrotik.createHotspotUser({
         username: voucher.code,
@@ -295,7 +309,15 @@ export class VouchersService {
         // session sans repasser par RADIUS, donc sans consulter User
         // Manager. Cookies et session en cours partent avec.
         await this.access.revoke(mikrotik, voucher.umUsername);
-      } else if (voucher.status === VoucherStatus.SOLD || voucher.status === VoucherStatus.ACTIVE) {
+      } else if (
+        // Un ticket HotSpot pré-créé porte son compte dès la génération : il
+        // faut le couper même avant vente, sinon un code imprimé mais retiré
+        // de la vente continuerait d'ouvrir l'accès. Un ticket historique,
+        // lui, n'a de compte qu'une fois vendu.
+        voucher.target === VoucherTarget.HOTSPOT ||
+        voucher.status === VoucherStatus.SOLD ||
+        voucher.status === VoucherStatus.ACTIVE
+      ) {
         await mikrotik.setHotspotUserDisabled(voucher.code, true);
         await this.access.purgeCookies(mikrotik, voucher.code);
         await this.access.closeSessions(mikrotik, voucher.code);
@@ -437,8 +459,58 @@ export class VouchersService {
           data: {
             umUsername: voucher.code,
             umState: assignment.state,
+            // Posé ici aussi, et pas seulement côté HotSpot : une colonne à
+            // moitié remplie se lit mal, et `target IS NULL` doit garder son
+            // sens unique — « ticket historique, sans compte avant la vente ».
+            target: VoucherTarget.USER_MANAGER,
             lastReconciledAt: new Date(),
           },
+        }),
+      );
+    }
+    return updated;
+  }
+
+  /**
+   * Provisionne un lot sur la table HotSpot du routeur.
+   *
+   * Deux différences de fond avec User Manager, et elles changent le produit
+   * vendu.
+   *
+   * La première : **il n'y a pas de validité calendaire**. Le plafond posé
+   * ici est `limit-uptime`, du temps passé connecté — il s'arrête quand le
+   * client se déconnecte. Un forfait d'un mois y devient 720 h de connexion,
+   * bien plus généreux. L'interface l'écrit avant de générer, en chiffres.
+   *
+   * La seconde : le compte existe **dès la génération**, là où un ticket
+   * historique n'en avait aucun avant sa vente. C'est pourquoi `target` est
+   * enregistré : sans lui, `um_username IS NULL` voudrait dire deux choses,
+   * et la vente tenterait de créer un compte déjà présent.
+   */
+  private async provisionOnHotspot(
+    vouchers: Voucher[],
+    plan: { id: string; name: string; mikrotikProfileName: string; validityDurationSeconds: number },
+    routerId: string,
+  ): Promise<Voucher[]> {
+    const mikrotik = await this.clients.forRouter(routerId);
+    const tenantId = this.tenantContext.requireTenantId();
+    const updated: Voucher[] = [];
+
+    for (const voucher of vouchers) {
+      await mikrotik.createHotspotUser({
+        username: voucher.code,
+        password: voucher.code,
+        profileName: plan.mikrotikProfileName,
+        comment: `gemikrot:t:${tenantId.slice(0, 8)}:v:${voucher.code}`,
+        // Le seul plafond qui borne réellement un ticket HotSpot : le
+        // `session-timeout` du profil, lui, repart à zéro à chaque
+        // reconnexion. C'est ce que portent déjà 400 comptes du parc.
+        limitUptimeSeconds: plan.validityDurationSeconds,
+      });
+      updated.push(
+        await this.prisma.scoped.voucher.update({
+          where: { id: voucher.id },
+          data: { target: VoucherTarget.HOTSPOT, lastReconciledAt: new Date() },
         }),
       );
     }

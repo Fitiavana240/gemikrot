@@ -810,6 +810,41 @@ vers Tickets ▸ Générer un lot pour de la vente suivie.
 pour un profil `first auth`). Puis supprimés depuis la console : **0 attribution orpheline**
 restante, 3 comptes User Manager et 646 HotSpot comme avant.
 
+### 2026-09-20 — Les lots suivis choisissent leur cible
+
+**TIC ✅ — cible d'un lot.** La génération de lots — celle qui porte un prix et suit chaque
+ticket de la vente à l'expiration — ne savait créer que sur User Manager. Elle accepte
+désormais le HotSpot, User Manager restant le défaut.
+
+**Le modèle avait une ambiguïté qu'il fallait lever d'abord.** `um_username IS NULL` voulait
+dire deux choses : « ticket historique, sans compte tant qu'il n'est pas vendu » **et**
+« servi par le HotSpot ». Tant que les lots n'allaient que sur User Manager, la confusion
+restait sans conséquence. Elle en aurait une immédiatement avec des lots HotSpot pré-créés :
+la vente tenterait de créer un compte qui existe déjà, et la désactivation d'un ticket non
+vendu ne couperait rien. D'où une colonne `target` explicite (migration
+`20260920160000_voucher_target`), rétro-remplie pour les lignes existantes.
+
+**Ce que la cible change vraiment**, et que l'écran écrit en chiffres avant de générer : sur
+User Manager la validité est **calendaire**, elle court client déconnecté ; sur le HotSpot le
+plafond posé est `limit-uptime`, du **temps connecté**. Le profil seul ne borne rien — son
+`session-timeout` repart à zéro à chaque reconnexion. Un forfait d'un mois devient donc
+720 h de connexion réelle, et l'écran le dit en toutes lettres quand la durée dépasse la
+journée.
+
+**Trois textes devenus faux, corrigés en les regardant à l'écran** :
+« Un forfait d'un mois y devient 2 h » sur une offre de deux heures ; l'avertissement
+« ce profil n'existe pas sur le routeur » qui s'affichait en cible HotSpot alors qu'il
+interroge les profils *User Manager*, décourageant une action valide ; et « on n'y crée
+plus », qui énonçait une règle là où il n'y a qu'un défaut. Le premier message disait aussi
+que les comptes seraient créés « sans validité » — `PlanProvisioningService.reconcile` crée
+le profil manquant à la génération, ce que le code confirme.
+
+**Non éprouvé de bout en bout, et pourquoi** : la génération de lots exige un exploitant
+(`requireTenantId`), et le compte de la session est SUPER_ADMIN, qui n'en a aucun — le
+`POST /vouchers/batches` rend `403`. Ce n'est pas un défaut de ce changement, c'est le
+cloisonnement qui fait son travail : un ticket appartient à un exploitant. La vérification
+sur matériel demande une session ADMIN.
+
 **RTR-21 ✅ — l'onglet Paiements du routeur.** `/user-manager/payment` répond, et il est vide :
 ce parc encaisse par Mobile Money, hors du routeur. Les noms de champs viennent donc des
 colonnes de WinBox et **non d'un relevé** — troisième table dans ce cas, après `/ppp/active`.

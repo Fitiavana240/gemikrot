@@ -68,6 +68,7 @@ describe('VouchersService.generateBatch', () => {
     mikrotik = {
       createUserManagerUsers: vi.fn(async (inputs: any[]) => inputs),
       assignProfile: vi.fn(async () => ({ state: 'waiting', endTime: null })),
+      createHotspotUser: vi.fn(async (input: any) => input),
     };
     clients = {
       forRouter: vi.fn(async () => mikrotik),
@@ -130,6 +131,68 @@ describe('VouchersService.generateBatch', () => {
       profileName: '1JOUR-2000AR',
     });
     expect(result.every((v) => v.umUsername)).toBe(true);
+  });
+
+  /**
+   * La cible d'un lot change le produit vendu, pas seulement l'endroit où
+   * vit le compte. Ces cas figent la différence.
+   */
+  describe('cible du lot', () => {
+    it('va sur User Manager par défaut, sans cible demandée', async () => {
+      const codes = ['UM01', 'UM02'];
+      vi.mocked(voucherCode.generateVoucherCode).mockImplementation(() => codes.shift()!);
+
+      const result = await buildService().generateBatch(
+        { planId: 'plan-1', quantity: 2 } as any,
+        'admin-1',
+      );
+
+      // Le défaut compte : lui seul tient une validité calendaire.
+      expect(mikrotik.createUserManagerUsers).toHaveBeenCalled();
+      expect(mikrotik.createHotspotUser).not.toHaveBeenCalled();
+      expect(result.every((v) => v.target === 'USER_MANAGER')).toBe(true);
+    });
+
+    it('crée sur le HotSpot avec un plafond de temps connecté quand on le demande', async () => {
+      const codes = ['HS01', 'HS02'];
+      vi.mocked(voucherCode.generateVoucherCode).mockImplementation(() => codes.shift()!);
+
+      const result = await buildService().generateBatch(
+        { planId: 'plan-1', quantity: 2, target: 'HOTSPOT' } as any,
+        'admin-1',
+      );
+
+      expect(mikrotik.createUserManagerUsers).not.toHaveBeenCalled();
+      expect(mikrotik.createHotspotUser).toHaveBeenCalledTimes(2);
+      // `limit-uptime` et non le `session-timeout` du profil : celui-ci
+      // repart à zéro à chaque reconnexion et ne borne donc rien.
+      expect(mikrotik.createHotspotUser.mock.calls[0][0]).toMatchObject({
+        username: 'HS01',
+        password: 'HS01',
+        profileName: '1JOUR-2000AR',
+        limitUptimeSeconds: 86400,
+      });
+      expect(result.every((v) => v.target === 'HOTSPOT')).toBe(true);
+      // Pas de compte User Manager : le confondre ferait chercher une
+      // échéance calendaire qui n'existe pas.
+      expect(result.every((v) => !v.umUsername)).toBe(true);
+    });
+
+    it('enregistre la cible sur le lot, pour que le suivi la montre', async () => {
+      const codes = ['HS03'];
+      vi.mocked(voucherCode.generateVoucherCode).mockImplementation(() => codes.shift()!);
+
+      await buildService().generateBatch(
+        { planId: 'plan-1', quantity: 1, target: 'HOTSPOT' } as any,
+        'admin-1',
+      );
+
+      expect(prisma.voucherBatch.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ target: 'HOTSPOT' }),
+        }),
+      );
+    });
   });
 
   it("relance la génération quand le code aléatoire entre en collision avec un voucher existant", async () => {

@@ -1,11 +1,22 @@
 import { api } from './client';
 import type { Voucher, VoucherStatus } from './types';
 
+/**
+ * Où créer les comptes d'un lot.
+ *
+ * User Manager par défaut, et c'est le bon choix : lui seul tient une
+ * validité **calendaire**, qui continue de courir client déconnecté. Sur le
+ * HotSpot, le plafond compte le temps passé connecté — un forfait d'un mois
+ * y devient 720 h de connexion, ce qui n'est pas le même produit.
+ */
+export type CibleLot = 'USER_MANAGER' | 'HOTSPOT';
+
 export interface GenerateBatchInput {
   planId: string;
   quantity: number;
   prefix?: string;
   routerId?: string;
+  target?: CibleLot;
 }
 
 /** Répartition des tickets d'une offre par statut. */

@@ -175,21 +175,29 @@ function ByPlanTab() {
  * Ce que la génération va réellement faire, dit avant de la lancer.
  *
  * Deux questions qu'un exploitant doit pouvoir se poser : **où** les comptes
- * seront créés, et **sous quel profil**. Les tickets vendus vivent dans User
- * Manager, seul capable de faire expirer une validité calendaire — le HotSpot
- * ne borne qu'une session, et la borne repart à chaque reconnexion. L'écran
- * le dit au lieu de le supposer connu.
+ * seront créés, et **sous quel profil**. User Manager est le choix par
+ * défaut, seul capable de faire expirer une validité calendaire. Le HotSpot
+ * reste possible — pour un routeur sans le paquet, ou pour les tickets courts
+ * que le parc vend déjà ainsi — mais le même chiffre n'y veut pas dire la
+ * même chose : le plafond compte le temps *connecté*, pas les jours. L'écran
+ * l'écrit en heures avant de générer, au lieu de le supposer connu.
  *
  * Le profil est vérifié sur le routeur, pas seulement lu en base : une offre
  * dont le profil a été renommé dans WinBox produirait des comptes orphelins,
  * et l'erreur n'apparaîtrait qu'à la première connexion d'un client.
  */
-function CibleGeneration({ plan }: { plan: Plan | undefined }) {
+function CibleGeneration({
+  plan,
+  cible,
+}: {
+  plan: Plan | undefined;
+  cible: 'USER_MANAGER' | 'HOTSPOT';
+}) {
   const { currentId } = useRouterSelection();
   const profils = useQuery({
     queryKey: ['um-profiles-check', currentId],
     queryFn: () => userManagerApi.listProfiles(currentId),
-    enabled: Boolean(plan),
+    enabled: Boolean(plan) && cible === 'USER_MANAGER',
     retry: false,
   });
 
@@ -203,46 +211,75 @@ function CibleGeneration({ plan }: { plan: Plan | undefined }) {
 
   const attendu = plan.mikrotikProfileName;
   const trouvé = profils.data?.some((p) => p.name === attendu);
+  const hotspot = cible === 'HOTSPOT';
 
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
         <span>
           <span className="text-slate-500">Créés dans </span>
-          <Badge tone="green">User Manager</Badge>
+          <Badge tone={hotspot ? 'amber' : 'green'}>
+            {hotspot ? 'HotSpot' : 'User Manager'}
+          </Badge>
         </span>
         <span>
           <span className="text-slate-500">Profil </span>
           <span className="font-mono text-xs">{attendu}</span>
         </span>
         <span>
-          <span className="text-slate-500">Validité </span>
+          {/* Le même chiffre ne veut pas dire la même chose des deux côtés :
+              calendaire sur User Manager, temps connecté sur le HotSpot.
+              L'écrire évite de vendre un mois pour 720 h de connexion. */}
+          <span className="text-slate-500">{hotspot ? 'Plafond ' : 'Validité '}</span>
           {formatDuration(plan.validityDurationSeconds)}
+          <span className="text-slate-500">{hotspot ? ' de temps connecté' : ' calendaire'}</span>
         </span>
       </div>
 
-      {profils.isPending && (
+      {hotspot && (
+        <p className="mt-1.5 text-xs text-amber-700">
+          Sur le HotSpot, rien n'expire à une date : le plafond compte le temps passé connecté et
+          s'arrête dès que le client se déconnecte. Ces tickets vaudront{' '}
+          <strong>{Math.round(plan.validityDurationSeconds / 3600)} h de connexion réelle</strong>,
+          étalées sur autant de jours que le client voudra.
+          {/* Pour un ticket de quelques heures, c'est équivalent. Pour un
+              forfait long, c'est un tout autre produit — le dire seulement
+              là où ça change quelque chose. */}
+          {plan.validityDurationSeconds > 86_400 &&
+            " Sur un forfait de cette durée, c'est bien plus généreux qu'une validité calendaire : préférez User Manager."}
+        </p>
+      )}
+
+      {/* Ce contrôle interroge les profils **User Manager**. En cible
+          HotSpot il ne veut rien dire, et son verdict — « ce profil n'existe
+          pas » — découragerait une génération parfaitement valide. Le
+          résultat en cache d'une visite précédente suffirait à le faire
+          apparaître : c'est la cible qui décide, pas la présence des données. */}
+      {!hotspot && profils.isPending && (
         <p className="mt-1.5 text-xs text-slate-400">Vérification du profil sur le routeur…</p>
       )}
-      {profils.isError && (
+      {!hotspot && profils.isError && (
         <p className="mt-1.5 text-xs text-amber-700">
           Le routeur n'a pas répondu : impossible de vérifier que le profil existe.
         </p>
       )}
-      {trouvé === false && (
+      {!hotspot && trouvé === false && (
         <p className="mt-1.5 text-xs text-red-600">
-          Ce profil n'existe pas sur le routeur. Les comptes seraient créés sans validité —
-          synchronisez l'offre depuis l'écran Offres avant de générer.
+          Ce profil n'existe pas encore dans User Manager. Il sera créé à la génération, depuis
+          l'offre — vérifiez ensuite qu'il porte bien la validité attendue.
         </p>
       )}
-      {trouvé === true && (
+      {!hotspot && trouvé === true && (
         <p className="mt-1.5 text-xs text-emerald-700">Profil trouvé sur le routeur.</p>
       )}
 
+      {/* Cette phrase disait « on n'y crée plus ». C'est devenu faux le jour
+          où la cible est devenue un choix : elle affirmait une règle là où il
+          n'y a qu'un défaut. */}
       <p className="mt-2 text-xs text-slate-500">
-        Le HotSpot garde sa propre table de comptes, visible sous « Historique HotSpot ». On n'y
-        crée plus : un compte HotSpot n'expire pas à une date, seul son profil borne la session et
-        la borne repart à chaque reconnexion.
+        Le HotSpot garde sa propre table de comptes, visible sous « Historique HotSpot ». Les
+        tickets y sont l'exception : son profil ne borne qu'une session, et la borne repart à
+        chaque reconnexion — seul le plafond de temps cumulé les limite vraiment.
       </p>
     </div>
   );
@@ -316,6 +353,17 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
                 onChange={(e) => setForm({ ...form, prefix: e.target.value || undefined })}
               />
             </FormField>
+            <FormField label="Créer les comptes dans">
+              <Select
+                value={form.target ?? 'USER_MANAGER'}
+                onChange={(e) =>
+                  setForm({ ...form, target: e.target.value as GenerateBatchInput['target'] })
+                }
+              >
+                <option value="USER_MANAGER">User Manager (recommandé)</option>
+                <option value="HOTSPOT">HotSpot</option>
+              </Select>
+            </FormField>
             <div className="col-span-2 flex items-end md:col-span-1">
               <Button type="submit" disabled={generate.isPending} className="w-full">
                 {generate.isPending ? 'Génération…' : 'Générer'}
@@ -323,7 +371,10 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
             </div>
             {error && <p className="col-span-2 text-sm text-red-600 md:col-span-4">{error}</p>}
             <div className="col-span-2 md:col-span-4">
-              <CibleGeneration plan={plans?.find((p) => p.id === form.planId)} />
+              <CibleGeneration
+                plan={plans?.find((p) => p.id === form.planId)}
+                cible={form.target ?? 'USER_MANAGER'}
+              />
             </div>
           </form>
           <p className="mt-3 text-xs text-slate-500">
