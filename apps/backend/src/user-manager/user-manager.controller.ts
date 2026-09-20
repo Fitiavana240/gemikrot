@@ -51,6 +51,17 @@ export class UserManagerController {
     return this.userManager.sessions(username, routerId);
   }
 
+  /**
+   * Paiements notes par le routeur.
+   *
+   * Distinct de l'ecran Paiements de l'application : ceci n'est que la
+   * fonction integree de RouterOS, que le parc n'utilise pas.
+   */
+  @Get('payments')
+  payments(@Query('routerId') routerId?: string) {
+    return this.userManager.payments(routerId);
+  }
+
   /** Attributions profil/compte : c'est la que vit l'echeance reelle. */
   @Get('assignments')
   assignments(@Query('username') username?: string, @Query('routerId') routerId?: string) {

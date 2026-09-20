@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
 import { useRouterSelection } from '../routers/RouterContext';
+import { GenerationTickets } from '../components/GenerationTickets';
 import {
   Badge,
   Button,
@@ -397,6 +398,8 @@ export function HotspotUsersTab() {
 
 export function HotspotProfilesTab() {
   const { currentId } = useRouterSelection();
+  const { canWrite } = useAuth();
+  const [àGenerer, setÀGenerer] = useState<string | null>(null);
   const requête = useQuery({
     queryKey: ['hotspot-profiles', currentId],
     queryFn: () => hotspotTabsApi.profiles(currentId),
@@ -409,9 +412,19 @@ export function HotspotProfilesTab() {
         ticket : la durée repart à zéro à chaque reconnexion. C'est pourquoi les ventes passent
         par User Manager.
       </p>
+
+      {àGenerer && currentId && (
+        <GenerationTickets
+          routerId={currentId}
+          cible="hotspot"
+          profileName={àGenerer}
+          onFermer={() => setÀGenerer(null)}
+        />
+      )}
+
       <Liste
         requête={requête}
-        colonnes={['Profil', 'Descendant', 'Montant', 'Durée de session', 'Appareils']}
+        colonnes={['Profil', 'Descendant', 'Montant', 'Durée de session', 'Appareils', '']}
         vide={{ titre: 'Aucun profil HotSpot' }}
         ligne={(p) => (
           <tr key={p.id}>
@@ -420,6 +433,70 @@ export function HotspotProfilesTab() {
             <td className="px-3 py-2 tabular-nums">{formatDebit(p.rateLimitTxBitsPerSecond)}</td>
             <td className="px-3 py-2 tabular-nums">{formatDuree(p.sessionTimeoutSeconds)}</td>
             <td className="px-3 py-2 tabular-nums">{p.sharedUsers}</td>
+            <td className="px-3 py-2 text-right">
+              {canWrite && <Button onClick={() => setÀGenerer(p.name)}>Générer</Button>}
+            </td>
+          </tr>
+        )}
+      />
+    </div>
+  );
+}
+
+/**
+ * Les paiements notés par le routeur lui-même.
+ *
+ * À ne pas confondre avec l'écran Paiements de l'application, qui est la
+ * source de vérité commerciale. Ceci n'est que la fonction de paiement
+ * intégrée de RouterOS — que ce parc n'utilise pas, puisqu'il encaisse par
+ * Mobile Money hors du routeur. La table sera donc vide, et c'est normal :
+ * l'écran le dit plutôt que de laisser croire à une panne.
+ */
+export function UmPaymentsTab() {
+  const { currentId } = useRouterSelection();
+  const requête = useQuery({
+    queryKey: ['um-payments', currentId],
+    queryFn: () => umTabsApi.payments(currentId),
+  });
+
+  return (
+    <div className="space-y-3">
+      <p className="max-w-3xl text-sm text-slate-600">
+        Ce que le routeur a noté lui-même, par sa fonction de paiement intégrée. Ce n'est pas la
+        comptabilité de la console : les encaissements Mobile Money se suivent dans{' '}
+        <strong>Vendre ▸ Paiements</strong>.
+      </p>
+      {/* Les noms de champs viennent des colonnes de WinBox et non d'un
+          relevé : la collection répond `200` mais reste vide sur ce parc.
+          Le dire évite qu'une colonne vide passe pour une panne. */}
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <strong>Table non vérifiée sur matériel.</strong> Elle répond, mais elle est vide ici —
+        le paiement intégré de RouterOS n'est pas utilisé. Si des lignes apparaissent un jour
+        avec des colonnes vides, ce sont les noms de champs qu'il faudra corriger, pas le
+        routeur.
+      </div>
+      <Liste
+        requête={requête}
+        colonnes={['Compte', 'Profil', 'Prix', 'Devise', 'Début', 'Fin', 'État']}
+        vide={{
+          titre: 'Aucun paiement enregistré par le routeur',
+          aide: "C'est attendu : les encaissements passent par Mobile Money, hors du routeur.",
+        }}
+        ligne={(p) => (
+          <tr key={p.id}>
+            <td className="px-3 py-2 font-medium">{p.username}</td>
+            <td className="px-3 py-2 text-slate-500">{p.profileName ?? '—'}</td>
+            <td className="px-3 py-2 tabular-nums">{p.price ?? '—'}</td>
+            <td className="px-3 py-2 text-slate-500">{p.currency ?? '—'}</td>
+            <td className="px-3 py-2 text-xs text-slate-500">{p.transactionStart ?? '—'}</td>
+            <td className="px-3 py-2 text-xs text-slate-500">{p.transactionEnd ?? '—'}</td>
+            <td className="px-3 py-2">
+              {p.transactionStatus ? (
+                <Badge tone="slate">{p.transactionStatus}</Badge>
+              ) : (
+                <span className="text-slate-400">—</span>
+              )}
+            </td>
           </tr>
         )}
       />

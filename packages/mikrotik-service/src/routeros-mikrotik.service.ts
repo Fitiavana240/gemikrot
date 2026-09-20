@@ -460,6 +460,18 @@ export class RouterOSMikrotikService implements IMikrotikService {
     return raw.map(UmMapper.mapUserManagerSession);
   }
 
+  /**
+   * Paiements notés par le routeur lui-même.
+   *
+   * Vide sur le parc : l'encaissement passe par Mobile Money, hors routeur.
+   * Les noms de champs viennent donc des colonnes de WinBox et non d'un
+   * relevé — l'écran qui l'affiche le dit.
+   */
+  async getUserManagerPayments() {
+    const raw = await this.client.get<any[]>('/user-manager/payment');
+    return raw.map(UmMapper.mapUserManagerPayment);
+  }
+
   // ==================== User Manager : écriture ====================
 
   async createUserManagerUser(input: CreateUserManagerUserDto) {

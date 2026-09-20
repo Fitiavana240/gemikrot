@@ -27,6 +27,7 @@ import {
   UserManagerProfileLimitationDto,
   UserManagerSessionDto,
   UserManagerUserDto,
+  UserManagerPaymentDto,
   UserManagerUserProfileDto,
 } from '../../src/dto/user-manager.dto';
 import {
@@ -333,6 +334,11 @@ export class MockMikrotikService implements IMikrotikService {
   }
 
   async getUserManagerSessions(_username?: string): Promise<UserManagerSessionDto[]> {
+    return [];
+  }
+
+  /** Vide, comme sur le parc : personne n'encaisse par le routeur. */
+  async getUserManagerPayments(): Promise<UserManagerPaymentDto[]> {
     return [];
   }
 

@@ -91,3 +91,28 @@ export interface UserManagerSessionDto {
   /** Porté par le routeur, pas déduit d'une date de fin manquante. */
   active: boolean;
 }
+
+/**
+ * Un paiement enregistré par User Manager — `/user-manager/payment`.
+ *
+ * **Noms de champs non vérifiés sur matériel.** La collection existe et
+ * répond `200`, mais elle est vide sur le parc : la fonction de paiement
+ * intégrée de RouterOS n'y est pas utilisée, l'encaissement passant par
+ * Mobile Money hors du routeur. Les champs ci-dessous sont déduits des
+ * colonnes de WinBox, pas d'un relevé — même situation que `/ppp/active`, et
+ * l'écran le dit plutôt que de laisser croire.
+ *
+ * À ne pas confondre avec les paiements de l'application, qui sont la source
+ * de vérité commerciale : ceci n'est que ce que le routeur a noté lui-même.
+ */
+export interface UserManagerPaymentDto {
+  id: string;
+  username: string;
+  profileName: string | null;
+  /** Tel que le routeur l'écrit, sans conversion de devise. */
+  price: string | null;
+  currency: string | null;
+  transactionStart: string | null;
+  transactionEnd: string | null;
+  transactionStatus: string | null;
+}

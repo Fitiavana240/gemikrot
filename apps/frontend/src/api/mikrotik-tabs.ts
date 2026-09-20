@@ -219,7 +219,26 @@ export const umTabsApi = {
     api.get<UmSession[]>(`/user-manager/sessions${q(routerId, { username: username ?? '' })}`),
   assignments: (routerId?: string, username?: string) =>
     api.get<UmAssignment[]>(`/user-manager/assignments${q(routerId, { username: username ?? '' })}`),
+  payments: (routerId?: string) => api.get<UmPayment[]>(`/user-manager/payments${q(routerId)}`),
 };
+
+/**
+ * Un paiement noté par le routeur — `/user-manager/payment`.
+ *
+ * **Noms de champs non vérifiés sur matériel** : la collection répond mais
+ * elle est vide sur le parc, qui encaisse par Mobile Money hors du routeur.
+ * Ces champs viennent des colonnes de WinBox, pas d'un relevé.
+ */
+export interface UmPayment {
+  id: string;
+  username: string;
+  profileName: string | null;
+  price: string | null;
+  currency: string | null;
+  transactionStart: string | null;
+  transactionEnd: string | null;
+  transactionStatus: string | null;
+}
 
 /** bits/s → « 6 Mb/s », ou un tiret quand il n'y a pas de limite. */
 export function formatDebit(bits: number | null): string {

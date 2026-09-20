@@ -26,6 +26,7 @@ import {
   UserManagerProfileLimitationDto,
   UserManagerSessionDto,
   UserManagerUserDto,
+  UserManagerPaymentDto,
   UserManagerUserProfileDto,
 } from '../dto/user-manager.dto';
 import {
@@ -177,6 +178,13 @@ export interface IMikrotikService {
   getUserManagerUserProfiles(username?: string): Promise<UserManagerUserProfileDto[]>;
   /** Sans argument : toutes les sessions. Avec `username` : filtré. */
   getUserManagerSessions(username?: string): Promise<UserManagerSessionDto[]>;
+  /**
+   * Paiements notes par le routeur lui-meme.
+   *
+   * **Noms de champs non verifies** : la collection est vide sur le parc,
+   * qui encaisse par Mobile Money hors du routeur.
+   */
+  getUserManagerPayments(): Promise<UserManagerPaymentDto[]>;
 
   // ---------- User Manager : écriture ----------
 

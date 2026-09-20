@@ -132,6 +132,19 @@ export class UserManagerService {
   }
 
   /**
+   * Les paiements notes par le routeur lui-meme.
+   *
+   * A ne pas confondre avec l'ecran Paiements de l'application, qui est la
+   * source de verite commerciale. Ceci n'est que la fonction de paiement
+   * integree de RouterOS, que le parc n'utilise pas : il encaisse par Mobile
+   * Money, hors du routeur. La table sera donc vide, et c'est normal.
+   */
+  async payments(routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    return mikrotik.getUserManagerPayments();
+  }
+
+  /**
    * Les attributions profil/compte.
    *
    * C'est ici que vit l'echeance reelle : `end-time` est calendaire et tenu

@@ -15,6 +15,7 @@ import {
 } from '../api/user-manager';
 import { useAuth } from '../auth/AuthContext';
 import { useRouterSelection } from '../routers/RouterContext';
+import { GenerationTickets } from '../components/GenerationTickets';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import {
@@ -31,6 +32,7 @@ import {
 import {
   UmAssignmentsTab,
   UmAttributesTab,
+  UmPaymentsTab,
   UmRoutersTab,
   UmSessionsTab,
   UmUserGroupsTab,
@@ -47,6 +49,7 @@ const ONGLETS = {
   attributions: { titre: 'Attributions', rendu: () => <UmAssignmentsTab /> },
   limitations: { titre: 'Limitations', rendu: () => <LimitationsTab /> },
   attributs: { titre: 'Attributs RADIUS', rendu: () => <UmAttributesTab /> },
+  paiements: { titre: 'Paiements du routeur', rendu: () => <UmPaymentsTab /> },
 } as const;
 
 type Tab = keyof typeof ONGLETS;
@@ -109,6 +112,8 @@ function ProfilesTab() {
   const queryClient = useQueryClient();
   const { error, setError, onError } = useActionError();
   const [form, setForm] = useState<CreateProfileInput>(EMPTY_PROFILE);
+  /** Le profil pour lequel on génère, quand le panneau est ouvert. */
+  const [àGenerer, setÀGenerer] = useState<string | null>(null);
 
   const { currentId } = useRouterSelection();
   const profiles = useQuery({
@@ -164,6 +169,15 @@ function ProfilesTab() {
   return (
     <div className="space-y-4">
       {error && <ErrorBanner>{error}</ErrorBanner>}
+
+      {àGenerer && currentId && (
+        <GenerationTickets
+          routerId={currentId}
+          cible="user-manager"
+          profileName={àGenerer}
+          onFermer={() => setÀGenerer(null)}
+        />
+      )}
 
       {canWrite && (
         <Card title="Créer un profil">
@@ -249,6 +263,7 @@ function ProfilesTab() {
               <td className="px-3 py-2">
                 {canWrite && (
                   <div className="flex justify-end gap-1">
+                    <Button onClick={() => setÀGenerer(profile.name)}>Générer</Button>
                     <Button
                       variant="secondary"
                       onClick={() => {

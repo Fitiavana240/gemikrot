@@ -5,6 +5,7 @@ import {
   UserManagerSessionDto,
   UserManagerUserDto,
   UserManagerUserProfileDto,
+  UserManagerPaymentDto,
   UserManagerUserProfileState,
 } from '../dto/user-manager.dto';
 import { formatRateToken, parseRateToken, parseRouterOsDuration } from './hotspot.mapper';
@@ -155,4 +156,30 @@ function mapUserProfileState(state: unknown): UserManagerUserProfileState {
 export function formatValidity(seconds: number | null): string {
   if (seconds == null) return 'unlimited';
   return `${seconds}s`;
+}
+
+/**
+ * Paiement noté par User Manager.
+ *
+ * Écrit d'après les colonnes de WinBox et **non d'après un relevé** : la
+ * collection est vide sur le parc, qui encaisse par Mobile Money hors du
+ * routeur. Si une colonne reste obstinément vide alors que des paiements
+ * existent, c'est un nom de champ qu'il faut corriger ici.
+ */
+function orNullUm(value: unknown): string | null {
+  const texte = typeof value === "string" ? value.trim() : value == null ? "" : String(value);
+  return texte === "" ? null : texte;
+}
+
+export function mapUserManagerPayment(raw: any): UserManagerPaymentDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    username: raw?.user ?? '',
+    profileName: orNullUm(raw?.profile),
+    price: orNullUm(raw?.price),
+    currency: orNullUm(raw?.currency),
+    transactionStart: orNullUm(raw?.['trans-start']),
+    transactionEnd: orNullUm(raw?.['trans-end']),
+    transactionStatus: orNullUm(raw?.['trans-status']),
+  };
 }

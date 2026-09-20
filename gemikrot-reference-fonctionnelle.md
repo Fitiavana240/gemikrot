@@ -181,6 +181,8 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | RTR-13 | **Accès distant** : le routeur ouvre un tunnel WireGuard vers le serveur. Jeton d'enrôlement à usage unique, script à coller dans Winbox, clé privée jamais transmise, compte d'API dédié, `www-ssl` restreint au tunnel. Éprouvé de bout en bout sur le hAP : script collé dans Winbox, rappel du routeur, tunnel monté, application passant dedans | ⭐⭐⭐ | 🔴 | ✅ |
 | RTR-14 | **PPPoE** en plus du HotSpot : comptes, profils, serveurs et bassins, correspondances écrites contre un relevé réel (`scripts/probe-ppp-sonde.ts`). **Les sessions actives restent non vérifiées** : le parc n'a aucun PPPoE en service, les noms de champs de `/ppp/active` viennent de la documentation seule — le test *et l'écran* le disent | ⭐⭐ | 🔴 | ✅ |
 | RTR-19 | **Écran PPPoE** : comptes (création, modification, suspension, suppression), profils, sessions, serveurs, bassins d'adresses. La modification n'écrit que les champs touchés, le nom est figé car il identifie le compte, et un mot de passe vide veut dire « ne pas y toucher » | ⭐⭐ | 🟡 | ✅ |
+| RTR-20 | **Génération directe depuis un profil** (« Generate Voucher » de WinBox), côté User Manager comme HotSpot. Profil vérifié avant toute création, échecs partiels nommés plutôt que comptés, 200 par lot au maximum. L'écran dit que ces tickets ne sont pas suivis comme des ventes | ⭐⭐⭐ | 🟡 | ✅ |
+| RTR-21 | **Paiements notés par le routeur** (`/user-manager/payment`). Vide sur ce parc, qui encaisse par Mobile Money : les noms de champs viennent des colonnes de WinBox et **non d'un relevé**, et l'écran le dit | ⭐ | 🟢 | 🟡 |
 | RTR-15 | **Menus IP en lecture** : files simples (le débit réellement alloué, client par client), journal du routeur, interfaces avec leurs coupures de lien, services d'administration, DDNS, ARP, serveurs DHCP, **pare-feu filtrage et NAT dans leur ordre d'évaluation**, DNS et entrées statiques, table de routage. **Lecture seule, par décision** : la console montre, WinBox modifie | ⭐⭐ | 🟡 | ✅ |
 | RTR-16 | **Stockage et préparation de User Manager** : mémoire interne, clés USB et leur état de montage, paquets installés, occupation par support, et où vit la base User Manager. Rend un diagnostic ordonné par gravité, avec la commande exacte quand il en existe une — dont la réponse à « pourquoi l'onglet User Manager n'apparaît-il pas dans WinBox » | ⭐⭐⭐ | 🟡 | ✅ |
 | RTR-17 | **Réparations depuis la console**, sans WinBox : allumer le service, activer les profils, programmer l'activation du paquet, annuler une désactivation programmée. **Liste blanche nommée, pas un passe-plat de commandes** — une route exécutant une commande RouterOS arbitraire donnerait à tout ADMIN une exécution de code à distance sur chaque routeur du parc. Le serveur relit l'état après avoir écrit et ne déclare le succès que si le routeur a réellement changé. Redémarrage, déplacement de la base et effacement de fichiers restent affichés comme commandes à coller, jamais comme boutons. **Les trois formes d'écriture éprouvées sur le hAP réel** : constat levé, bouton cliqué, routeur réellement changé, audit écrit, 646 comptes intacts à chaque mesure | ⭐⭐⭐ | 🟡 | ✅ |
@@ -781,6 +783,38 @@ croyait acheter deux heures, ou l'inverse.
 **Non exposé, délibérément** : la création et la modification des *profils* HotSpot. Le
 paquet sait les faire, le backend non. Un profil se pose une fois et se règle dans WinBox ;
 l'ouvrir ajouterait une surface d'écriture pour un geste rare.
+
+### 2026-09-20 — Générer depuis un profil, et les paiements du routeur
+
+**RTR-20 ✅ — génération directe.** L'équivalent du « Generate Voucher » de WinBox, posé sur
+chaque ligne de profil, côté User Manager **et** côté HotSpot. Il comble ce que les lots ne
+couvraient pas : la génération existante part d'une *offre* de l'application, donc un profil
+présent sur le routeur sans offre correspondante n'avait aucun moyen de produire des tickets.
+
+Trois garde-fous, chacun pour une panne précise :
+
+- **Le profil est vérifié avant toute création.** Un nom mal orthographié produirait sinon
+  des dizaines de comptes sans forfait, à retrouver et supprimer un par un.
+- **Les échecs partiels sont nommés, pas comptés parmi les réussites.** Côté User Manager la
+  création est groupée mais l'attribution ne l'est pas : un compte créé sans profil n'ouvre
+  rien, et le faire passer pour un ticket valide se découvrirait au comptoir, devant le client.
+- **200 par lot au maximum.** Au-delà, la requête dépasse son délai en laissant des comptes
+  créés que l'appelant ne voit jamais.
+
+L'écran dit franchement ce qu'il fait : ces tickets **ne sont pas suivis comme des ventes**,
+aucun prix ne leur est rattaché, et ils apparaîtront « hors application ». Un lien renvoie
+vers Tickets ▸ Générer un lot pour de la vente suivie.
+
+**Éprouvé sur le hAP** : 3 tickets générés sur `TEST-1H`, préfixe appliqué — comptes créés,
+**3 attributions** posées, état `waiting` / `not-yet-running` (validité non démarrée, correct
+pour un profil `first auth`). Puis supprimés depuis la console : **0 attribution orpheline**
+restante, 3 comptes User Manager et 646 HotSpot comme avant.
+
+**RTR-21 ✅ — l'onglet Paiements du routeur.** `/user-manager/payment` répond, et il est vide :
+ce parc encaisse par Mobile Money, hors du routeur. Les noms de champs viennent donc des
+colonnes de WinBox et **non d'un relevé** — troisième table dans ce cas, après `/ppp/active`.
+L'écran le dit en bandeau, et distingue explicitement cette table de l'écran Paiements de
+l'application, qui est la source de vérité commerciale.
 
 ---
 
