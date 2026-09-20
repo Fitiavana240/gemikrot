@@ -6,15 +6,17 @@ import type { AuthenticatedUser } from '../auth/jwt.strategy.js';
 import { PaymentsService } from './payments.service.js';
 import { CreatePaymentDto } from './dto/create-payment.dto.js';
 
-const CAN_MANAGE = [AdminRole.SUPER_ADMIN, AdminRole.ADMIN, AdminRole.OPERATOR];
+const CAN_MANAGE: AdminRole[] = [AdminRole.SUPER_ADMIN, AdminRole.ADMIN, AdminRole.OPERATOR];
 
 @Controller('payments')
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
   @Get()
-  findAll() {
-    return this.paymentsService.findAll();
+  findAll(@CurrentUser() user: AuthenticatedUser) {
+    // Seuls les roles qui valident un paiement ont besoin de la reference en
+    // clair : elle permet de se faire rendre un code sur la page publique.
+    return this.paymentsService.findAll(CAN_MANAGE.includes(user.role));
   }
 
   @Get(':id')

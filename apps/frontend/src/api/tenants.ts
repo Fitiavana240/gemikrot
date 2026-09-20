@@ -48,6 +48,9 @@ export const tenantsApi = {
   update: (input: UpdateTenantInput) => api.patch<Tenant>('/tenants/me', input),
   addMobileMoney: (input: Omit<MobileMoneyAccount, 'id' | 'isActive'>) =>
     api.post<MobileMoneyAccount>('/tenants/me/mobile-money', input),
+  /** Retire la puce du choix propose au client, sans effacer son historique. */
+  setMobileMoneyActive: (id: string, isActive: boolean) =>
+    api.patch<MobileMoneyAccount>(`/tenants/me/mobile-money/${id}/active`, { isActive }),
   removeMobileMoney: (id: string) => api.delete<void>(`/tenants/me/mobile-money/${id}`),
 
   // Réservé au SUPER_ADMIN.

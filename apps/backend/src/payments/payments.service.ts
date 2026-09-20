@@ -8,6 +8,24 @@ import { SubscriptionsService } from '../subscriptions/subscriptions.service.js'
 import { PAYMENT_PROVIDER, type PaymentProvider } from './providers/payment-provider.interface.js';
 import type { CreatePaymentDto } from './dto/create-payment.dto.js';
 
+
+/**
+ * Masque la reference d'un paiement.
+ *
+ * La reference Mobile Money sert a **retrouver un acces** : qui la connait
+ * peut, sur la page publique, se faire rendre le code d'un ticket deja
+ * vendu. Elle n'a donc rien a faire en clair sur l'ecran d'un role qui ne
+ * valide pas les paiements.
+ *
+ * Les quatre derniers caracteres restent visibles, pour que l'operateur
+ * puisse rapprocher la ligne du bordereau que le client lui montre sans
+ * pouvoir s'en servir seul.
+ */
+export function masquerReference(reference: string): string {
+  if (reference.length <= 4) return '••••';
+  return `••••${reference.slice(-4)}`;
+}
+
 @Injectable()
 export class PaymentsService {
   constructor(
@@ -19,8 +37,17 @@ export class PaymentsService {
     private readonly tenantContext: TenantContextService,
   ) {}
 
-  findAll(): Promise<Payment[]> {
-    return this.prisma.scoped.payment.findMany({ orderBy: { createdAt: 'desc' } });
+  /**
+   * La liste, avec la reference masquee pour qui ne valide pas les paiements.
+   * Le masquage est fait ici et non a l'affichage : une valeur qui n'a pas
+   * quitte le serveur ne peut pas etre lue dans la reponse reseau.
+   */
+  async findAll(voirReferences = false): Promise<Payment[]> {
+    const paiements = await this.prisma.scoped.payment.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    if (voirReferences) return paiements;
+    return paiements.map((p) => ({ ...p, reference: masquerReference(p.reference) }));
   }
 
   async findOne(id: string): Promise<Payment> {

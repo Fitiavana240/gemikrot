@@ -52,6 +52,12 @@ export function SettingsPage() {
     },
     onError,
   });
+  const toggleAccount = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      tenantsApi.setMobileMoneyActive(id, isActive),
+    onSuccess: () => { setError(null); refresh(); },
+    onError,
+  });
   const removeAccount = useMutation({
     mutationFn: tenantsApi.removeMobileMoney,
     onSuccess: () => { setError(null); refresh(); },
@@ -139,7 +145,7 @@ export function SettingsPage() {
       </Card>
 
       <Card title="Puces Mobile Money — ce que le client voit pour payer">
-        <Table head={['Opérateur', 'Numéro', 'Titulaire de la puce', '']}>
+        <Table head={['Opérateur', 'Numéro', 'Titulaire de la puce', 'Proposée au client', '']}>
           {tenant.data?.mobileMoneyAccounts?.map((acc) => (
             <tr key={acc.id}>
               <td className="px-3 py-2">
@@ -147,18 +153,37 @@ export function SettingsPage() {
               </td>
               <td className="px-3 py-2 font-mono">{acc.phoneNumber}</td>
               <td className="px-3 py-2">{acc.accountName}</td>
-              <td className="px-3 py-2 text-right">
+              <td className="px-3 py-2">
+                {/* Desactiver plutot que supprimer : une puce retiree du
+                    commerce garde ses paiements passes, qui referencent son
+                    numero. */}
+                <Badge tone={acc.isActive ? 'green' : 'slate'}>
+                  {acc.isActive ? 'oui' : 'non'}
+                </Badge>
+              </td>
+              <td className="space-x-2 px-3 py-2 text-right">
                 {canWrite && (
-                  <Button variant="danger" onClick={() => removeAccount.mutate(acc.id)}>
-                    Retirer
-                  </Button>
+                  <>
+                    <Button
+                      variant="secondary"
+                      disabled={toggleAccount.isPending}
+                      onClick={() =>
+                        toggleAccount.mutate({ id: acc.id, isActive: !acc.isActive })
+                      }
+                    >
+                      {acc.isActive ? 'Désactiver' : 'Réactiver'}
+                    </Button>
+                    <Button variant="danger" onClick={() => removeAccount.mutate(acc.id)}>
+                      Supprimer
+                    </Button>
+                  </>
                 )}
               </td>
             </tr>
           ))}
           {!tenant.data?.mobileMoneyAccounts?.length && (
             <tr>
-              <td className="px-3 py-4 text-slate-400" colSpan={4}>
+              <td className="px-3 py-4 text-slate-400" colSpan={5}>
                 Aucune puce enregistrée — le client ne saurait pas où envoyer son paiement.
               </td>
             </tr>

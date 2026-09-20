@@ -87,6 +87,37 @@ export class TenantsService {
     return account;
   }
 
+  /**
+   * Active ou desactive une puce sans la supprimer.
+   *
+   * Supprimer etait jusqu'ici la seule option offerte, et c'etait la mauvaise :
+   * une puce retiree du commerce garde ses paiements passes, qui referencent
+   * son numero. La retirer du choix propose au client est une chose ; effacer
+   * a quel numero il a paye en est une autre.
+   */
+  async setMobileMoneyActive(
+    id: string,
+    isActive: boolean,
+    adminUserId?: string,
+  ): Promise<MobileMoneyAccount> {
+    const account = await this.prisma.scoped.mobileMoneyAccount.findUnique({ where: { id } });
+    if (!account) throw new NotFoundException(`Compte Mobile Money ${id} introuvable`);
+
+    const updated = await this.prisma.scoped.mobileMoneyAccount.update({
+      where: { id },
+      data: { isActive },
+    });
+    await this.audit.log({
+      adminUserId,
+      tenantId: account.tenantId,
+      action: isActive ? 'ENABLE_MOBILE_MONEY_ACCOUNT' : 'DISABLE_MOBILE_MONEY_ACCOUNT',
+      targetType: 'MobileMoneyAccount',
+      targetId: id,
+      payloadDiff: { phoneNumber: account.phoneNumber },
+    });
+    return updated;
+  }
+
   async removeMobileMoneyAccount(id: string, adminUserId?: string): Promise<void> {
     // Passe par le client cloisonné : impossible de supprimer la puce d'un
     // autre exploitant, même en devinant son identifiant.

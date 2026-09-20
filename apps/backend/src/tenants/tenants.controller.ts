@@ -29,6 +29,17 @@ export class TenantsController {
     return this.tenants.addMobileMoneyAccount(dto, user.id);
   }
 
+  /** Retirer une puce du choix propose au client, sans effacer son historique. */
+  @Roles(AdminRole.SUPER_ADMIN, AdminRole.ADMIN)
+  @Patch('me/mobile-money/:id/active')
+  setMobileMoneyActive(
+    @Param('id') id: string,
+    @Body() body: { isActive: boolean },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.tenants.setMobileMoneyActive(id, body.isActive, user.id);
+  }
+
   @Roles(AdminRole.SUPER_ADMIN, AdminRole.ADMIN)
   @Delete('me/mobile-money/:id')
   removeMobileMoney(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {

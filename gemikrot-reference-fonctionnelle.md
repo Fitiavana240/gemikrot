@@ -154,8 +154,8 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | SOC-2 | **Rôles RBAC** : SUPER_ADMIN (plateforme), ADMIN (exploitant), OPERATOR (vend), VIEWER (consulte). Garde globale + `@Roles()` par route ; un ADMIN crée ses OPERATOR/VIEWER | ⭐⭐⭐ | 🟢 | ✅ |
 | SOC-3 | **Inscription libre puis activation** par le super-admin. Connexion refusée avec un message distinct selon que le compte est en attente ou suspendu | ⭐⭐ | 🟢 | ✅ |
 | SOC-4 | **Marque de l'exploitant** : nom du Wi-Fi, logo, domaines, devise (ISO 4217), identifiant public (slug) pour l'adresse de la page client | ⭐⭐ | 🟢 | ✅ |
-| SOC-5 | **Puces Mobile Money** : numéro + nom du titulaire par opérateur, affichés au client. Bascule actif/inactif **absente de l'interface** — une puce retirée ne peut pas être désactivée depuis la console | ⭐⭐⭐ | 🟢 | 🟡 |
-| SOC-6 | **Audit de toutes les opérations** (qui, quand, quoi, depuis quelle IP) : connexions, paiements, tickets, écritures routeur. Écrit ; **jamais consulté** — aucun écran ne l'expose | ⭐⭐⭐ | 🟢 | 🟡 |
+| SOC-5 | **Puces Mobile Money** : numéro + nom du titulaire par opérateur, affichés au client. Bascule actif/inactif depuis la console — désactiver plutôt que supprimer, une puce retirée du commerce gardant ses paiements passés | ⭐⭐⭐ | 🟢 | ✅ |
+| SOC-6 | **Audit de toutes les opérations** (qui, quand, quoi, depuis quelle IP) : connexions, paiements, tickets, écritures routeur. Consultable depuis la console, filtrable, réservé aux rôles d'administration | ⭐⭐⭐ | 🟢 | ✅ |
 | SOC-7 | **Devise par exploitant**, formatage `Intl.NumberFormat`, devise figée sur chaque paiement pour que l'historique reste lisible après changement | ⭐⭐ | 🟢 | ✅ |
 | SOC-8 | **i18n de la console** FR (+ MG/EN). La console est en français en dur ; seule la page client est bilingue | ⭐ | 🟡 | ⬜ |
 | SOC-9 | **Multi-routeurs réel** : sélecteur de routeur dans la console et propagation partout, via un contexte React et un choix mémorisé. Le repli sur « le plus ancien routeur enregistré » a disparu de l'interface | ⭐⭐⭐ | 🟡 | ✅ |
@@ -209,10 +209,10 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | TIC-5 | **Répartition par offre** : combien à vendre, vendus, en cours, expirés | ⭐⭐ | 🟢 | ✅ |
 | TIC-6 | **Tickets historiques** d'avant la bascule, servis par le HotSpot local, dans un onglet à part et jamais modifiés | ⭐⭐ | 🟢 | ✅ |
 | TIC-7 | **Modèle de ticket imprimable** en HTML, avec logo, 30 par A4 et grand format. Refusé — pas nettoyé en silence — s'il contient autre chose que de la mise en forme | ⭐⭐ | 🟡 | ✅ |
-| TIC-8 | **Réconciliation périodique automatique** : aujourd'hui l'expiration ne se relit que sur clic ou à l'ouverture d'un écran. Un ticket expiré la nuit garde son accès par cookie jusqu'au prochain passage de quelqu'un | ⭐⭐⭐ | 🟡 | ⬜ |
+| TIC-8 | **Réconciliation périodique automatique** : travail d'expiration toutes les minutes, réconciliation par routeur toutes les 15 minutes, chacun sous verrou. Un ticket expiré la nuit voit ses cookies purgés sans intervention | ⭐⭐⭐ | 🟡 | ✅ |
 | TIC-9 | **QR code sur le ticket** : le client scanne au lieu de recopier dix caractères | ⭐⭐ | 🟢 | ⬜ |
 | TIC-10 | **Impression thermique** (ESC/POS, 58/80 mm) en plus de l'A4 | ⭐ | 🟡 | ⬜ |
-| TIC-11 | **Suivi de lot** : quel lot, imprimé quand, par qui, combien vendus. Les modèles `VoucherBatch`/`VoucherJob` existent mais aucun écran ne les montre | ⭐⭐ | 🟢 | 🟡 |
+| TIC-11 | **Suivi de lot** : quel lot, généré quand, par qui, combien vendus et combien restants. Décompte rapporté au nombre réellement créé, une génération interrompue en ayant produit moins | ⭐⭐ | 🟢 | ✅ |
 
 ---
 
@@ -238,7 +238,7 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | CLI-2 | **Appareils** rattachés à un client, avec MAC, adresse et type | ⭐⭐ | 🟢 | ✅ |
 | CLI-3 | **Détection du type d'appareil** (nom DHCP, fabricant MAC) pour repérer ceux qui ne peuvent pas afficher un portail captif ; proposition confirmée par un admin, jamais imposée | ⭐⭐ | 🟡 | ✅ |
 | CLI-4 | **Consommation par client** : durée et volume, depuis la comptabilité RADIUS | ⭐⭐ | 🟢 | 🟡 |
-| CLI-5 | **Fiche client unifiée** : un écran qui réunit ses tickets, son abonnement, ses appareils, ses paiements et ses sessions. Les données existent, éclatées sur cinq écrans | ⭐⭐ | 🟡 | ⬜ |
+| CLI-5 | **Fiche client unifiée** : tickets, abonnement, appareils et paiements sur un écran, avec l'accès en cours mis en avant — c'est la question posée au comptoir | ⭐⭐ | 🟡 | ✅ |
 
 ---
 
@@ -253,7 +253,7 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | PAY-5 | **Journal des SMS reçus** : rapprochés, non rapprochés avec le motif, rejoués. Sans lui, un paiement perdu est inexplicable | ⭐⭐⭐ | 🟡 | ⬜ |
 | PAY-6 | **API marchand opérateur** (MVola, Orange Money) en remplacement du SMS quand l'exploitant a un contrat | ⭐ | 🔴 | ⬜ |
 | PAY-7 | **Remboursement et annulation** tracés | ⭐ | 🟡 | 🟡 |
-| PAY-8 | **Masquage de la référence** hors ADMIN : elle sert à retrouver un accès, elle ne doit pas s'afficher en clair à tout rôle | ⭐⭐ | 🟢 | ⬜ |
+| PAY-8 | **Masquage de la référence** hors rôles qui valident : masquée côté serveur, quatre derniers caractères visibles pour rapprocher un bordereau sans pouvoir s'en servir | ⭐⭐ | 🟢 | ✅ |
 
 ---
 
@@ -321,7 +321,7 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | SECU-7 | **Réinitialisation de mot de passe** : un exploitant qui oublie le sien est bloqué, seul le super-admin peut le débloquer en base | ⭐⭐⭐ | 🟡 | ⬜ |
 | SECU-8 | **2FA (TOTP)** pour ADMIN et SUPER_ADMIN | ⭐⭐ | 🟡 | ⬜ |
 | SECU-9 | **Politique de mot de passe** : 6 caractères minimum aujourd'hui, sans contrôle de robustesse | ⭐⭐ | 🟢 | 🟡 |
-| SECU-10 | **Consultation du journal d'audit** depuis la console, filtrable | ⭐⭐ | 🟢 | ⬜ |
+| SECU-10 | **Consultation du journal d'audit** depuis la console, filtrable par action, objet, issue et période. Pagination par curseur : le journal grossit pendant qu'on le feuillette | ⭐⭐ | 🟢 | ✅ |
 | SECU-11 | **Signature du point d'entrée SMS** (HMAC sur le corps brut, horodatage, anti-rejeu). `rawBody` est déjà conservé pour ça | ⭐⭐⭐ | 🟡 | ⬜ |
 | SECU-12 | **Validation de `logoUrl`** : simple chaîne aujourd'hui, une adresse `javascript:` y passe et ce logo entre dans le modèle de ticket | ⭐⭐ | 🟢 | ⬜ |
 | SECU-13 | **Revue de sécurité externe** avant ouverture large de la page publique | ⭐⭐ | 🟡 | ⬜ |
