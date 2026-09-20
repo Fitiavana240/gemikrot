@@ -12,6 +12,7 @@ const SAMPLE = {
   createdAt: '18/09/2026',
   ticketIndex: '1',
   ticketTotal: '30',
+  qrUrl: 'data:image/svg+xml;base64,PHN2Zy8+',
 };
 
 describe('TicketRenderService', () => {

@@ -7,6 +7,7 @@ import {
   TicketRenderService,
   type TicketPlaceholders,
 } from './ticket-render.service.js';
+import { contenuQr, qrDataUri } from './qr.util.js';
 
 /**
  * Gabarit livré d'origine, calibré pour 30 tickets par A4 — une cellule de
@@ -21,8 +22,42 @@ const DEFAULT_TEMPLATE = `<div style="text-align:center">
   <div style="font-size:6pt;color:#94a3b8">valable {{validity}}</div>
 </div>`;
 
-/** Second gabarit, 10 par page : de la place pour des mentions. */
+/**
+ * Second gabarit, 10 par page : de la place pour des mentions — et pour un
+ * QR code, que la cellule de 30 tickets ne peut pas accueillir lisiblement.
+ *
+ * Le QR est à droite du code, pas à sa place : un client dont le téléphone
+ * ne scanne pas doit toujours pouvoir saisir les caractères.
+ */
 const LARGE_TEMPLATE = `<div>
+  <table style="width:100%">
+    <tr>
+      <td><img src="{{logoUrl}}" alt="" /></td>
+      <td align="right"><strong>{{wifiName}}</strong></td>
+    </tr>
+  </table>
+  <table style="width:100%">
+    <tr>
+      <td>
+        <div style="font-family:monospace;font-size:16pt;font-weight:bold;letter-spacing:2px;text-align:center;margin:2mm 0">{{code}}</div>
+        <div style="text-align:center;font-size:9pt">{{planName}} — {{price}}</div>
+        <div style="text-align:center;font-size:8pt;color:#64748b">Valable {{validity}} à partir de la première connexion</div>
+      </td>
+      <td align="right" style="width:18mm"><img src="{{qrUrl}}" alt="" style="width:16mm;height:16mm" /></td>
+    </tr>
+  </table>
+  <div style="font-size:7pt;color:#94a3b8;margin-top:1mm">Scannez le code, ou connectez-vous au Wi-Fi puis saisissez-le. Ticket {{ticketIndex}}/{{ticketTotal}} — {{createdAt}}</div>
+</div>`;
+
+/**
+ * Les gabarits livrés d'une version antérieure, et ce qui les remplace.
+ *
+ * Clé : le HTML exact tel qu'il a été posé à l'époque. Un gabarit trouvé
+ * identique n'a jamais été modifié — le remplacer ne perd donc rien.
+ */
+const ANCIENS_GABARITS: Record<string, string> = {
+  // Version d'avant le QR code : même mise en page, sans l'image.
+  [`<div>
   <table style="width:100%">
     <tr>
       <td><img src="{{logoUrl}}" alt="" /></td>
@@ -33,7 +68,8 @@ const LARGE_TEMPLATE = `<div>
   <div style="text-align:center;font-size:9pt">{{planName}} — {{price}}</div>
   <div style="text-align:center;font-size:8pt;color:#64748b">Valable {{validity}} à partir de la première connexion</div>
   <div style="font-size:7pt;color:#94a3b8;margin-top:1mm">Connectez-vous au Wi-Fi puis saisissez ce code. Ticket {{ticketIndex}}/{{ticketTotal}} — {{createdAt}}</div>
-</div>`;
+</div>`]: LARGE_TEMPLATE,
+};
 
 @Injectable()
 export class TicketTemplatesService {
@@ -52,7 +88,7 @@ export class TicketTemplatesService {
     const existing = await this.prisma.scopedStrict.ticketTemplate.findMany({
       orderBy: { createdAt: 'asc' },
     });
-    if (existing.length > 0) return existing;
+    if (existing.length > 0) return this.alignerGabaritsIntacts(existing);
 
     const tenantId = this.tenantContext.requireTenantId();
     await this.prisma.scopedStrict.ticketTemplate.createMany({
@@ -61,6 +97,34 @@ export class TicketTemplatesService {
         { tenantId, name: 'Grand format, 10 par page', html: LARGE_TEMPLATE, perPage: 10 },
       ],
     });
+    return this.prisma.scopedStrict.ticketTemplate.findMany({ orderBy: { createdAt: 'asc' } });
+  }
+
+  /**
+   * Fait profiter des améliorations du gabarit livré ceux qui ne l'ont jamais
+   * touché — l'ajout du QR code, ici.
+   *
+   * La comparaison est **au caractère près** avec la version précédemment
+   * livrée. C'est délibérément strict : dès qu'un exploitant a modifié son
+   * gabarit, fût-ce d'un espace, il est à lui et rien ne le réécrit. Le seul
+   * cas traité est celui d'un gabarit d'origine resté tel quel, où remplacer
+   * ne perd rien et évite qu'une fonctionnalité reste invisible faute d'avoir
+   * su qu'il fallait l'ajouter à la main.
+   */
+  private async alignerGabaritsIntacts(
+    gabarits: TicketTemplate[],
+  ): Promise<TicketTemplate[]> {
+    const àAligner = gabarits.filter((g) => ANCIENS_GABARITS[g.html] !== undefined);
+    if (àAligner.length === 0) return gabarits;
+
+    await Promise.all(
+      àAligner.map((g) =>
+        this.prisma.scopedStrict.ticketTemplate.update({
+          where: { id: g.id },
+          data: { html: ANCIENS_GABARITS[g.html] },
+        }),
+      ),
+    );
     return this.prisma.scopedStrict.ticketTemplate.findMany({ orderBy: { createdAt: 'asc' } });
   }
 
@@ -108,6 +172,9 @@ export class TicketTemplatesService {
       createdAt: new Date().toLocaleDateString('fr-FR'),
       ticketIndex: String(i + 1),
       ticketTotal: String(perPage),
+      // L'aperçu porte un vrai QR : un carré gris ne dirait pas si le
+      // motif tient dans la cellule, ce qui est justement la question.
+      qrUrl: qrDataUri(`EXEMPLE${String(i + 1).padStart(2, '0')}`),
     }));
     return this.render.renderSheet(html, sample, { perPage, title: 'Aperçu' });
   }
@@ -135,7 +202,7 @@ export class TicketTemplatesService {
 
     const tenant = await this.prisma.tenant.findUniqueOrThrow({
       where: { id: this.tenantContext.requireTenantId() },
-      select: { wifiName: true, logoUrl: true, currency: true },
+      select: { wifiName: true, logoUrl: true, currency: true, domains: true },
     });
     const money = new Intl.NumberFormat('fr-FR', {
       style: 'currency',
@@ -154,6 +221,7 @@ export class TicketTemplatesService {
       createdAt: voucher.createdAt.toLocaleDateString('fr-FR'),
       ticketIndex: String(index + 1),
       ticketTotal: String(vouchers.length),
+      qrUrl: qrDataUri(contenuQr(voucher.code, tenant.domains)),
     }));
 
     return this.render.renderSheet(template.html, placeholders, {

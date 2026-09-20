@@ -13,6 +13,13 @@ export interface TicketPlaceholders {
   createdAt: string;
   ticketIndex: string;
   ticketTotal: string;
+  /**
+   * QR code du ticket, en image prête à poser dans un `<img src>`.
+   *
+   * Il encode l'adresse de connexion du portail quand un domaine est déclaré
+   * — scanner suffit alors à ouvrir la session — et le code seul sinon.
+   */
+  qrUrl: string;
 }
 
 export const PLACEHOLDER_HELP: { name: keyof TicketPlaceholders; description: string }[] = [
@@ -26,6 +33,11 @@ export const PLACEHOLDER_HELP: { name: keyof TicketPlaceholders; description: st
   { name: 'createdAt', description: 'Date de génération du ticket' },
   { name: 'ticketIndex', description: 'Numéro du ticket dans le lot' },
   { name: 'ticketTotal', description: 'Nombre de tickets du lot' },
+  {
+    name: 'qrUrl',
+    description:
+      "QR code du ticket, à placer dans un src d'image. Il connecte le client d'un scan si un domaine de portail est déclaré dans Paramètres ; sinon il porte seulement le code",
+  },
 ];
 
 /**

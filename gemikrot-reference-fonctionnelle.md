@@ -217,7 +217,7 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | TIC-6 | **Tickets historiques** d'avant la bascule, servis par le HotSpot local, dans un onglet à part et jamais modifiés | ⭐⭐ | 🟢 | ✅ |
 | TIC-7 | **Modèle de ticket imprimable** en HTML, avec logo, 30 par A4 et grand format. Refusé — pas nettoyé en silence — s'il contient autre chose que de la mise en forme | ⭐⭐ | 🟡 | ✅ |
 | TIC-8 | **Réconciliation périodique automatique** : travail d'expiration toutes les minutes, réconciliation par routeur toutes les 15 minutes, chacun sous verrou. Un ticket expiré la nuit voit ses cookies purgés sans intervention | ⭐⭐⭐ | 🟡 | ✅ |
-| TIC-9 | **QR code sur le ticket** : le client scanne au lieu de recopier dix caractères | ⭐⭐ | 🟢 | ⬜ |
+| TIC-9 | **QR code sur le ticket** : encode l'adresse de connexion du portail quand un domaine est déclaré — scanner suffit alors à ouvrir la session — et le code seul sinon. En SVG, pour rester net à 16 mm | ⭐⭐ | 🟢 | ✅ |
 | TIC-10 | **Impression thermique** (ESC/POS, 58/80 mm) en plus de l'A4 | ⭐ | 🟡 | ⬜ |
 | TIC-11 | **Suivi de lot** : quel lot, généré quand, par qui, combien vendus et combien restants. Décompte rapporté au nombre réellement créé, une génération interrompue en ayant produit moins | ⭐⭐ | 🟢 | ✅ |
 
@@ -838,6 +838,36 @@ interroge les profils *User Manager*, décourageant une action valide ; et « on
 plus », qui énonçait une règle là où il n'y a qu'un défaut. Le premier message disait aussi
 que les comptes seraient créés « sans validité » — `PlanProvisioningService.reconcile` crée
 le profil manquant à la génération, ce que le code confirme.
+
+### 2026-09-20 — TIC-9 : le QR code du ticket
+
+**Ce qu'il encode compte plus que sa présence.** Un QR portant les dix caractères du code
+obligerait encore à les coller dans le portail. Avec un domaine de portail déclaré —
+`wifitati.net` ici, que le routeur résout déjà vers lui-même — il porte
+`http://<domaine>/login?username=CODE&password=CODE` : le client rejoint le Wi-Fi, scanne, et
+la session s'ouvre sans qu'il ait rien saisi. Sans domaine, retour au code seul, ce qui reste
+mieux que de recopier à la main.
+
+**SVG et non image matricielle.** Une cellule de ticket fait 16 mm : une image de quelques
+dizaines de pixels y sortirait floue, et un QR flou ne se lit pas.
+
+**Une dépendance ajoutée, choisie sans dépendances.** `qrcode-generator` n'entraîne rien.
+C'était la condition : `@nestjs/schedule` avait cassé l'application en étant hissé à la racine
+avec `@nestjs/common` et `core`. Vérifié après installation — NestJS est resté dans le
+workspace, rien à la racine.
+
+**Le gabarit livré rattrape les anciens exploitants.** Ajouter le placeholder ne suffisait
+pas : les gabarits déjà en base n'auraient pas bougé, et la fonctionnalité serait restée
+invisible faute de savoir qu'il fallait l'ajouter à la main. Un gabarit dont le HTML est
+**identique au caractère près** à la version précédemment livrée est remplacé — il n'a jamais
+été touché, remplacer ne perd rien. Dès qu'il a été modifié, fût-ce d'un espace, il est à
+l'exploitant et rien ne le réécrit.
+
+**Éprouvé** : gabarit du parc aligné automatiquement, 4 tickets rendus, 4 QR en SVG
+`viewBox 0 0 39 39` — 37 modules, bien trop pour dix caractères : c'est l'URL. Le QR est
+placé à côté du code et non à sa place, un téléphone qui ne scanne pas devant toujours
+permettre la saisie. Rien sur le gabarit 30/page : 64 × 28 mm ne laissent pas la place d'un
+QR lisible.
 
 ### 2026-09-20 — Le SUPER_ADMIN peut cibler un exploitant
 
