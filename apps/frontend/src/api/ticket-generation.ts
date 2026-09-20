@@ -37,6 +37,15 @@ export interface GenerationResultat {
    * zéro à chaque reconnexion.
    */
   plafondCumule?: number | null;
+  /**
+   * Les planches A4 déposées sur le routeur, avec leur chemin exact.
+   *
+   * Le PDF ne passe pas par cette application : il est écrit là où vit la base
+   * des comptes, sur la clé USB du routeur. Sans ce chemin à l'écran, personne
+   * ne saurait qu'il existe.
+   */
+  planches?: { chemin: string; tickets: number; octets: number }[];
+  planchesEnEchec?: { chemin: string; motif: string }[];
   cible: CibleGeneration;
   profileName: string;
   /** Les codes réellement créés. */

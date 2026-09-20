@@ -7,6 +7,7 @@ import { RouterCredentialsService } from './router-credentials.service.js';
 import { RouterRepairService } from './router-repair.service.js';
 import { PppController } from './ppp.controller.js';
 import { TicketGenerationController } from './ticket-generation.controller.js';
+import { TicketsModule } from '../tickets/tickets.module.js';
 import { TicketGenerationService } from './ticket-generation.service.js';
 import { RouterToolsController } from './router-tools.controller.js';
 import { RouterEnrollmentController } from './router-enrollment.controller.js';
@@ -27,7 +28,7 @@ import { RouterMonitoringController } from './router-monitoring.controller.js';
  */
 @Global()
 @Module({
-  imports: [ConfigModule, AuditModule, DevicesModule],
+  imports: [ConfigModule, AuditModule, DevicesModule, TicketsModule],
   controllers: [
     RoutersController,
     RouterMonitoringController,

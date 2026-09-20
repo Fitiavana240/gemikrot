@@ -245,14 +245,18 @@ export class TicketTemplatesService {
   }
 }
 
+/**
+ * La validité d'une offre, **en heures**.
+ *
+ * Demandé tel quel, et la raison tient : l'exploitant vend des heures, ses
+ * offres s'appellent « 2Heure-500Ar », et un ticket qui annonce « 30 j »
+ * oblige le vendeur à convertir devant le client. Les deux écritures sont
+ * vraies ; une seule est celle du commerce.
+ *
+ * En dessous de l'heure, les minutes : « 0,25 h » n'aide personne.
+ */
 function humanDuration(seconds: number): string {
-  if (seconds >= 86_400) {
-    const days = seconds / 86_400;
-    return `${Number.isInteger(days) ? days : days.toFixed(1)} j`;
-  }
-  if (seconds >= 3600) {
-    const hours = seconds / 3600;
-    return `${Number.isInteger(hours) ? hours : hours.toFixed(1)} h`;
-  }
-  return `${Math.round(seconds / 60)} min`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
+  const heures = seconds / 3600;
+  return `${Number.isInteger(heures) ? heures : heures.toFixed(1).replace('.', ',')} h`;
 }

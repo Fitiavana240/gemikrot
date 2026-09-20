@@ -54,13 +54,22 @@ describe('TicketGenerationService', () => {
   let mikrotik: RouteurDeLabo;
   let audit: { log: ReturnType<typeof vi.fn> };
   let service: TicketGenerationService;
+  let planches: { écrire: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     mikrotik = new RouteurDeLabo();
     audit = { log: vi.fn().mockResolvedValue(undefined) };
+    planches = { écrire: vi.fn(async () => ({ planches: [], échecs: [], emplacement: 'usb1-part1' })) };
     service = new TicketGenerationService(
       { forRouter: async () => mikrotik } as never,
       audit as never,
+      // La planche est écrite sur le routeur, pas ici : ces dépendances sont
+      // réduites au strict nécessaire pour que les tests portent sur la
+      // génération des comptes, qui est leur sujet.
+      { tenant: { findUniqueOrThrow: async () => ({ wifiName: 'Labo', domains: [] }) } } as never,
+      { requireTenantId: () => 'labo' } as never,
+      { findAll: async () => [{ perPage: 30, isDefault: true }] } as never,
+      planches as never,
     );
   });
 

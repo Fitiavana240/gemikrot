@@ -867,6 +867,54 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — La planche A4 écrite sur le routeur
+
+Demandé : un PDF A4 à chaque génération, **enregistré sur le routeur et non dans
+l'application**, parce que c'est là que vit la base des comptes. Sondé avant d'écrire une ligne
+de conception — et chaque réponse du routeur a changé le dessin :
+
+| Sonde | Réponse du hAP en 7.24.4 | Ce que ça impose |
+|---|---|---|
+| `PUT /rest/file` `name`+`contents` | **201**, contenu relu octet pour octet, rangé en `.pdf file` | c'est le canal |
+| `/tool/fetch` | **500** — `not enough permissions (9)` | pas de téléchargement par le routeur |
+| `contents` à 82 800 octets | **400** — `failure: contents too long` | … |
+| dichotomie 32 k → 64 k | limite entre **61 250 et 61 500** | **60 Kio**, une planche par fichier |
+| flash interne | **278 Ko libres sur 16 Mo** | impossible d'y écrire |
+| `usb1-part1` | **975 Mo libres** | c'est là que ça va |
+
+Trois conséquences que ces chiffres dictent, et qu'aucune bibliothèque PDF ne donne :
+
+1. **Le fichier doit être ASCII.** `contents` voyage dans du JSON : un octet au-delà de 127
+   serait réencodé en UTF-8 en route. Donc aucune police ni image embarquée, les accents en
+   **échappement octal** — `(é)` pour « é » — et les flux **compressés puis réencodés en
+   ASCII85**, un couple de filtres que le format porte depuis toujours.
+2. **Le QR est dessiné en vecteur**, pas en image : une image serait binaire. Les modules
+   sombres voisins sont fondus en un rectangle par série — sans cela une planche de trente
+   tickets dépassait encore la limite une fois compressée.
+3. **Une planche par fichier.** Mesuré : 30 tickets avec QR d'URL = 54 456 octets, 60 = 108 540.
+   Le découpage est donc **vérifié sur le PDF produit**, pas seulement sur le nombre par page :
+   un nom d'offre long ou un domaine de portail changent le poids.
+
+Le fichier atterrit dans `usb1-part1/tickets/`, nommé d'après le profil et l'horodatage — deux
+lots du même profil le même jour ne s'écrasent pas. **Un échec d'écriture n'annule jamais les
+tickets** : ils sont déjà sur le routeur quand la planche part, et sept feuilles moins une
+valent mieux que rien.
+
+**Second point demandé : la validité en heures.** Les offres de ce parc s'appellent
+« 2Heure-500Ar » ; un ticket qui annoncerait « 30 j » obligerait le vendeur à convertir devant
+le client. L'écran Offres et le ticket imprimé disent maintenant `2 h`, `24 h`, `168 h`,
+`720 h`. `formatDuration`, qui choisit l'unité la plus naturelle, reste juste ailleurs — un
+temps consommé n'est pas une validité vendue.
+
+**Éprouvé bout en bout** : trois tickets générés sur le vrai routeur, planche écrite en
+`usb1-part1/tickets/2Heure-500Ar-202609201939.pdf`, **6 825 octets sur le routeur pour 6 825
+envoyés**, type `.pdf file`. Comptes et planche supprimés ensuite, 646 comptes intacts.
+
+**Ce qui n'est pas éprouvé** : RouterOS ne rend pas le `contents` d'un fichier de cette taille,
+je n'ai donc pas pu relire ces 6 825 octets pour les comparer. Ce qui l'est : un PDF de
+623 octets a fait l'aller-retour caractère pour caractère, et le même générateur produit des
+planches qui s'ouvrent et s'impriment correctement en local.
+
 ### 2026-09-20 — `*10` dans la colonne « Compte »
 
 Parti pour écrire le miroir du contrôle précédent — les comptes du routeur qu'aucun ticket ne

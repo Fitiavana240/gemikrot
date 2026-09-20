@@ -71,6 +71,31 @@ export function GenerationTickets({
             et le cookie rend cette reconnexion automatique. Le dire ici, c'est
             permettre de s'apercevoir tout de suite qu'un profil n'en porte
             pas — 228 tickets invendus étaient dans ce cas sur ce parc. */}
+        {/* La planche compte autant que les codes : c'est elle qu'on imprime.
+            Elle vit sur le routeur, pas ici — il faut donc dire où. */}
+        {(resultat.planches?.length ?? 0) > 0 && (
+          <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900">
+            <strong>
+              {resultat.planches!.length} planche(s) A4 écrite(s) sur le routeur
+            </strong>{' '}
+            — à récupérer dans WinBox, onglet Files :
+            <ul className="mt-1 font-mono text-xs">
+              {resultat.planches!.map((p) => (
+                <li key={p.chemin}>
+                  {p.chemin} <span className="text-emerald-700">({p.tickets} tickets)</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {(resultat.planchesEnEchec?.length ?? 0) > 0 && (
+          <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+            <strong>Les comptes sont bien créés</strong>, mais la planche n'a pas pu être écrite
+            sur le routeur : {resultat.planchesEnEchec![0].motif}. Les codes ci-dessous restent
+            valables, et l'écran « Imprimer » sait toujours produire la feuille.
+          </div>
+        )}
+
         {resultat.cible === 'hotspot' &&
           (resultat.plafondCumule ? (
             <p className="mb-3 text-sm text-slate-600">

@@ -3,6 +3,10 @@ import { AuditResult } from '@prisma/client';
 import { AuditService } from '../audit/audit.service.js';
 import { generateVoucherCode } from '../vouchers/voucher-code.util.js';
 import { MikrotikClientFactory } from './mikrotik-client.factory.js';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { TenantContextService } from '../tenancy/tenant-context.service.js';
+import { TicketTemplatesService } from '../tickets/ticket-templates.service.js';
+import { PlancheRouteurService, type RapportPlanches } from '../tickets/planche-routeur.service.js';
 
 export type CibleGeneration = 'user-manager' | 'hotspot';
 
@@ -40,6 +44,16 @@ export interface GenerationResultat {
    * information, pas un détail : les tickets partent sans borne cumulée.
    */
   plafondCumule?: number | null;
+  /**
+   * Les planches A4 déposées sur le routeur, avec leur chemin.
+   *
+   * Le PDF ne transite pas par cette application : il est écrit là où vit la
+   * base des comptes, sur la clé USB du routeur. L'exploitant le récupère
+   * depuis WinBox, à côté des comptes qu'il vient de créer.
+   */
+  planches?: { chemin: string; tickets: number; octets: number }[];
+  /** Planches qui n'ont pas pu être écrites, sans que les tickets en pâtissent. */
+  planchesEnEchec?: { chemin: string; motif: string }[];
 }
 
 /**
@@ -63,6 +77,10 @@ export class TicketGenerationService {
   constructor(
     private readonly clients: MikrotikClientFactory,
     private readonly audit: AuditService,
+    private readonly prisma: PrismaService,
+    private readonly tenantContext: TenantContextService,
+    private readonly modèles: TicketTemplatesService,
+    private readonly planches: PlancheRouteurService,
   ) {}
 
   async generer(
@@ -83,9 +101,11 @@ export class TicketGenerationService {
     // qu'il faudrait retrouver et supprimer un par un.
     const profilsHotspot =
       demande.cible === 'hotspot' ? await mikrotik.getHotspotProfiles() : [];
+    const profilsUm =
+      demande.cible === 'user-manager' ? await mikrotik.getUserManagerProfiles() : [];
     const profils =
       demande.cible === 'user-manager'
-        ? (await mikrotik.getUserManagerProfiles()).map((p) => p.name)
+        ? profilsUm.map((p) => p.name)
         : profilsHotspot.map((p) => p.name);
 
     if (!profils.includes(demande.profileName)) {
@@ -122,6 +142,20 @@ export class TicketGenerationService {
         ? await this.genererUserManager(mikrotik, codes, demande)
         : await this.genererHotspot(mikrotik, codes, demande, plafondCumule);
 
+    /**
+     * La validité à imprimer, prise sur le profil du routeur.
+     *
+     * Côté HotSpot c'est la durée de session ; côté User Manager, la validité
+     * du profil — qui est calendaire. Les deux se lisent sur le routeur et non
+     * dans l'application : c'est lui qui les appliquera au client.
+     */
+    const validité =
+      demande.cible === 'hotspot'
+        ? plafondCumule
+        : (profilsUm.find((p) => p.name === demande.profileName)?.validityDurationSeconds ?? null);
+
+    const planches = await this.déposerPlanches(mikrotik, resultat.codes, demande, validité);
+
     await this.audit.log({
       adminUserId,
       routerId,
@@ -135,10 +169,58 @@ export class TicketGenerationService {
         demandes: demande.quantite,
         crees: resultat.codes.length,
         echecs: resultat.echecs.length,
+        planches: planches.planches.map((p) => p.chemin),
       },
     });
 
-    return resultat;
+    return {
+      ...resultat,
+      planches: planches.planches,
+      planchesEnEchec: planches.échecs,
+    };
+  }
+
+  /**
+   * Écrit les planches A4 sur le routeur, sans jamais faire échouer le lot.
+   *
+   * Les comptes sont déjà créés quand on arrive ici : une clé USB absente ou
+   * un disque plein ne doit pas faire croire que la génération a raté. L'échec
+   * est rendu à côté des codes, que l'exploitant garde de toute façon.
+   */
+  private async déposerPlanches(
+    mikrotik: Awaited<ReturnType<MikrotikClientFactory['forRouter']>>,
+    codes: string[],
+    demande: GenerationDemande,
+    validitéSecondes: number | null,
+  ): Promise<RapportPlanches> {
+    const vide: RapportPlanches = { planches: [], échecs: [], emplacement: '' };
+    if (codes.length === 0) return vide;
+
+    try {
+      const tenant = await this.prisma.tenant.findUniqueOrThrow({
+        where: { id: this.tenantContext.requireTenantId() },
+        select: { wifiName: true, domains: true },
+      });
+      const modèles = await this.modèles.findAll();
+      const parPage = modèles.find((m) => m.isDefault)?.perPage ?? modèles[0]?.perPage ?? 30;
+
+      // L'horodatage dans le nom plutôt qu'un numéro : deux lots du même
+      // profil le même jour ne doivent pas s'écraser l'un l'autre sur la clé.
+      const horodatage = new Date().toISOString().slice(0, 16).replace(/[:T-]/g, '');
+      const étiquette = `${demande.profileName}-${horodatage}`.replace(/[^A-Za-z0-9_.-]/g, '_');
+
+      return await this.planches.écrire(mikrotik, {
+        tickets: codes.map((code) => ({ code, offre: demande.profileName, prix: '' })),
+        validitéSecondes,
+        réseau: tenant.wifiName,
+        domaines: tenant.domains,
+        parPage,
+        étiquette,
+      });
+    } catch (error) {
+      this.logger.warn(`Planches non produites : ${String(error)}`);
+      return { ...vide, échecs: [{ chemin: '', motif: error instanceof Error ? error.message : String(error) }] };
+    }
   }
 
   /**

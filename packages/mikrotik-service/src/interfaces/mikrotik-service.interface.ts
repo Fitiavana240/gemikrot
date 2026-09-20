@@ -299,6 +299,15 @@ export interface IMikrotikService {
   // les donnees avant qu'on l'apprenne autrement.
 
   getRouterFiles(): Promise<RouterFileDto[]>;
+  /**
+   * Écrit un fichier **texte** sur le routeur, ASCII et sous 61 440 octets.
+   *
+   * Ces deux bornes ne sont pas des précautions : elles viennent de
+   * `PUT /rest/file`, qui refuse au-delà et dont le champ `contents` voyage
+   * dans du JSON.
+   */
+  writeRouterFile(name: string, contents: string): Promise<void>;
+  deleteRouterFile(id: string): Promise<void>;
   getRouterStorage(): Promise<RouterStorageDto>;
   /** Le diagnostic complet de User Manager : present, allume, et ou. */
   getUserManagerReadiness(): Promise<UserManagerReadinessDto>;

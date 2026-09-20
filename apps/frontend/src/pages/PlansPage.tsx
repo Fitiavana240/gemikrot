@@ -1,9 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { plansApi, type CreatePlanInput } from '../api/plans';
+import { plansApi, validitéEnHeures, type CreatePlanInput } from '../api/plans';
 import { hotspotTabsApi } from '../api/mikrotik-tabs';
 import { ChampDuree } from '../components/Edition';
-import { formatDuration } from '../api/user-manager';
 import { useRouterSelection } from '../routers/RouterContext';
 import { useAuth } from '../auth/AuthContext';
 import { libellé, STATUT_SIMPLE } from '../api/libelles';
@@ -152,9 +151,11 @@ export function PlansPage() {
             <tr key={plan.id}>
               <td className="px-3 py-2">{plan.name}</td>
               <td className="px-3 py-2">{format(plan.price)}</td>
-              {/* « 720 h » pour un forfait au mois : exact, et illisible. La
-                  même fonction qu'ailleurs choisit l'unité qui tombe juste. */}
-              <td className="px-3 py-2">{formatDuration(plan.validityDurationSeconds)}</td>
+              {/* En heures, comme le veut le commerce de ce parc : les offres
+                  s'appellent « 2Heure-500Ar » et le ticket imprimé dit la même
+                  chose. Une colonne en jours obligerait à convertir de tête
+                  entre l'écran et le papier. */}
+              <td className="px-3 py-2">{validitéEnHeures(plan.validityDurationSeconds)}</td>
               <td className="px-3 py-2 font-mono text-xs text-slate-500">
                 {plan.mikrotikProfileName}
                 {nomsProfils && !nomsProfils.has(plan.mikrotikProfileName) && (

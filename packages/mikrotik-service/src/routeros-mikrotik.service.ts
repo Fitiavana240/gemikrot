@@ -59,7 +59,11 @@ import {
 } from './dto/commands.dto';
 import { IpBindingType } from './dto/hotspot.dto';
 import type { UserManagerUserDto } from './dto/user-manager.dto';
-import { MikrotikConflictError, MikrotikNotFoundError } from './errors/mikrotik.errors';
+import {
+  MikrotikConflictError,
+  MikrotikNotFoundError,
+  MikrotikValidationError,
+} from './errors/mikrotik.errors';
 
 /**
  * Corps d'écriture d'une limitation. Les champs sont ceux relevés sur un hAP
@@ -1105,6 +1109,48 @@ export class RouterOSMikrotikService implements IMikrotikService {
   async getRouterFiles() {
     const raw = await this.client.get<any[]>('/file');
     return raw.map(StorageMapper.mapRouterFile);
+  }
+
+  /**
+   * Écrit un fichier texte sur le routeur.
+   *
+   * **Sondé sur le hAP en 7.24.4, pas deviné** :
+   *
+   * - `PUT /rest/file` avec `name` et `contents` crée le fichier et rend 201 ;
+   * - le contenu revient **octet pour octet**, et un `.pdf` est reconnu comme
+   *   tel par le routeur ;
+   * - au-delà de **61 440 octets**, RouterOS répond
+   *   `failure: contents too long` ;
+   * - `/tool/fetch`, qui aurait laissé le routeur télécharger le fichier
+   *   lui-même, est refusé à ce compte d'API — `not enough permissions (9)`.
+   *
+   * Le contenu voyage dans du JSON : il doit donc être **ASCII**, sans quoi
+   * l'encodage UTF-8 changerait les octets en route.
+   */
+  async writeRouterFile(name: string, contents: string): Promise<void> {
+    if (contents.length > 61_440) {
+      throw new MikrotikValidationError(
+        `Fichier trop volumineux pour l'API du routeur : ${contents.length} octets, maximum 61 440`,
+        { name, size: contents.length },
+      );
+    }
+    // Contrôlé caractère par caractère plutôt que par une expression
+    // régulière : la classe de caractères équivalente s'écrit avec des
+    // échappements que le moindre outil de génération transforme en vrais
+    // octets de contrôle dans le fichier source.
+    const horsAscii = [...contents].find((c) => c.charCodeAt(0) > 127);
+    if (horsAscii) {
+      throw new MikrotikValidationError(
+        `Le contenu doit être en ASCII : caractère « ${horsAscii} » refusé`,
+        { name },
+      );
+    }
+    await this.client.put<any>('/file', { name, contents });
+  }
+
+  /** Supprime un fichier du routeur, par son identifiant. */
+  async deleteRouterFile(id: string): Promise<void> {
+    await this.client.delete(`/file/${id}`);
   }
 
   async getRouterStorage() {
