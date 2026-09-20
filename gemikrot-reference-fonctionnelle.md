@@ -102,7 +102,7 @@ Conséquences observées sur le parc réel (hAP ac², 646 comptes HotSpot, Route
 | SOC-9 | Multi-routeurs réel dans la console | ✅ livré |
 | RTR-11 | Disjoncteur par routeur | ✅ livré, éprouvé sur le routeur réel |
 | RTR-12 | File d'opérations différées | ✅ livré |
-| RTR-13 | Enrôlement par tunnel WireGuard | ✅ tunnel monté sur le hAP réel, application joignant le routeur par le tunnel avec le compte créé par le script |
+| RTR-13 | Enrôlement par tunnel WireGuard | ✅ éprouvé de bout en bout : script, rappel réseau, tunnel monté, application passant dedans |
 | RTR-14 | PPPoE | 🟡 comptes, profils, serveurs et bassins livrés et éprouvés ; sessions actives non relevables |
 
 **Vérifié** : 91 tests backend (13 fichiers), `tsc` propre sur les deux espaces, migrations appliquées, application démarrée sans erreur d'injection et les routes d'enrôlement exposées.
@@ -129,6 +129,8 @@ Relevé au passage : le champ de `/ip/service` s'appelle `available-from`, `addr
 **Tunnel monté et éprouvé (2026-09-20)** : poignée de main établie, puis l'application a joint le routeur **par le tunnel**, sur son adresse `10.88.0.2`, avec le compte `gemikrot-api` créé par le script. Identité en 496 ms, disjoncteur `JOIGNABLE`, et lecture complète : 646 comptes HotSpot — l'invariant tient —, 50 cookies, 7 sessions, 10 profils, 3 comptes User Manager, 2 profils PPP.
 
 Cela tranche la dernière question que la documentation ne tranchait pas : **les droits `read,write,api,rest-api,test` suffisent à l'API REST**. Le compte applicatif n'a pas besoin de `sensitive`, ni de `web`, ni de `policy`.
+
+**Dernier maillon franchi** : le routeur a appelé l'application lui-même, par le réseau, avec la ligne exacte du script — `status: finished`, `code: 201`. Enrôlement créé côté serveur. Plus aucune étape de RTR-13 n'a été simulée ou contournée. Les enregistrements de répétition ont ensuite été supprimés, rien n'y étant rattaché.
 
 **Le symptôme à savoir lire** : côté routeur, `tx` qui grimpe, `rx` à zéro et aucune poignée de main signifient que le routeur appelle une adresse où personne ne répond — mauvais point de terminaison, port fermé, ou serveur déplacé. Ce n'est ni une affaire de clés ni de pare-feu du routeur. Éprouvé à la dure pendant la répétition : le bail DHCP du poste avait tourné entre la génération du script et son exécution, et le pair pointait sur une adresse que la machine ne portait plus. La console devra distinguer ce cas de « tunnel monté mais API muette », dont le remède n'a rien à voir.
 
