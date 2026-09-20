@@ -44,6 +44,12 @@ export class VouchersController {
     return this.reconciliation.reconcileTenant(routerId);
   }
 
+  /** Les lots generes et ce qu'ils sont devenus. */
+  @Get('batches')
+  listBatches() {
+    return this.vouchersService.listBatches();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.vouchersService.findOne(id);

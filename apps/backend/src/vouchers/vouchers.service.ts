@@ -341,6 +341,73 @@ export class VouchersService {
    * Le code sert de nom d'utilisateur **et** de mot de passe : le client n'a
    * qu'un seul champ à saisir sur le portail captif.
    */
+
+  /**
+   * Les lots generes, avec ce qu'ils sont devenus.
+   *
+   * Les modeles existaient depuis le debut sans qu'aucun ecran ne les montre :
+   * on generait cent tickets et plus rien ne disait combien avaient ete
+   * vendus, ni quel lot etait deja imprime. La question « ai-je encore des
+   * tickets 1 jour ? » se repondait en comptant a la main.
+   *
+   * Le decompte par statut est fait en base, une requete groupee pour tous
+   * les lots : le faire lot par lot multiplierait les allers-retours par le
+   * nombre de lots affiches.
+   */
+  async listBatches() {
+    const lots = await this.prisma.scoped.voucherBatch.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: {
+        id: true,
+        quantity: true,
+        prefix: true,
+        status: true,
+        createdAt: true,
+        plan: { select: { name: true } },
+        router: { select: { label: true } },
+        createdByAdmin: { select: { email: true } },
+        jobs: {
+          select: { processed: true, total: true, status: true, errorMessage: true },
+          take: 1,
+          orderBy: { id: 'desc' },
+        },
+      },
+    });
+
+    if (lots.length === 0) return [];
+
+    const decomptes = await this.prisma.scoped.voucher.groupBy({
+      by: ['batchId', 'status'],
+      where: { batchId: { in: lots.map((l) => l.id) } },
+      _count: { _all: true },
+    });
+
+    return lots.map((lot) => {
+      const miens = decomptes.filter((d) => d.batchId === lot.id);
+      const par = (statut: string) =>
+        miens.find((d) => d.status === statut)?._count._all ?? 0;
+
+      const disponibles = par('CREATED');
+      const vendus = par('SOLD') + par('ACTIVE') + par('EXPIRED');
+
+      return {
+        ...lot,
+        job: lot.jobs[0] ?? null,
+        jobs: undefined,
+        decompte: {
+          disponibles,
+          vendus,
+          expires: par('EXPIRED'),
+          coupes: par('DISABLED') + par('CANCELLED'),
+          // Rapporte au nombre reellement cree, pas a la quantite demandee :
+          // une generation interrompue en a produit moins.
+          total: miens.reduce((somme, d) => somme + d._count._all, 0),
+        },
+      };
+    });
+  }
+
   private async provisionOnUserManager(
     vouchers: Voucher[],
     plan: { id: string; name: string },
