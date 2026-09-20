@@ -48,7 +48,9 @@ export function App() {
             <Route path="/devices" element={<DevicesPage />} />
             <Route path="/routers" element={<RoutersPage />} />
             <Route path="/hotspot" element={<HotspotPage />} />
+            <Route path="/hotspot/:tab" element={<HotspotPage />} />
             <Route path="/user-manager" element={<UserManagerPage />} />
+            <Route path="/user-manager/:tab" element={<UserManagerPage />} />
             <Route path="/ticket-templates" element={<TicketTemplatesPage />} />
             <Route path="/ticket-print" element={<TicketPrintPage />} />
             <Route path="/audit" element={<AuditPage />} />

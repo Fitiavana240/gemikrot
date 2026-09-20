@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
+import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   formatBytes,
@@ -14,9 +15,19 @@ import { useAuth } from '../auth/AuthContext';
 import { useRouterSelection } from '../routers/RouterContext';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, FormField, Input, Select, Table } from '../components/ui';
+import { Badge, Button, Card, FormField, Input, PageHeader, Select, Table } from '../components/ui';
+import { UmAssignmentsTab, UmSessionsTab } from './RouterTabs';
 
-type Tab = 'profils' | 'limitations' | 'comptes';
+/** Un onglet par table de User Manager. */
+const ONGLETS = {
+  comptes: { titre: 'Comptes', rendu: () => <AccountsTab /> },
+  profils: { titre: 'Profils', rendu: () => <ProfilesTab /> },
+  limitations: { titre: 'Limitations', rendu: () => <LimitationsTab /> },
+  attributions: { titre: 'Attributions', rendu: () => <UmAssignmentsTab /> },
+  sessions: { titre: 'Sessions', rendu: () => <UmSessionsTab /> },
+} as const;
+
+type Tab = keyof typeof ONGLETS;
 
 const SOURCE_LABEL: Record<AccountSource, { label: string; tone: 'green' | 'amber' | 'slate' }> = {
   ABONNEMENT: { label: 'Abonnement', tone: 'green' },
@@ -24,44 +35,21 @@ const SOURCE_LABEL: Record<AccountSource, { label: string; tone: 'green' | 'ambe
   HORS_APPLICATION: { label: 'Hors application', tone: 'slate' },
 };
 
+/**
+ * L'onglet vient de l'adresse : chaque table est atteignable par le menu,
+ * partageable par son lien, et le retour arrière fait ce qu'on attend.
+ */
 export function UserManagerPage() {
-  const [tab, setTab] = useState<Tab>('profils');
+  const { tab } = useParams();
+  const courant: Tab = tab && tab in ONGLETS ? (tab as Tab) : 'comptes';
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold">User Manager</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Ce que porte réellement le routeur. La validité des offres y est calendaire : elle
-          continue de s'appliquer même cette console fermée.
-        </p>
-      </div>
-
-      <div className="flex gap-1 border-b border-slate-200">
-        {(
-          [
-            ['profils', 'Profils'],
-            ['limitations', 'Limitations'],
-            ['comptes', 'Comptes'],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            onClick={() => setTab(value)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-              tab === value
-                ? 'border-sky-600 text-sky-700'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'profils' && <ProfilesTab />}
-      {tab === 'limitations' && <LimitationsTab />}
-      {tab === 'comptes' && <AccountsTab />}
+      <PageHeader
+        title={`User Manager — ${ONGLETS[courant].titre}`}
+        description="Ce que porte réellement le routeur. La validité y est calendaire : elle continue de s'appliquer, même cette console fermée."
+      />
+      {ONGLETS[courant].rendu()}
     </div>
   );
 }

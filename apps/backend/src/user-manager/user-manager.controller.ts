@@ -27,6 +27,18 @@ export class UserManagerController {
 
   // ---------- Profils ----------
 
+  /** Historique des authentifications RADIUS. Filtrable par compte. */
+  @Get('sessions')
+  sessions(@Query('username') username?: string, @Query('routerId') routerId?: string) {
+    return this.userManager.sessions(username, routerId);
+  }
+
+  /** Attributions profil/compte : c'est la que vit l'echeance reelle. */
+  @Get('assignments')
+  assignments(@Query('username') username?: string, @Query('routerId') routerId?: string) {
+    return this.userManager.assignments(username, routerId);
+  }
+
   @Get('profiles')
   listProfiles(@Query('routerId') routerId?: string) {
     return this.userManager.listProfiles(routerId);

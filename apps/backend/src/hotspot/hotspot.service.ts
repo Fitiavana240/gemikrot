@@ -45,6 +45,49 @@ export class HotspotService {
    * `login-by` et la durée de vie des cookies, donc ce qui détermine si une
    * suspension coupe vraiment l'accès.
    */
+  /**
+   * Les comptes HotSpot du routeur.
+   *
+   * Distincts des comptes User Manager : le HotSpot en garde sa propre table,
+   * et c'est elle que WinBox montre sous « Users ». Sur ce parc, les 646
+   * comptes historiques vivent ici — les tickets vendus depuis sont passes a
+   * User Manager, qui seul sait faire expirer une validite calendaire.
+   */
+  async users(routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    return mikrotik.getHotspotUsers();
+  }
+
+  /** Les profils HotSpot : debit et duree de session, pas de validite. */
+  async profiles(routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    return mikrotik.getHotspotProfiles();
+  }
+
+  /**
+   * Les hotes vus par le HotSpot, authentifies ou non.
+   *
+   * Un hote sans session est un appareil present sur le reseau qui n'a pas
+   * ouvert d'acces : c'est la qu'on repere une TV ou une camera incapable
+   * d'afficher un portail captif.
+   */
+  async hosts(routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    return mikrotik.getHotspotHosts();
+  }
+
+  /** Les contournements du portail, par adresse MAC. */
+  async ipBindings(routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    return mikrotik.getIpBindings();
+  }
+
+  /** Les baux DHCP, pour rapprocher une adresse d'un nom d'appareil. */
+  async dhcpLeases(routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    return mikrotik.getDhcpLeases();
+  }
+
   async overview(routerId?: string) {
     const mikrotik = await this.client(routerId);
     const [servers, profiles, cookies, active] = await Promise.all([

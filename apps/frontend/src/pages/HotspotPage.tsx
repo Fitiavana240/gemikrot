@@ -1,54 +1,49 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
+import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatUptime, formatVolume, hotspotApi } from '../api/hotspot';
 import { formatDuration } from '../api/user-manager';
 import { useAuth } from '../auth/AuthContext';
 import { useRouterSelection } from '../routers/RouterContext';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, FormField, Input, Table } from '../components/ui';
+import { Badge, Button, Card, FormField, Input, PageHeader, Table } from '../components/ui';
+import {
+  HotspotHostsTab,
+  HotspotProfilesTab,
+  HotspotUsersTab,
+  IpBindingsTab,
+} from './RouterTabs';
 
-type Tab = 'serveurs' | 'walled-garden' | 'cookies' | 'sessions';
+/** Un onglet par table de `IP / Hotspot` dans WinBox. */
+const ONGLETS = {
+  serveurs: { titre: 'Serveurs', rendu: () => <ServersTab /> },
+  comptes: { titre: 'Comptes HotSpot', rendu: () => <HotspotUsersTab /> },
+  profils: { titre: 'Profils HotSpot', rendu: () => <HotspotProfilesTab /> },
+  hotes: { titre: 'Hôtes', rendu: () => <HotspotHostsTab /> },
+  liaisons: { titre: 'Liaisons IP', rendu: () => <IpBindingsTab /> },
+  'walled-garden': { titre: 'Walled Garden', rendu: () => <WalledGardenTab /> },
+  cookies: { titre: 'Cookies', rendu: () => <CookiesTab /> },
+  sessions: { titre: 'Sessions', rendu: () => <SessionsTab /> },
+} as const;
 
+type Tab = keyof typeof ONGLETS;
+
+/**
+ * L'onglet vient de l'adresse et non d'un état local : chaque table est
+ * atteignable par le menu, partageable par son lien, et le retour arrière du
+ * navigateur fait ce qu'on attend.
+ */
 export function HotspotPage() {
-  const [tab, setTab] = useState<Tab>('serveurs');
+  const { tab } = useParams();
+  const courant: Tab = tab && tab in ONGLETS ? (tab as Tab) : 'serveurs';
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold">HotSpot</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          La configuration réseau telle qu'elle vit sur le routeur. Rien n'en est recopié ici :
-          ces réglages appartiennent au routeur, pas au suivi commercial.
-        </p>
-      </div>
-
-      <div className="flex gap-1 border-b border-slate-200">
-        {(
-          [
-            ['serveurs', 'Serveurs'],
-            ['walled-garden', 'Walled Garden'],
-            ['cookies', 'Cookies'],
-            ['sessions', 'Sessions'],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            onClick={() => setTab(value)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-              tab === value
-                ? 'border-sky-600 text-sky-700'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'serveurs' && <ServersTab />}
-      {tab === 'walled-garden' && <WalledGardenTab />}
-      {tab === 'cookies' && <CookiesTab />}
-      {tab === 'sessions' && <SessionsTab />}
+      <PageHeader
+        title={`HotSpot — ${ONGLETS[courant].titre}`}
+        description="La configuration telle qu'elle vit sur le routeur. Rien n'en est recopié ici : ces réglages lui appartiennent, pas au suivi commercial."
+      />
+      {ONGLETS[courant].rendu()}
     </div>
   );
 }

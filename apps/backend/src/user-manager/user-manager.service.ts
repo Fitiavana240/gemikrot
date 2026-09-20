@@ -98,6 +98,33 @@ export class UserManagerService {
 
   // ==================== Profils ====================
 
+
+  /**
+   * Les sessions User Manager, celles que RADIUS a vues.
+   *
+   * A ne pas confondre avec les sessions HotSpot actives : celles-ci sont
+   * l'historique des authentifications, y compris terminees. Une session
+   * ouverte par cookie n'y figure pas — elle n'est jamais passee par RADIUS,
+   * et c'est exactement ce qui rend la lecture des deux necessaire.
+   */
+  async sessions(username?: string, routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    return mikrotik.getUserManagerSessions(username);
+  }
+
+  /**
+   * Les attributions profil/compte.
+   *
+   * C'est ici que vit l'echeance reelle : `end-time` est calendaire et tenu
+   * par le routeur, qui l'applique meme application arretee. Un compte peut
+   * en porter plusieurs — un rachat en ajoute une, il ne remplace pas la
+   * precedente.
+   */
+  async assignments(username?: string, routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    return mikrotik.getUserManagerUserProfiles(username);
+  }
+
   async listProfiles(routerId?: string): Promise<ProfileView[]> {
     const mikrotik = await this.client(routerId);
     const [profiles, junctions, assignments, plans] = await Promise.all([
