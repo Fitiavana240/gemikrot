@@ -100,14 +100,16 @@ Conséquences observées sur le parc réel (hAP ac², 646 comptes HotSpot, Route
 | Item | Intitulé | État |
 |------|----------|------|
 | SOC-9 | Multi-routeurs réel dans la console | ✅ livré |
-| RTR-11 | Disjoncteur par routeur | ✅ livré |
+| RTR-11 | Disjoncteur par routeur | ✅ livré, éprouvé sur le routeur réel |
 | RTR-12 | File d'opérations différées | ✅ livré |
 | RTR-13 | Enrôlement par tunnel WireGuard | 🟡 côté application livré, script à éprouver sur le matériel |
 | RTR-14 | PPPoE | ⬜ **bloqué** — voir ci-dessous |
 
-**Vérifié** : 91 tests backend (13 fichiers), `tsc` propre sur les deux espaces, migrations appliquées, application démarrée sans erreur d'injection et les routes d'enrôlement exposées. Commits `819a801`, `46792f1`, `1bc69ee`, `98de1a4`, `91ba350`, `0cc6198`.
+**Vérifié** : 91 tests backend (13 fichiers), `tsc` propre sur les deux espaces, migrations appliquées, application démarrée sans erreur d'injection et les routes d'enrôlement exposées.
 
-**Ce qui bloque RTR-14** : `www-ssl` du routeur coupe la connexion avant la poignée de main TLS, alors que le port 443 est ouvert et que le routeur répond au ping. Le port 8729 négocie puis refuse (alerte TLS 40) — la différence montre que ce n'est pas un problème de certificat mais un refus d'adresse. Le poste est passé de `192.168.88.250` à `192.168.88.47` : vérifier `/ip/service/print` dans Winbox, champ `address` de `www-ssl`. Une fois l'accès rétabli, `npm run probe:ppp https://192.168.88.1 <compte> <motdepasse>` relève les charges utiles PPP et le reste s'écrit contre ce relevé.
+**Vérifié contre le routeur réel (2026-09-20)** : appel de bout en bout en 599 ms par la fabrique de clients et le disjoncteur, identité `hAP`, état `JOIGNABLE` avant et après, épinglage TLS effectif. 646 comptes HotSpot, 48 cookies, 6 sessions — l'invariant des 646 comptes tient. RTR-11 n'est donc plus éprouvé seulement contre des simulacres.
+
+**Ce qui bloque RTR-14** (mis à jour le 2026-09-20) : l'accès est rétabli — le service `reverse-proxy` occupait le port 443 aux dépens de `www-ssl`, et le désactiver a suffi. Le relevé a donc tourné, et il montre que **ce parc n'a aucun PPPoE** : zéro compte, zéro session, aucun serveur configuré, et des profils par défaut dont RouterOS omet tous les champs non renseignés. Écrire les correspondances depuis la documentation reviendrait à répéter l'erreur que ce relevé existe pour éviter. `scripts/probe-ppp-sonde.ts` crée le minimum, relève et efface : il reste à l'exécuter, l'écriture sur le routeur ne pouvant pas venir de l'agent. Les sessions actives (`/ppp/active`) resteront de toute façon inconnues tant qu'aucun abonné PPPoE réel ne se sera connecté.
 
 *Livré par Claude Opus 5, le 2026-09-19. La colonne « Implémenté » de ce lot n'a été cochée que pour ce qui compile, passe les tests et démarre ; rien de ce lot n'a été éprouvé contre le routeur réel, et c'est dit à chaque ligne concernée.*
 
