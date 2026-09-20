@@ -153,6 +153,19 @@ function mio(octets: number): string {
 }
 
 /**
+ * Taille lisible quelle que soit l'échelle.
+ *
+ * `mio()` suffit pour parler de mémoire interne, mais écrirait « 0.0 Mio »
+ * pour une base de 20 Kio — ce qui donnerait l'impression qu'elle ne prend
+ * pas de place, alors que c'est justement le sujet.
+ */
+function taille(octets: number): string {
+  if (octets >= 1024 * 1024) return mio(octets);
+  if (octets >= 1024) return `${(octets / 1024).toFixed(octets < 10 * 1024 ? 1 : 0)} Kio`;
+  return `${octets} o`;
+}
+
+/**
  * Le diagnostic complet de User Manager : est-il là, tourne-t-il, et où
  * vivent ses données ?
  *
@@ -163,6 +176,37 @@ function mio(octets: number): string {
  * triés par gravité à la fin. Écrire une règle plus haut ne la rend pas plus
  * urgente.
  */
+/** Le nom que User Manager 5 donne à sa base, partout où elle se trouve. */
+const NOM_BASE = 'um5.sqlite';
+
+/**
+ * Les bases User Manager qui traînent **ailleurs** que là où le routeur lit.
+ *
+ * Déplacer la base ne supprime pas l'ancienne : elle reste à prendre de la
+ * place, et sur un flash de 16 Mio cela se remarque. Pire, elle ressemble à
+ * la vraie — quelqu'un qui cherche les tickets un jour de panne risque de
+ * restaurer celle-là, figée au jour du déplacement.
+ */
+function basesOrphelines(
+  fichiers: RouterFileDto[],
+  cheminActif: string | null,
+): { dossier: string; octets: number }[] {
+  const racineActive = cheminActif ? cheminActif.replace(/^\/+/, '').replace(/\/+$/, '') : null;
+
+  const dossiers = new Map<string, number>();
+  for (const fichier of fichiers) {
+    const nom = fichier.name.replace(/^\/+/, '');
+    if (!nom.split('/').pop()?.startsWith(NOM_BASE)) continue;
+
+    const dossier = nom.slice(0, nom.lastIndexOf('/'));
+    if (racineActive !== null && dossier === racineActive) continue;
+    // Les fichiers compagnons (`-wal`, `-shm`) comptent : ils partent avec.
+    dossiers.set(dossier, (dossiers.get(dossier) ?? 0) + (fichier.sizeBytes ?? 0));
+  }
+
+  return [...dossiers.entries()].map(([dossier, octets]) => ({ dossier, octets }));
+}
+
 export function evaluerUserManager(entree: {
   packagesRaw: any[];
   /** `/user-manager` ; `null` si l'appel a échoué, ce qui arrive sans le paquet. */
@@ -171,6 +215,8 @@ export function evaluerUserManager(entree: {
   databaseRaw: any | null;
   resource: any;
   disksRaw: any[];
+  /** `/file`. Sert à repérer les bases laissées derrière un déplacement. */
+  filesRaw?: any[];
 }): UserManagerReadinessDto {
   const packages = entree.packagesRaw.map(mapRouterPackage);
   const disks = entree.disksRaw.map(mapRouterDisk);
@@ -393,6 +439,28 @@ export function evaluerUserManager(entree: {
         `${mio(database.sizeBytes)}). Un support plein empêche User Manager ` +
         `d'écrire : les sessions ne sont plus comptées.`,
       commande: null,
+      reparation: null,
+    });
+  }
+
+  for (const orpheline of basesOrphelines(
+    (entree.filesRaw ?? []).map(mapRouterFile),
+    chemin,
+  )) {
+    constats.push({
+      code: 'base-orpheline',
+      niveau: 'avertissement',
+      titre: 'Une ancienne base User Manager subsiste',
+      detail:
+        `« ${orpheline.dossier} » contient une base User Manager que le routeur ` +
+        `ne lit plus — la base active est ${chemin ? `« ${chemin} »` : 'ailleurs'}. ` +
+        `Elle occupe ${taille(orpheline.octets)}, et sur une mémoire interne de cette ` +
+        `taille cela compte. Plus gênant : elle ressemble à la vraie. Un jour de ` +
+        `panne, restaurer celle-là rendrait l'état des tickets figé au jour du ` +
+        `déplacement. Vérifiez sa date avant de l'effacer, puis sauvegardez.`,
+      commande: `/file/remove ${orpheline.dossier}`,
+      // Effacer une base, même morte, ne se fait pas d'un bouton : sa date
+      // est le seul élément qui distingue une relique d'un secours.
       reparation: null,
     });
   }

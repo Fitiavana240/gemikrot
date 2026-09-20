@@ -390,4 +390,60 @@ describe('RouterOSMikrotikService', () => {
       expect(client.delete).not.toHaveBeenCalled();
     });
   });
+
+  /**
+   * Les écritures sur les menus **singleton**, éprouvées sur le hAP réel le
+   * 2026-09-20 — et d'abord de la mauvaise façon.
+   *
+   * `PATCH /rest/user-manager` rend **500 Internal Server Error** en 7.24.4.
+   * Le PATCH vaut pour les collections (`/user-manager/user/<id>`), où il y a
+   * un élément à viser ; un menu sans éléments veut la commande `set` en
+   * POST. La forme se transpose mal, et rien dans la documentation ne le dit
+   * assez fort pour qu'on s'en méfie.
+   */
+  describe('écritures sur les menus singleton', () => {
+    it('pose les réglages User Manager par la commande `set`, et non par PATCH', async () => {
+      client.post.mockResolvedValueOnce({});
+
+      await service.setUserManagerSettings({ enabled: true, useProfiles: true });
+
+      expect(client.post).toHaveBeenCalledWith('/user-manager/set', {
+        enabled: 'yes',
+        'use-profiles': 'yes',
+      });
+      // Le piège d'origine : un PATCH ici répond 500.
+      expect(client.patch).not.toHaveBeenCalled();
+    });
+
+    it("n'écrit que ce qu'on lui demande", async () => {
+      client.post.mockResolvedValueOnce({});
+
+      await service.setUserManagerSettings({ useProfiles: false });
+
+      // Renvoyer `enabled` au passage éteindrait le service de quelqu'un qui
+      // voulait seulement toucher aux profils.
+      expect(client.post).toHaveBeenCalledWith('/user-manager/set', {
+        'use-profiles': 'no',
+      });
+    });
+
+    it('vise un paquet par son identifiant, forme confirmée sur le routeur', async () => {
+      client.get.mockResolvedValueOnce([
+        { '.id': '*3', name: 'user-manager', version: '7.24.4' },
+        { '.id': '*1', name: 'routeros', version: '7.24.4' },
+      ]);
+      client.post.mockResolvedValueOnce({});
+
+      await service.unschedulePackage('user-manager');
+
+      expect(client.post).toHaveBeenCalledWith('/system/package/unschedule', { '.id': '*3' });
+    });
+
+    it('refuse de programmer un paquet absent plutôt que de deviner', async () => {
+      client.get.mockResolvedValueOnce([{ '.id': '*1', name: 'routeros', version: '7.24.4' }]);
+
+      await expect(service.enablePackage('user-manager')).rejects.toThrow(MikrotikNotFoundError);
+      expect(client.post).not.toHaveBeenCalled();
+    });
+  });
 });

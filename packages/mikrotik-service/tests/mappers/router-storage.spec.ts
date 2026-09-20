@@ -335,6 +335,46 @@ describe('evaluerUserManager', () => {
     expect(constat?.detail).toContain('redémarrage');
   });
 
+  it('repère une base laissée derrière un déplacement', () => {
+    // Relevé sur le hAP : la base active est sur la clé, et une copie
+    // d'avant le déplacement dort encore sur le flash — 20 Kio sur les
+    // 276 Kio qui restent.
+    const etat = evaluerUserManager({
+      ...PARC,
+      filesRaw: [
+        { '.id': '*1', name: 'usb1-part1/user-manager/um5.sqlite', size: '61440', type: '.sqlite file' },
+        { '.id': '*2', name: 'usb1-part1/user-manager/um5.sqlite-wal', size: '111272', type: '.sqlite-wal file' },
+        { '.id': '*3', name: 'flash/user-manager5/um5.sqlite', size: '20480', type: '.sqlite file' },
+      ],
+    });
+
+    const constat = etat.constats.find((c) => c.code === 'base-orpheline');
+    expect(constat?.niveau).toBe('avertissement');
+    expect(constat?.detail).toContain('flash/user-manager5');
+    // En Kio, pas « 0.0 Mio » : une taille arrondie à zéro dirait le contraire
+    // de ce que le constat veut faire remarquer.
+    expect(constat?.detail).toContain('20 Kio');
+    expect(constat?.detail).not.toContain('0.0 Mio');
+    // Effacer une base ne se fait pas d'un bouton, même morte.
+    expect(constat?.reparation).toBeNull();
+    expect(constat?.commande).toBe('/file/remove flash/user-manager5');
+  });
+
+  it("ne prend pas la base active pour une orpheline", () => {
+    // Le chemin actif porte une barre de tête (`/usb1-part1/...`) et les
+    // fichiers n'en ont pas. Sans normalisation, la vraie base serait
+    // signalée comme relique — et l'exploitant inviterait à l'effacer.
+    const etat = evaluerUserManager({
+      ...PARC,
+      filesRaw: [
+        { '.id': '*1', name: 'usb1-part1/user-manager/um5.sqlite', size: '61440', type: '.sqlite file' },
+        { '.id': '*2', name: 'usb1-part1/user-manager/um5.sqlite-wal', size: '111272', type: '.sqlite-wal file' },
+      ],
+    });
+
+    expect(codes(etat)).not.toContain('base-orpheline');
+  });
+
   it("cesse de proposer l'activation une fois qu'elle est programmée", () => {
     // Le piège : `disabled` reste vrai jusqu'au redémarrage. Sans regarder
     // `scheduled`, on reproposerait indéfiniment une réparation déjà faite à

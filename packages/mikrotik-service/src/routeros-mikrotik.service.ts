@@ -1061,14 +1061,15 @@ export class RouterOSMikrotikService implements IMikrotikService {
   /**
    * Allume ou éteint le service User Manager, et ses profils.
    *
-   * `/user-manager` est un menu singleton : on écrit sur le chemin lui-même,
-   * sans identifiant — contrairement à `/user-manager/user/<id>`.
+   * `/user-manager` est un menu **singleton** : il n'a pas d'éléments, donc
+   * pas d'identifiant à viser. RouterOS veut alors la commande `set` en POST
+   * — `POST /rest/user-manager/set` — et non un PATCH sur le chemin.
    *
-   * **Forme non éprouvée contre le matériel.** L'écriture depuis ce poste est
-   * refusée par l'outillage, et cinq correspondances de ce projet écrites sur
-   * la seule documentation se sont révélées fausses. L'appelant ne doit donc
-   * pas croire l'absence d'erreur : `RouterRepairService` relit l'état après
-   * coup et ne déclare le succès que si le routeur a réellement changé.
+   * Éprouvé de la mauvaise façon d'abord : `PATCH /rest/user-manager` rend
+   * **500 Internal Server Error** sur le hAP en 7.24.4. Relevé le
+   * 2026-09-20, en cliquant le bouton de la console sur un vrai routeur.
+   * C'est le PATCH des collections (`/user-manager/user/<id>`) qui avait
+   * induit en erreur : la forme ne se transpose pas aux singletons.
    */
   async setUserManagerSettings(payload: { enabled?: boolean; useProfiles?: boolean }) {
     const corps: Record<string, string> = {};
@@ -1077,7 +1078,7 @@ export class RouterOSMikrotikService implements IMikrotikService {
       corps['use-profiles'] = payload.useProfiles ? 'yes' : 'no';
     }
     this.logger.info('Écriture des réglages User Manager', { corps });
-    await this.client.patch<any>('/user-manager', corps);
+    await this.client.post<any>('/user-manager/set', corps);
   }
 
   /**
@@ -1124,10 +1125,13 @@ export class RouterOSMikrotikService implements IMikrotikService {
    * seules. Un routeur injoignable doit continuer a lever.
    */
   async getUserManagerReadiness() {
-    const [resource, disks, packages] = await Promise.all([
+    const [resource, disks, packages, files] = await Promise.all([
       this.client.get<any>('/system/resource'),
       this.client.get<any[]>('/disk'),
       this.client.get<any[]>('/system/package'),
+      // Sert à repérer une base laissée derrière un déplacement : elle
+      // ressemble à la vraie et prend la place qui manque.
+      this.client.get<any[]>('/file'),
     ]);
 
     const absorber = async <T>(chemin: string): Promise<T | null> => {
@@ -1148,6 +1152,7 @@ export class RouterOSMikrotikService implements IMikrotikService {
       databaseRaw: Array.isArray(databaseRaw) ? databaseRaw[0] : databaseRaw,
       resource: Array.isArray(resource) ? resource[0] : resource,
       disksRaw: disks,
+      filesRaw: files,
     });
   }
 

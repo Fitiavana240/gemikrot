@@ -180,6 +180,20 @@ export interface RouterDisk {
   disabled: boolean;
 }
 
+export interface RouterFile {
+  id: string;
+  /** Chemin complet, racine comprise : `flash/hotspot/login.html`. */
+  name: string;
+  /** Racine du chemin : `flash`, `usb1-part1`, `um5files`… */
+  root: string;
+  /** `directory`, `disk`, `backup`, `.html file`… tel que RouterOS l'écrit. */
+  type: string;
+  /** Absente pour un dossier. */
+  sizeBytes: number | null;
+  /** Heure locale du routeur, sans fuseau — non convertie. */
+  lastModified: string | null;
+}
+
 export interface RouterPackage {
   id: string;
   name: string;
@@ -280,6 +294,7 @@ export const routerToolsApi = {
   dnsStatic: (routerId: string) => api.get<DnsStaticEntry[]>(`${base(routerId)}/dns/static`),
   routes: (routerId: string) => api.get<Route[]>(`${base(routerId)}/routes`),
   storage: (routerId: string) => api.get<RouterStorage>(`${base(routerId)}/storage`),
+  files: (routerId: string) => api.get<RouterFile[]>(`${base(routerId)}/files`),
   userManagerReadiness: (routerId: string) =>
     api.get<UserManagerReadiness>(`${base(routerId)}/user-manager-readiness`),
   /**

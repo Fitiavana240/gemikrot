@@ -182,7 +182,8 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | RTR-14 | **PPPoE** en plus du HotSpot : comptes, profils, serveurs et bassins livrés, correspondances écrites contre un relevé réel (`scripts/probe-ppp-sonde.ts`). **Les sessions actives restent non vérifiées** : le parc n'a aucun PPPoE en service, les noms de champs de `/ppp/active` sont donc pris de la documentation seule — et le test le dit | ⭐⭐ | 🔴 | 🟡 |
 | RTR-15 | **Menus IP en lecture** : files simples (le débit réellement alloué, client par client), journal du routeur, interfaces avec leurs coupures de lien, services d'administration, DDNS, ARP, serveurs DHCP, **pare-feu filtrage et NAT dans leur ordre d'évaluation**, DNS et entrées statiques, table de routage. **Lecture seule, par décision** : la console montre, WinBox modifie | ⭐⭐ | 🟡 | ✅ |
 | RTR-16 | **Stockage et préparation de User Manager** : mémoire interne, clés USB et leur état de montage, paquets installés, occupation par support, et où vit la base User Manager. Rend un diagnostic ordonné par gravité, avec la commande exacte quand il en existe une — dont la réponse à « pourquoi l'onglet User Manager n'apparaît-il pas dans WinBox » | ⭐⭐⭐ | 🟡 | ✅ |
-| RTR-17 | **Réparations depuis la console**, sans WinBox : allumer le service, activer les profils, programmer l'activation du paquet, annuler une désactivation programmée. **Liste blanche nommée, pas un passe-plat de commandes** — une route exécutant une commande RouterOS arbitraire donnerait à tout ADMIN une exécution de code à distance sur chaque routeur du parc. Le serveur relit l'état après avoir écrit et ne déclare le succès que si le routeur a réellement changé. Redémarrage, déplacement de la base et effacement de fichiers restent affichés comme commandes à coller, jamais comme boutons. Éprouvé sur le hAP réel : constat levé, bouton cliqué, routeur réellement changé, audit écrit, 646 comptes intacts. Reste à éprouver `PATCH /rest/user-manager` | ⭐⭐⭐ | 🟡 | 🟡 |
+| RTR-17 | **Réparations depuis la console**, sans WinBox : allumer le service, activer les profils, programmer l'activation du paquet, annuler une désactivation programmée. **Liste blanche nommée, pas un passe-plat de commandes** — une route exécutant une commande RouterOS arbitraire donnerait à tout ADMIN une exécution de code à distance sur chaque routeur du parc. Le serveur relit l'état après avoir écrit et ne déclare le succès que si le routeur a réellement changé. Redémarrage, déplacement de la base et effacement de fichiers restent affichés comme commandes à coller, jamais comme boutons. **Les trois formes d'écriture éprouvées sur le hAP réel** : constat levé, bouton cliqué, routeur réellement changé, audit écrit, 646 comptes intacts à chaque mesure | ⭐⭐⭐ | 🟡 | ✅ |
+| RTR-18 | **Écran Fichiers** : le contenu du routeur trié par taille décroissante, filtrable par support — la seule question qu'on se pose quand 16 Mio de mémoire interne sont pleins à 98 %. Détecte les bases User Manager laissées derrière un déplacement, qui prennent la place *et* ressemblent à la vraie | ⭐⭐ | 🟢 | ✅ |
 
 ---
 
@@ -650,16 +651,29 @@ invisibles en test, et la seconde aurait envoyé le parc dans la mauvaise direct
 - L'audit porte la ligne `REPAIR_USER_MANAGER` / `SUCCESS`, attribuée au compte qui a cliqué.
 - L'invariant du parc tient : **646 comptes HotSpot** avant et après.
 
-**Ce qui reste non éprouvé** : `PATCH /rest/user-manager` (les réparations « allumer le
-service » et « activer les profils »), faute d'un moyen de l'exercer sans toucher un
-réglage qui sert des clients. `POST /rest/system/package/enable` partage la forme exacte
-de `unschedule`, vérifiée. Si une forme est mauvaise, la console le dira — c'est
-précisément ce que la relecture d'état garantit — au lieu d'afficher un succès trompeur.
+**Le second essai a trouvé l'erreur qui restait.** L'exploitant a posé `use-profiles=no`,
+le constat s'est levé, le clic a rendu **500 Internal Server Error** :
+`PATCH /rest/user-manager` **n'existe pas**. Le PATCH vaut pour les collections, où il y a
+un élément à viser ; un menu singleton veut la commande `set` en POST —
+`POST /rest/user-manager/set`. La forme ne se transpose pas, et rien ne le signale.
 
-- **Pour clore RTR-17** : éprouver `PATCH /rest/user-manager`. Le geste sans risque est de
-  poser `use-profiles=no` depuis WinBox, de cliquer sur le bouton, puis de constater le
-  retour à `yes` — quelques secondes pendant lesquelles User Manager authentifie toujours,
-  sans appliquer les limites de profil.
+Corrigé puis rejoué : « Activer les profils : fait. », et une lecture indépendante du
+routeur confirme `use-profiles: true`. **Les trois formes d'écriture sont désormais
+éprouvées sur le matériel** — `POST <menu>/set` pour les singletons, `POST <menu>/<commande>`
+avec `.id` pour les paquets. 646 comptes HotSpot à chaque mesure.
+
+C'est la sixième correspondance de ce projet écrite de bonne foi sur la documentation et
+démentie par le matériel. La relecture d'état a fait son travail : la console a montré
+l'échec au lieu d'un succès de façade.
+
+- **Écran Fichiers**, ajouté dans la foulée : le contenu du routeur trié par taille
+  décroissante, filtrable par support. L'endpoint existait depuis la veille sans être
+  affiché. Il a trouvé en s'ouvrant ce qu'aucune lecture ciblée n'avait vu —
+  `flash/user-manager5/um5.sqlite`, une base d'avant le déplacement vers la clé, 20 Kio sur
+  les 276 Kio libres. Devenu un constat à part entière (`base-orpheline`) : elle prend la
+  place qui manque, et surtout elle **ressemble à la vraie** — la restaurer un jour de panne
+  figerait les tickets au jour du déplacement. Sans bouton : seule sa date distingue une
+  relique d'un secours.
 
 ---
 

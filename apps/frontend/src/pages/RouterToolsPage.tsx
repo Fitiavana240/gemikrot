@@ -984,6 +984,115 @@ function StockageTab() {
   );
 }
 
+/**
+ * Les fichiers du routeur, par support.
+ *
+ * Trié par taille décroissante et non par nom, parce que la question qu'on
+ * se pose en ouvrant cet écran est toujours la même : **qu'est-ce qui prend
+ * la place ?** Un tri alphabétique obligerait à parcourir cinquante lignes
+ * pour trouver les trois qui comptent.
+ */
+function FichiersTab() {
+  const { currentId } = useRouterSelection();
+  const [racine, setRacine] = useState<string | null>(null);
+
+  const requête = useQuery({
+    queryKey: ['tools-files', currentId],
+    queryFn: () => routerToolsApi.files(currentId!),
+    enabled: Boolean(currentId),
+  });
+
+  const fichiers = requête.data ?? [];
+
+  // Les dossiers et les disques ne pèsent rien et noieraient le classement ;
+  // ils restent comptés dans le total de leur racine, où ils ont un sens.
+  const réels = fichiers.filter((f) => f.type !== 'directory' && f.type !== 'disk');
+
+  const racines = [...new Set(fichiers.map((f) => f.root))].map((nom) => ({
+    nom,
+    octets: réels.filter((f) => f.root === nom).reduce((t, f) => t + (f.sizeBytes ?? 0), 0),
+    nombre: réels.filter((f) => f.root === nom).length,
+  }));
+
+  const visibles = (racine ? réels.filter((f) => f.root === racine) : réels)
+    .slice()
+    .sort((a, b) => (b.sizeBytes ?? 0) - (a.sizeBytes ?? 0));
+
+  return (
+    <div className="space-y-3">
+      <p className="max-w-3xl text-sm text-slate-600">
+        Ce qui occupe la place, du plus lourd au plus léger. Sur un routeur dont la mémoire
+        interne fait 16 Mio, c'est l'écran qui dit quoi supprimer avant une sauvegarde ou une
+        mise à jour. Les dossiers ne sont pas listés : ils ne pèsent rien par eux-mêmes.
+      </p>
+
+      {racines.length > 0 && (
+        <div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1 text-sm">
+          <button
+            type="button"
+            onClick={() => setRacine(null)}
+            className={`rounded-md px-3 py-1.5 font-medium transition ${
+              racine === null
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Tous ({réels.length})
+          </button>
+          {racines.map((r) => (
+            <button
+              key={r.nom}
+              type="button"
+              onClick={() => setRacine(r.nom)}
+              className={`rounded-md px-3 py-1.5 font-medium transition ${
+                racine === r.nom
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span className="font-mono text-xs">{r.nom}</span>
+              <span className="ml-1.5 text-xs text-slate-500">{formatOctets(r.octets)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <Liste
+        requête={{ ...requête, data: visibles }}
+        colonnes={['Fichier', 'Type', 'Taille', 'Modifié']}
+        vide={{
+          titre: 'Aucun fichier',
+          aide:
+            racine === null
+              ? "Le routeur ne rapporte aucun fichier — c'est inhabituel."
+              : `Rien sur « ${racine} ».`,
+        }}
+        ligne={(f) => (
+          <tr key={f.id}>
+            <td className="max-w-[22rem] truncate px-3 py-2 font-mono text-xs" title={f.name}>
+              {f.name}
+            </td>
+            <td className="px-3 py-2 text-xs text-slate-500">
+              {/* RouterOS écrit « .sqlite file » : le point et le mot « file »
+                  n'apprennent rien, l'extension seule se lit mieux. */}
+              {f.type.replace(/^\./, '').replace(/ file$/, '')}
+            </td>
+            <td className="px-3 py-2 tabular-nums">
+              {f.sizeBytes != null ? formatOctets(f.sizeBytes) : '—'}
+            </td>
+            <td className="px-3 py-2 text-xs text-slate-500">{f.lastModified ?? '—'}</td>
+          </tr>
+        )}
+      />
+
+      <p className="text-xs text-slate-500">
+        Lecture seule. Supprimer un fichier depuis la console supposerait de savoir à quoi
+        chacun sert — les pages du portail captif et la base User Manager vivent ici.
+      </p>
+    </div>
+  );
+}
+
 const ONGLETS = {
   debit: { titre: 'Débit par client', rendu: () => <QueuesTab /> },
   liens: { titre: 'Interfaces', rendu: () => <InterfacesTab /> },
@@ -994,6 +1103,7 @@ const ONGLETS = {
   dns: { titre: 'DNS', rendu: () => <DnsTab /> },
   routes: { titre: 'Routes', rendu: () => <RoutesTab /> },
   stockage: { titre: 'Stockage et User Manager', rendu: () => <StockageTab /> },
+  fichiers: { titre: 'Fichiers', rendu: () => <FichiersTab /> },
 } as const;
 
 type Tab = keyof typeof ONGLETS;
