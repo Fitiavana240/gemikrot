@@ -1,6 +1,8 @@
 import {
   evaluerUserManager,
+  lireProgrammation,
   mapRouterDisk,
+  mapRouterPackage,
   mapRouterStorage,
   racineDuChemin,
 } from '../../src/mappers/router-storage.mapper';
@@ -56,6 +58,24 @@ const PAQUETS = [
   { '.id': '*2', available: 'false', disabled: 'false', name: 'wireless', size: '1876113', version: '7.24.4' },
   { '.id': '*3', available: 'false', disabled: 'false', name: 'user-manager', size: '344209', version: '7.24.4' },
 ];
+
+/**
+ * Un paquet **disponible mais jamais installé**, relevé tel quel.
+ *
+ * `/system/package` mélange deux populations, et le même routeur a rendu 3
+ * lignes à une lecture puis 19 à la suivante. Le marqueur fiable est la
+ * version vide : `disabled` vaut `true` ici aussi, et s'y fier ferait passer
+ * un paquet jamais installé pour un paquet simplement éteint.
+ */
+const PAQUET_DISPONIBLE = {
+  '.id': '*4',
+  available: 'true',
+  disabled: 'true',
+  name: 'calea',
+  scheduled: '',
+  size: '20625',
+  version: '',
+};
 
 const SERVICE = {
   'accounting-port': '1813',
@@ -114,12 +134,50 @@ describe('mapRouterDisk', () => {
     expect(partition.mountPoint).toBe('usb1-part1');
   });
 
+  it('sépare les deux populations de `/system/package`', () => {
+    const installé = mapRouterPackage(PAQUETS[2]);
+    const disponible = mapRouterPackage(PAQUET_DISPONIBLE);
+
+    expect(installé.installed).toBe(true);
+    expect(installé.available).toBe(false);
+
+    // `disabled` vaut vrai pour les deux : c'est la version qui tranche.
+    expect(disponible.disabled).toBe(true);
+    expect(disponible.installed).toBe(false);
+    expect(disponible.available).toBe(true);
+  });
+
   it("rend null l'espace libre, que RouterOS 7.24 ne donne pas", () => {
     // Constat de terrain : `/disk` n'a aucun champ `free`, même pour une
     // partition ext4 montée. Le chiffre fiable vient de
     // `/user-manager/database`. Le test le fige pour qu'on ne se remette pas
     // à l'attendre d'ici.
     expect(mapRouterDisk(DISQUE_PARTITION).freeBytes).toBeNull();
+  });
+});
+
+describe('lireProgrammation', () => {
+  it("lit la phrase d'affichage de RouterOS, pas un code", () => {
+    // Relevé sur le hAP : `/system/package/print` montre « scheduled for
+    // disable ». Une égalité stricte sur 'disable' ne correspond jamais — le
+    // constat ne se lève pas, et la vérification d'une réparation conclut au
+    // succès sans que rien n'ait bougé.
+    expect(lireProgrammation('scheduled for disable')).toBe('disable');
+    expect(lireProgrammation('scheduled for enable')).toBe('enable');
+  });
+
+  it('accepte aussi la forme courte, au cas où une version la rendrait', () => {
+    expect(lireProgrammation('disable')).toBe('disable');
+    expect(lireProgrammation('enable')).toBe('enable');
+  });
+
+  it('ne confond pas les deux : « disable » ne contient pas « enable »', () => {
+    expect(lireProgrammation('scheduled for disable')).not.toBe('enable');
+  });
+
+  it('rend null quand rien n’est programmé', () => {
+    expect(lireProgrammation('')).toBeNull();
+    expect(lireProgrammation(undefined)).toBeNull();
   });
 });
 
@@ -284,7 +342,9 @@ describe('evaluerUserManager', () => {
     const etat = evaluerUserManager({
       ...PARC,
       packagesRaw: PAQUETS.map((p) =>
-        p.name === 'user-manager' ? { ...p, disabled: 'true', scheduled: 'enable' } : p,
+        p.name === 'user-manager'
+          ? { ...p, disabled: 'true', scheduled: 'scheduled for enable' }
+          : p,
       ),
     });
 
@@ -296,13 +356,43 @@ describe('evaluerUserManager', () => {
     expect(constat?.reparation).toBeNull();
   });
 
+  it("ne prend pas un paquet disponible pour un paquet installé", () => {
+    // Le cas d'un routeur neuf. Avant correction, le diagnostic disait
+    // « installé mais désactivé » et prescrivait de téléverser un `.npk` —
+    // l'inverse du bon geste, puisque le paquet est déjà dans l'image.
+    const etat = evaluerUserManager({
+      ...PARC,
+      packagesRaw: [
+        ...PAQUETS.filter((p) => p.name !== 'user-manager'),
+        { ...PAQUET_DISPONIBLE, name: 'user-manager' },
+      ],
+      serviceRaw: null,
+      databaseRaw: null,
+    });
+
+    expect(etat.packageInstalled).toBe(false);
+    expect(etat.packageAvailable).toBe(true);
+    expect(etat.packageEnabled).toBe(false);
+
+    const constat = etat.constats.find((c) => c.code === 'paquet-disponible-non-installe');
+    expect(constat?.niveau).toBe('bloquant');
+    expect(constat?.reparation).toBe('activer-paquet');
+    // Et surtout : ne pas envoyer chercher un fichier qui est déjà là.
+    expect(constat?.detail).not.toContain('téléverser le');
+    expect(constat?.detail).toContain('déjà présent');
+    // Pas de doublon « service éteint » : le paquet non installé est la cause.
+    expect(codes(etat)).not.toContain('service-eteint');
+    expect(codes(etat)).not.toContain('paquet-absent');
+  });
+
   it('attrape une désactivation programmée, que rien ne trahit autrement', () => {
     // Le paquet tourne (`disabled` faux) et mourra au prochain redémarrage.
     // Sans ce constat, personne ne fait le lien des semaines plus tard.
     const etat = evaluerUserManager({
       ...PARC,
       packagesRaw: PAQUETS.map((p) =>
-        p.name === 'user-manager' ? { ...p, scheduled: 'disable' } : p,
+        // La phrase exacte du routeur, et non le code qu'on imagine.
+        p.name === 'user-manager' ? { ...p, scheduled: 'scheduled for disable' } : p,
       ),
     });
 

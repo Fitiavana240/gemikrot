@@ -54,12 +54,31 @@ export interface RouterDiskDto {
   disabled: boolean;
 }
 
-/** Un paquet RouterOS — `/system/package`. */
+/**
+ * Un paquet RouterOS — `/system/package`.
+ *
+ * Attention au piège : cette collection mélange **deux populations**. Les
+ * paquets réellement installés portent une version et un horodatage de
+ * construction ; ceux qui sont seulement *disponibles* dans l'image ont une
+ * version vide, `available` vrai et `disabled` vrai. Les confondre fait dire
+ * « installé mais désactivé » d'un paquet qui n'a jamais été installé — et
+ * conduit à prescrire exactement le contraire du bon geste.
+ *
+ * Le routeur ne rend pas toujours la seconde population : le même hAP a
+ * renvoyé 3 paquets à une lecture et 19 à la suivante.
+ */
 export interface RouterPackageDto {
   id: string;
   name: string;
   version: string | null;
   sizeBytes: number | null;
+  /** Réellement installé : c'est la version qui en fait foi, pas la présence. */
+  installed: boolean;
+  /**
+   * Présent dans l'image et installable sans rien téléverser. Un paquet
+   * disponible s'installe en l'activant puis en redémarrant.
+   */
+  available: boolean;
   /**
    * Un paquet désactivé reste sur le disque mais ne tourne pas — et son
    * menu disparaît de WinBox. C'est la première chose à vérifier quand un
@@ -68,13 +87,19 @@ export interface RouterPackageDto {
   disabled: boolean;
   buildTime: string | null;
   /**
-   * Ce qui est prévu au prochain démarrage : `enable`, `disable`, ou vide.
+   * Ce qui est prévu au prochain démarrage, **tel que RouterOS l'écrit**.
    *
-   * C'est le **seul** observable qui prouve qu'une activation a été prise en
+   * C'est une phrase d'affichage et non un code : le routeur rend
+   * `scheduled for disable`, pas `disable`. Comparer à `'disable'` ne marche
+   * donc jamais — d'où `scheduledAction`, qui porte la valeur exploitable.
+   *
+   * C'est le seul observable qui prouve qu'une activation a été prise en
    * compte : `disabled` ne bouge qu'après le redémarrage, si bien que sans ce
    * champ une activation réussie ressemble à une activation ignorée.
    */
   scheduled: string | null;
+  /** Ce que dit `scheduled`, ramené à ce qui est décidable. */
+  scheduledAction: 'enable' | 'disable' | null;
 }
 
 /** Ce que le routeur dit de lui-même — `/system/resource`. */
@@ -128,18 +153,26 @@ export interface ConstatDto {
  * supplément, il n'est pas dans l'image de base.
  */
 export interface UserManagerReadinessDto {
-  /** Le paquet est-il présent ? Absent = pas d'onglet, pas de service. */
+  /** Réellement installé. Absent = pas d'onglet, pas de service. */
   packageInstalled: boolean;
+  /**
+   * Non installé, mais présent dans l'image du routeur.
+   *
+   * Change complètement le geste à prescrire : pas de `.npk` à trouver ni à
+   * téléverser, il suffit de l'activer et de redémarrer. C'est le cas d'un
+   * routeur neuf, et donc le cas le plus fréquent à la mise en service.
+   */
+  packageAvailable: boolean;
   packageEnabled: boolean;
   packageVersion: string | null;
   packageSizeBytes: number | null;
   /**
-   * Ce qui attend le prochain démarrage (`enable`, `disable`, ou `null`).
+   * Ce qui attend le prochain démarrage, ramené à `enable`, `disable`, ou rien.
    *
    * Sans ce champ, une activation réussie serait indiscernable d'une
    * activation ignorée : `packageEnabled` ne bascule qu'après le redémarrage.
    */
-  packageScheduled: string | null;
+  packageScheduled: 'enable' | 'disable' | null;
   /** Le service RADIUS de User Manager est-il allumé ? */
   serviceEnabled: boolean;
   /** Sans profils, User Manager n'est qu'un RADIUS : pas de forfaits. */

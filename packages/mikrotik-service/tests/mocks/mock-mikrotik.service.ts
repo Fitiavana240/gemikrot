@@ -878,6 +878,7 @@ export class MockMikrotikService implements IMikrotikService {
   async getUserManagerReadiness(): Promise<UserManagerReadinessDto> {
     return {
       packageInstalled: true,
+      packageAvailable: false,
       packageEnabled: false,
       packageVersion: '7.24.4',
       packageSizeBytes: 344209,

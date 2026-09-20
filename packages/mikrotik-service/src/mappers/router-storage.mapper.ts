@@ -62,15 +62,40 @@ export function mapRouterDisk(raw: any): RouterDiskDto {
   };
 }
 
+/**
+ * Ce que `scheduled` veut dire, quelle que soit la façon dont il est écrit.
+ *
+ * RouterOS y met une phrase d'affichage — `scheduled for disable` — et non
+ * un code. Une égalité stricte sur `'disable'` ne correspond jamais : le
+ * constat ne se lève pas, et la vérification d'une réparation conclut au
+ * succès sans que rien n'ait bougé. Relevé sur le hAP le 2026-09-20.
+ *
+ * L'ordre compte peu ici (`disable` ne contient pas `enable`), mais il est
+ * explicite pour que personne n'ait à le revérifier.
+ */
+export function lireProgrammation(value: unknown): 'enable' | 'disable' | null {
+  const texte = String(value ?? '').toLowerCase();
+  if (texte.includes('disable')) return 'disable';
+  if (texte.includes('enable')) return 'enable';
+  return null;
+}
+
 export function mapRouterPackage(raw: any): RouterPackageDto {
+  const version = orNull(raw?.version);
   return {
     id: raw?.['.id'] ?? '',
     name: raw?.name ?? '',
-    version: orNull(raw?.version),
+    version,
     sizeBytes: nombreOuNull(raw?.size),
+    // Un paquet seulement disponible n'a pas de version. C'est le seul
+    // marqueur fiable : `disabled` vaut `true` dans ce cas aussi, et ferait
+    // passer un paquet jamais installé pour un paquet éteint.
+    installed: version !== null,
+    available: flag(raw?.available),
     disabled: flag(raw?.disabled),
     buildTime: orNull(raw?.['build-time']),
     scheduled: orNull(raw?.scheduled),
+    scheduledAction: lireProgrammation(raw?.scheduled),
   };
 }
 
@@ -223,7 +248,25 @@ export function evaluerUserManager(entree: {
   }
 
   // --- Le paquet ----------------------------------------------------------
-  if (!paquet) {
+  //
+  // Trois états, et non deux : absent de l'image, présent mais non installé,
+  // installé. Le deuxième est celui d'un routeur neuf — donc le plus fréquent
+  // à la mise en service — et il appelle le geste opposé du premier.
+  if (paquet && !paquet.installed) {
+    constats.push({
+      code: 'paquet-disponible-non-installe',
+      niveau: 'bloquant',
+      titre: "Le paquet est disponible mais pas installé",
+      detail:
+        `C'est pourquoi le menu « User Manager » n'apparaît pas dans WinBox. ` +
+        `Bonne nouvelle : le paquet est déjà présent dans l'image du routeur, ` +
+        `il n'y a aucun fichier à trouver ni à téléverser — et donc rien à ` +
+        `libérer sur la mémoire interne. Il suffit de l'activer puis de ` +
+        `redémarrer, l'installation se faisant au démarrage.`,
+      commande: `/system/package/enable ${NOM_PAQUET}`,
+      reparation: 'activer-paquet',
+    });
+  } else if (!paquet) {
     constats.push({
       code: 'paquet-absent',
       niveau: 'bloquant',
@@ -243,7 +286,7 @@ export function evaluerUserManager(entree: {
       // Téléverser un `.npk` puis redémarrer ne passe pas par l'API REST.
       reparation: null,
     });
-  } else if (!paquet.disabled && paquet.scheduled === 'disable') {
+  } else if (!paquet.disabled && paquet.scheduledAction === 'disable') {
     // Le cas sournois : rien ne change tant que le routeur tourne, puis le
     // service disparaît au premier redémarrage — souvent des semaines plus
     // tard, quand plus personne ne fera le lien.
@@ -259,7 +302,7 @@ export function evaluerUserManager(entree: {
       commande: `/system/package/unschedule ${NOM_PAQUET}`,
       reparation: 'annuler-desactivation',
     });
-  } else if (paquet.disabled && paquet.scheduled === 'enable') {
+  } else if (paquet.disabled && paquet.scheduledAction === 'enable') {
     // L'activation est déjà demandée : la reproposer ferait tourner en rond
     // quelqu'un qui vient de l'appliquer et ne voit rien changer.
     constats.push({
@@ -291,7 +334,10 @@ export function evaluerUserManager(entree: {
   }
 
   // --- Le service ---------------------------------------------------------
-  if (paquet && !paquet.disabled && entree.serviceRaw && !serviceEnabled) {
+  // `installed` et non la simple présence : un paquet seulement disponible ne
+  // rend aucun service, et lui reprocher d'être éteint masquerait la vraie
+  // cause derrière un deuxième constat inutile.
+  if (paquet?.installed && !paquet.disabled && entree.serviceRaw && !serviceEnabled) {
     constats.push({
       code: 'service-eteint',
       niveau: 'bloquant',
@@ -305,7 +351,7 @@ export function evaluerUserManager(entree: {
     });
   }
 
-  if (paquet && entree.serviceRaw && serviceEnabled && !useProfiles) {
+  if (paquet?.installed && entree.serviceRaw && serviceEnabled && !useProfiles) {
     constats.push({
       code: 'profils-desactives',
       niveau: 'avertissement',
@@ -370,11 +416,14 @@ export function evaluerUserManager(entree: {
   const rang: Record<ConstatDto['niveau'], number> = { bloquant: 0, avertissement: 1, ok: 2 };
 
   return {
-    packageInstalled: paquet != null,
-    packageEnabled: paquet != null && !paquet.disabled,
+    packageInstalled: paquet?.installed === true,
+    packageAvailable: paquet != null && !paquet.installed && paquet.available,
+    // Un paquet non installé n'est pas « actif » : sans cette condition, un
+    // paquet seulement disponible passerait pour éteint plutôt qu'absent.
+    packageEnabled: paquet?.installed === true && !paquet.disabled,
     packageVersion: paquet?.version ?? null,
     packageSizeBytes: paquet?.sizeBytes ?? null,
-    packageScheduled: paquet?.scheduled ?? null,
+    packageScheduled: paquet?.scheduledAction ?? null,
     serviceEnabled,
     useProfiles,
     database,

@@ -21,8 +21,15 @@ import { MikrotikClientFactory } from './mikrotik-client.factory.js';
  * à coller, avec leur explication.
  */
 interface Reparation {
-  /** Le constat que cette réparation est censée faire disparaître. */
-  readonly constat: string;
+  /**
+   * Les constats que cette réparation est censée faire disparaître.
+   *
+   * Plusieurs, parce qu'un même geste répond parfois à deux situations :
+   * activer le paquet vaut aussi bien pour un paquet installé puis désactivé
+   * que pour un paquet seulement disponible dans l'image — le diagnostic les
+   * distingue pour l'exploitant, le remède est le même.
+   */
+  readonly constats: readonly string[];
   readonly libellé: string;
   /** Ce qu'on taperait dans WinBox — montré avant, et journalisé. */
   readonly commande: string;
@@ -41,21 +48,21 @@ interface Reparation {
 
 const RÉPARATIONS: Record<string, Reparation> = {
   'allumer-service': {
-    constat: 'service-eteint',
+    constats: ['service-eteint'],
     libellé: 'Allumer le service User Manager',
     commande: '/user-manager/set enabled=yes',
     appliquer: (s) => s.setUserManagerSettings({ enabled: true }),
     vérifier: (é) => é.serviceEnabled,
   },
   'activer-profils': {
-    constat: 'profils-desactives',
+    constats: ['profils-desactives'],
     libellé: 'Activer les profils',
     commande: '/user-manager/set use-profiles=yes',
     appliquer: (s) => s.setUserManagerSettings({ useProfiles: true }),
     vérifier: (é) => é.useProfiles,
   },
   'annuler-desactivation': {
-    constat: 'paquet-desactivation-programmee',
+    constats: ['paquet-desactivation-programmee'],
     libellé: 'Annuler la désactivation programmée',
     commande: '/system/package/unschedule user-manager',
     appliquer: (s) => s.unschedulePackage('user-manager'),
@@ -64,7 +71,7 @@ const RÉPARATIONS: Record<string, Reparation> = {
     vérifier: (é) => é.packageScheduled !== 'disable',
   },
   'activer-paquet': {
-    constat: 'paquet-desactive',
+    constats: ['paquet-desactive', 'paquet-disponible-non-installe'],
     libellé: 'Programmer l’activation du paquet',
     commande: '/system/package/enable user-manager',
     appliquer: (s) => s.enablePackage('user-manager'),
@@ -101,7 +108,7 @@ export class RouterRepairService {
   listerRéparations() {
     return Object.entries(RÉPARATIONS).map(([code, r]) => ({
       code,
-      constat: r.constat,
+      constats: r.constats,
       libelle: r.libellé,
       commande: r.commande,
       differee: r.différée === true,
@@ -123,7 +130,7 @@ export class RouterRepairService {
     // depuis une heure propose encore des réparations déjà faites ; les
     // rejouer écrirait un réglage que quelqu'un a peut-être changé exprès
     // entre-temps.
-    if (!avant.constats.some((c) => c.code === réparation.constat)) {
+    if (!avant.constats.some((c) => réparation.constats.includes(c.code))) {
       throw new ConflictException(
         `Ce problème n'est plus présent sur le routeur : ${réparation.libellé} n'a pas été appliqué.`,
       );

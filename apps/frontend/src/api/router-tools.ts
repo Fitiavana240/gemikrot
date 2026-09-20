@@ -187,6 +187,13 @@ export interface RouterPackage {
   sizeBytes: number | null;
   disabled: boolean;
   buildTime: string | null;
+  /** Réellement installé — la version en fait foi, pas la simple présence. */
+  installed: boolean;
+  /** Présent dans l'image, installable sans rien téléverser. */
+  available: boolean;
+  /** Tel que RouterOS l'écrit : « scheduled for disable », pas « disable ». */
+  scheduled: string | null;
+  scheduledAction: 'enable' | 'disable' | null;
 }
 
 export interface RouterStorage {
@@ -230,10 +237,17 @@ export interface ResultatReparation {
 export interface UserManagerReadiness {
   packageInstalled: boolean;
   packageEnabled: boolean;
+  /**
+   * Non installé, mais présent dans l'image du routeur.
+   *
+   * Change le geste à prescrire : rien à téléverser, il suffit d'activer et
+   * de redémarrer. C'est l'état d'un routeur neuf.
+   */
+  packageAvailable: boolean;
   packageVersion: string | null;
   packageSizeBytes: number | null;
-  /** `enable` quand l'activation attend un redémarrage. */
-  packageScheduled: string | null;
+  /** Ce qui attend le prochain démarrage. */
+  packageScheduled: 'enable' | 'disable' | null;
   serviceEnabled: boolean;
   useProfiles: boolean;
   database: {

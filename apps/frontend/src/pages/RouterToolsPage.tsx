@@ -805,11 +805,33 @@ function StockageTab() {
       <Card title="User Manager">
         <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Paquet">
-            <Badge tone={e.packageInstalled ? (e.packageEnabled ? 'green' : 'amber') : 'red'}>
-              {!e.packageInstalled ? 'absent' : e.packageEnabled ? 'actif' : 'désactivé'}
+            {/* Quatre états et non trois : « disponible » n'est pas
+                « installé », et le confondre avec « désactivé » ferait
+                prescrire un téléversement là où il n'y a rien à téléverser. */}
+            <Badge
+              tone={
+                e.packageEnabled
+                  ? 'green'
+                  : e.packageInstalled || e.packageAvailable
+                    ? 'amber'
+                    : 'red'
+              }
+            >
+              {e.packageEnabled
+                ? 'actif'
+                : e.packageInstalled
+                  ? 'désactivé'
+                  : e.packageAvailable
+                    ? 'disponible, non installé'
+                    : 'absent'}
             </Badge>
             {e.packageVersion && (
               <span className="ml-2 font-mono text-xs text-slate-500">{e.packageVersion}</span>
+            )}
+            {e.packageScheduled && (
+              <span className="ml-2 text-xs text-slate-500">
+                {e.packageScheduled === 'enable' ? 'activation' : 'désactivation'} au redémarrage
+              </span>
             )}
           </Field>
           <Field label="Service RADIUS">
@@ -914,20 +936,44 @@ function StockageTab() {
       </div>
 
       <Card title="Paquets installés">
+        {/* `/system/package` mélange les paquets installés et ceux qui sont
+            seulement disponibles dans l'image. Les afficher pêle-mêle noierait
+            les trois qui comptent sous seize qui ne tournent pas. */}
         <ul className="space-y-1 text-sm">
-          {s.packages.map((p) => (
-            <li key={p.id} className="flex items-center justify-between">
-              <span className="font-mono text-xs">{p.name}</span>
-              <span className="flex items-center gap-2 text-xs text-slate-500">
-                <span className="tabular-nums">
-                  {p.sizeBytes != null ? formatOctets(p.sizeBytes) : '—'}
+          {s.packages
+            .filter((p) => p.installed)
+            .map((p) => (
+              <li key={p.id} className="flex items-center justify-between">
+                <span className="font-mono text-xs">{p.name}</span>
+                <span className="flex items-center gap-2 text-xs text-slate-500">
+                  <span className="tabular-nums">
+                    {p.sizeBytes != null ? formatOctets(p.sizeBytes) : '—'}
+                  </span>
+                  <span className="font-mono">{p.version ?? '—'}</span>
+                  {p.scheduledAction && (
+                    <Badge tone={p.scheduledAction === 'enable' ? 'amber' : 'red'}>
+                      {p.scheduledAction === 'enable' ? 'activation' : 'désactivation'} au
+                      redémarrage
+                    </Badge>
+                  )}
+                  {p.disabled && !p.scheduledAction && <Badge tone="amber">désactivé</Badge>}
                 </span>
-                <span className="font-mono">{p.version ?? '—'}</span>
-                {p.disabled && <Badge tone="amber">désactivé</Badge>}
-              </span>
-            </li>
-          ))}
+              </li>
+            ))}
         </ul>
+        {s.packages.some((p) => !p.installed) && (
+          <p className="mt-3 text-xs text-slate-500">
+            <strong>{s.packages.filter((p) => !p.installed).length} autres</strong> sont présents
+            dans l'image sans être installés :{' '}
+            <span className="font-mono">
+              {s.packages
+                .filter((p) => !p.installed)
+                .map((p) => p.name)
+                .join(', ')}
+            </span>
+            . Les activer et redémarrer suffit à les installer — aucun fichier à téléverser.
+          </p>
+        )}
         <p className="mt-3 max-w-3xl text-xs text-slate-500">
           <strong>User Manager ne fait pas partie de l'image de base de RouterOS.</strong> C'est un
           paquet supplémentaire : tant qu'il n'est pas installé, son menu n'apparaît ni dans WinBox
