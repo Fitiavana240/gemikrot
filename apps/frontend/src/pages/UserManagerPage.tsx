@@ -15,7 +15,17 @@ import { useAuth } from '../auth/AuthContext';
 import { useRouterSelection } from '../routers/RouterContext';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, FormField, Input, PageHeader, Select, Table } from '../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyRow,
+  FormField,
+  Input,
+  PageHeader,
+  Select,
+  Table,
+} from '../components/ui';
 import {
   UmAssignmentsTab,
   UmAttributesTab,
@@ -227,11 +237,7 @@ function ProfilesTab() {
             </tr>
           ))}
           {profiles.data?.length === 0 && (
-            <tr>
-              <td className="px-3 py-4 text-slate-400" colSpan={9}>
-                Aucun profil sur ce routeur.
-              </td>
-            </tr>
+            <EmptyRow colSpan={9}>Aucun profil sur ce routeur.</EmptyRow>
           )}
         </Table>
       )}
@@ -383,11 +389,12 @@ function LimitationsTab() {
             </tr>
           ))}
           {limitations.data?.length === 0 && (
-            <tr>
-              <td className="px-3 py-4 text-slate-400" colSpan={7}>
-                Aucune limitation. Les plafonds d'une offre en créent une automatiquement.
-              </td>
-            </tr>
+            <EmptyRow
+              colSpan={7}
+              hint="Les plafonds d'une offre en créent une automatiquement."
+            >
+              Aucune limitation
+            </EmptyRow>
           )}
         </Table>
       )}
@@ -567,11 +574,7 @@ function AccountsTab() {
             </tr>
           ))}
           {visible?.length === 0 && (
-            <tr>
-              <td className="px-3 py-4 text-slate-400" colSpan={7}>
-                Aucun compte pour ce filtre.
-              </td>
-            </tr>
+            <EmptyRow colSpan={7}>Aucun compte pour ce filtre.</EmptyRow>
           )}
         </Table>
       )}

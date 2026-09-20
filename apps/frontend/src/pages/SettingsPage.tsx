@@ -4,7 +4,18 @@ import { tenantsApi, type UpdateTenantInput } from '../api/tenants';
 import type { PaymentMethod } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, FormField, Input, PageHeader, Select, Table, TableSkeleton } from '../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyRow,
+  FormField,
+  Input,
+  PageHeader,
+  Select,
+  Table,
+  TableSkeleton,
+} from '../components/ui';
 import { CURRENCIES, PROVIDERS } from '../lib/options';
 
 export function SettingsPage() {
@@ -185,11 +196,12 @@ export function SettingsPage() {
             </tr>
           ))}
           {!tenant.data?.mobileMoneyAccounts?.length && (
-            <tr>
-              <td className="px-3 py-4 text-slate-400" colSpan={5}>
-                Aucune puce enregistrée — le client ne saurait pas où envoyer son paiement.
-              </td>
-            </tr>
+            <EmptyRow
+              colSpan={5}
+              hint="Le client ne saurait pas où envoyer son paiement."
+            >
+              Aucune puce enregistrée
+            </EmptyRow>
           )}
         </Table>
 

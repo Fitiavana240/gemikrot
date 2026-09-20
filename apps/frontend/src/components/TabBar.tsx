@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 
 export interface TabDef {
   /** Segment d'adresse, ex. `comptes` pour `/hotspot/comptes`. */
@@ -24,8 +25,28 @@ export interface TabDef {
  * glisser.
  */
 export function TabBar({ base, tabs }: { base: string; tabs: TabDef[] }) {
+  const piste = useRef<HTMLDivElement>(null);
+  const { pathname } = useLocation();
+
+  /**
+   * Ramener l'onglet actif dans le champ de vision.
+   *
+   * Sans cela, arriver sur le onzième onglet d'un téléphone affiche une bande
+   * qui commence au premier : l'écran montre un contenu dont l'intitulé est
+   * hors cadre, et rien ne paraît sélectionné. Le défaut n'existait pas à
+   * cinq onglets ; il est apparu en les doublant.
+   *
+   * `block: 'nearest'` est indispensable : sans lui, le navigateur fait aussi
+   * défiler la page verticalement pour centrer l'onglet, et l'écran s'ouvre
+   * en sautant le titre.
+   */
+  useEffect(() => {
+    const actif = piste.current?.querySelector('[aria-current="page"]');
+    actif?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [pathname]);
+
   return (
-    <div className="-mx-1 overflow-x-auto">
+    <div ref={piste} className="-mx-1 overflow-x-auto">
       <nav className="flex min-w-max gap-1 border-b border-slate-200 px-1">
         {tabs.map((tab) => (
           <NavLink

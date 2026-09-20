@@ -5,7 +5,15 @@ import { plansApi } from '../api/plans';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
 import { useState } from 'react';
-import { Badge, Button, Card, PageHeader, Table, TableSkeleton } from '../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyRow,
+  PageHeader,
+  Table,
+  TableSkeleton,
+} from '../components/ui';
 
 const STATUS_TONE: Record<SubscriptionStatus, 'green' | 'amber' | 'slate' | 'red'> = {
   ACTIVE: 'green',
@@ -160,11 +168,9 @@ export function SubscriptionsPage() {
             </tr>
           ))}
           {subscriptions.data?.length === 0 && (
-            <tr>
-              <td className="px-3 py-4 text-slate-400" colSpan={6}>
-                Aucun abonnement — lancer l'import depuis l'écran Routeurs.
-              </td>
-            </tr>
+            <EmptyRow colSpan={6} hint="Lancer l'import depuis l'écran Routeurs.">
+              Aucun abonnement
+            </EmptyRow>
           )}
         </Table>
       )}

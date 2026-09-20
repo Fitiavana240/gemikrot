@@ -4,7 +4,7 @@ import { devicesApi, type DeviceType, type DiscoveredDevice } from '../api/devic
 import { useRouterSelection } from '../routers/RouterContext';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, PageHeader, Select, Table } from '../components/ui';
+import { Badge, Button, Card, EmptyRow, PageHeader, Select, Table } from '../components/ui';
 
 const DEVICE_TYPES: DeviceType[] = ['PHONE', 'COMPUTER', 'TV', 'CAMERA', 'ROUTER', 'OTHER'];
 
@@ -114,11 +114,7 @@ export function DevicesPage() {
               </tr>
             ))}
             {discovered.data?.length === 0 && (
-              <tr>
-                <td className="px-3 py-4 text-slate-400" colSpan={6}>
-                  Aucun bail DHCP visible sur le routeur.
-                </td>
-              </tr>
+              <EmptyRow colSpan={6}>Aucun bail DHCP visible sur le routeur.</EmptyRow>
             )}
           </Table>
         )}
@@ -155,11 +151,7 @@ export function DevicesPage() {
           </tr>
         ))}
         {devices.data?.length === 0 && (
-          <tr>
-            <td className="px-3 py-4 text-slate-400" colSpan={5}>
-              Aucun appareil enregistré.
-            </td>
-          </tr>
+          <EmptyRow colSpan={5}>Aucun appareil enregistré.</EmptyRow>
         )}
       </Table>
     </div>

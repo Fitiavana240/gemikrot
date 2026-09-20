@@ -13,7 +13,18 @@ import { useRouterSelection } from '../routers/RouterContext';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import type { Plan, Voucher, VoucherStatus } from '../api/types';
-import { Badge, Button, Card, FormField, Input, PageHeader, Select, Table, TableSkeleton } from '../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyRow,
+  FormField,
+  Input,
+  PageHeader,
+  Select,
+  Table,
+  TableSkeleton,
+} from '../components/ui';
 
 /**
  * Un onglet par façon de regarder les tickets, plus les deux écrans qui les
@@ -428,11 +439,7 @@ function VoucherTable({
         </tr>
       ))}
       {vouchers.length === 0 && (
-        <tr>
-          <td className="px-3 py-4 text-slate-400" colSpan={6}>
-            {emptyLabel}
-          </td>
-        </tr>
+        <EmptyRow colSpan={6}>{emptyLabel}</EmptyRow>
       )}
     </Table>
   );

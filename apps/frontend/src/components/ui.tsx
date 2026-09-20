@@ -145,6 +145,36 @@ export function PageHeader({
  * l'application est cassée. Dire « il n'y a rien, et voici pourquoi » est une
  * information, pas un aveu.
  */
+/**
+ * L'état vide d'une table, à l'intérieur de la table.
+ *
+ * `EmptyState` remplace une table ; celui-ci se glisse dedans, pour les cas
+ * où l'en-tête doit rester — il dit quelles colonnes existent, ce qui répond
+ * à la moitié de la question quand il n'y a rien à montrer.
+ *
+ * Il existe pour que les quatorze tables qui affichaient une ligne grise
+ * alignée à gauche parlent la même langue que le reste : même ton, même
+ * centrage, même poids.
+ */
+export function EmptyRow({
+  colSpan,
+  children,
+  hint,
+}: {
+  colSpan: number;
+  children: ReactNode;
+  hint?: ReactNode;
+}) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className="px-6 py-10 text-center">
+        <p className="text-sm font-medium text-slate-700">{children}</p>
+        {hint && <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">{hint}</p>}
+      </td>
+    </tr>
+  );
+}
+
 export function EmptyState({
   title,
   hint,

@@ -675,6 +675,19 @@ l'échec au lieu d'un succès de façade.
   figerait les tickets au jour du déplacement. Sans bouton : seule sa date distingue une
   relique d'un secours.
 
+- **Deux finitions de l'interface, dans la foulée.** La barre d'onglets ramène l'onglet
+  actif dans le champ de vision : le défaut n'existait pas à cinq onglets, il est apparu en
+  les portant à onze — sur un téléphone, on arrivait sur un écran dont l'intitulé était hors
+  cadre, sans rien qui paraisse sélectionné. Et les quatorze tables qui affichaient leur
+  état vide en ligne grise alignée à gauche passent par un composant partagé, au même ton
+  et au même centrage que le reste ; plusieurs en ont profité pour dire *pourquoi* c'est
+  vide plutôt que seulement « aucun ».
+
+**Non traité, et délibérément** : PPPoE n'a aucune route HTTP — il n'existe que dans le
+paquet. Lui construire un écran maintenant reviendrait à bâtir sur les noms de champs de
+`/ppp/active`, que le parc ne permet pas de vérifier faute d'un seul PPPoE en service.
+C'est exactement ce que la règle du §15.7 interdit.
+
 ---
 
 > ⚠️ **Règle d'or** : chaque item livré → vérification sur le routeur réel avec nettoyage,

@@ -6,7 +6,16 @@ import { formatDuration } from '../api/user-manager';
 import { useAuth } from '../auth/AuthContext';
 import { useRouterSelection } from '../routers/RouterContext';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, FormField, Input, PageHeader, Table } from '../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyRow,
+  FormField,
+  Input,
+  PageHeader,
+  Table,
+} from '../components/ui';
 import {
   HotspotHostsTab,
   HotspotProfilesTab,
@@ -304,11 +313,7 @@ function WalledGardenTab() {
             </tr>
           ))}
           {walledGarden.data?.hosts.length === 0 && (
-            <tr>
-              <td className="px-3 py-4 text-slate-400" colSpan={5}>
-                Aucun domaine ouvert.
-              </td>
-            </tr>
+            <EmptyRow colSpan={5}>Aucun domaine ouvert.</EmptyRow>
           )}
         </Table>
       </Card>
@@ -333,11 +338,7 @@ function WalledGardenTab() {
             </tr>
           ))}
           {walledGarden.data?.ips.length === 0 && (
-            <tr>
-              <td className="px-3 py-4 text-slate-400" colSpan={5}>
-                Aucune adresse ouverte.
-              </td>
-            </tr>
+            <EmptyRow colSpan={5}>Aucune adresse ouverte.</EmptyRow>
           )}
         </Table>
       </Card>
@@ -413,11 +414,9 @@ function CookiesTab() {
           </tr>
         ))}
         {cookies.data?.length === 0 && (
-          <tr>
-            <td className="px-3 py-4 text-slate-400" colSpan={5}>
-              Aucun cookie.
-            </td>
-          </tr>
+          <EmptyRow colSpan={5} hint="Un cookie vivant rouvre une session sans consulter la validité : leur absence est une bonne nouvelle.">
+            Aucun cookie.
+          </EmptyRow>
         )}
       </Table>
     </div>
@@ -465,11 +464,7 @@ function SessionsTab() {
           </tr>
         ))}
         {sessions.data?.length === 0 && (
-          <tr>
-            <td className="px-3 py-4 text-slate-400" colSpan={7}>
-              Aucune session enregistrée.
-            </td>
-          </tr>
+          <EmptyRow colSpan={7}>Aucune session enregistrée.</EmptyRow>
         )}
       </Table>
     </div>

@@ -2,7 +2,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { mikrotikApi } from '../api/mikrotik';
 import { useRouterSelection } from '../routers/RouterContext';
 import { useAuth } from '../auth/AuthContext';
-import { Badge, Button, Card, PageHeader, Table, TableSkeleton } from '../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyRow,
+  PageHeader,
+  Table,
+  TableSkeleton,
+} from '../components/ui';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} o`;
@@ -125,11 +133,7 @@ export function SessionsPage() {
               </tr>
             ))}
             {sessionsQuery.data.length === 0 && (
-              <tr>
-                <td className="px-3 py-4 text-slate-400" colSpan={6}>
-                  Aucun appareil connecté pour l'instant.
-                </td>
-              </tr>
+              <EmptyRow colSpan={6}>Aucun appareil connecté pour l'instant.</EmptyRow>
             )}
           </Table>
         </>
@@ -154,11 +158,7 @@ export function SessionsPage() {
               </tr>
             ))}
             {hostsQuery.data.length === 0 && (
-              <tr>
-                <td className="px-3 py-4 text-slate-400" colSpan={4}>
-                  Aucun appareil vu pour l'instant.
-                </td>
-              </tr>
+              <EmptyRow colSpan={4}>Aucun appareil vu pour l'instant.</EmptyRow>
             )}
           </Table>
         </>
