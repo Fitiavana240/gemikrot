@@ -109,6 +109,30 @@ export const ETAT_COMPTE_UM: Record<string, Libellé> = {
 };
 
 /**
+ * Comment une session est entrée, et ce que ça change pour la couper.
+ *
+ * Ce n'est pas une curiosité technique. Une session entrée **par cookie** se
+ * refait toute seule dès qu'on la ferme : le client n'a rien à taper, et le
+ * routeur ne consulte même pas RADIUS. Sur ce parc, neuf sessions en cours
+ * sur dix sont dans ce cas — relevé sur le routeur, pas supposé. « Déconnecter »
+ * y est donc sans effet durable, et l'ambre est là pour le dire.
+ */
+export const ENTREE_SESSION: Record<string, Libellé> = {
+  'mac-cookie': { label: 'cookie (adresse MAC)', ton: 'amber' },
+  cookie: { label: 'cookie', ton: 'amber' },
+  'http-pap': { label: 'code saisi', ton: 'green' },
+  'http-chap': { label: 'code saisi', ton: 'green' },
+  https: { label: 'code saisi', ton: 'green' },
+  mac: { label: 'adresse MAC', ton: 'amber' },
+  trial: { label: 'essai gratuit', ton: 'slate' },
+};
+
+/** Vrai quand fermer la session ne suffit pas : le client revient seul. */
+export function revientSeul(loginBy: string): boolean {
+  return loginBy.includes('cookie') || loginBy === 'mac';
+}
+
+/**
  * Traduit ce qui est connu, et **laisse passer le reste tel quel**.
  *
  * Un statut ajouté côté serveur sans l'être ici doit rester lisible, fût-ce

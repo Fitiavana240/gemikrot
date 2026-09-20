@@ -442,8 +442,20 @@ export class UserManagerService {
     return { ...user, coupure };
   }
 
+  /**
+   * Supprimer suppose de couper d'abord.
+   *
+   * Effacer le compte ne ferme pas la session en cours et ne touche pas aux
+   * cookies : le client reste en ligne, et son `mac-cookie` peut le ramèner.
+   * C'est pire que le blocage, qui coupe désormais — une fois le compte
+   * disparu, **il n'y a plus de nom à qui rattacher la coupure**, donc plus
+   * moyen de rattraper l'oubli depuis cette console.
+   *
+   * L'ordre compte : couper tant que le compte existe, supprimer ensuite.
+   */
   async deleteAccount(username: string, adminUserId?: string, routerId?: string): Promise<void> {
     const mikrotik = await this.client(routerId);
+    await this.access.revoke(mikrotik, username, { disableAccount: false });
     await mikrotik.deleteUserManagerUser(username);
     await this.log(adminUserId, 'DELETE_UM_USER', username);
   }

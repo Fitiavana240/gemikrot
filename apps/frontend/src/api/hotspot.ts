@@ -1,4 +1,5 @@
 import { api } from './client';
+import type { Coupure } from './coupure';
 import { routerQuery } from '../routers/RouterContext';
 
 export interface HotspotServerProfile {
@@ -95,7 +96,7 @@ export const hotspotApi = {
   deleteCookie: (id: string, routerId?: string) =>
     api.delete<void>(`/hotspot/cookies/${encodeURIComponent(id)}${routerQuery(routerId)}`),
   cutAccess: (username: string, routerId?: string) =>
-    api.post<{ cookiesRemoved: number; sessionsClosed: number }>(
+    api.post<Coupure>(
       `/hotspot/cut-access/${encodeURIComponent(username)}${routerQuery(routerId)}`,
     ),
   sessions: (routerId?: string) =>

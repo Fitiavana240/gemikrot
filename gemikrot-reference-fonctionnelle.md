@@ -867,6 +867,39 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — « Déconnecter », et le client revient dix secondes plus tard
+
+Relevé sur le routeur, pas supposé — les dix sessions en cours, avec leur mode d'entrée :
+
+```
+BELLO25-07  mac-cookie     PapaDuran  mac-cookie     Faniry       mac-cookie
+Malala      mac-cookie     kenny      mac-cookie     Soaragnetre  mac-cookie
+Mamasy      cookie         Herizo     mac-cookie     Lalaina      mac-cookie
+H830756     http-pap
+```
+
+**Neuf sur dix sont entrées par cookie.** Une seule a tapé un code. Or l'écran Connectés
+n'offrait qu'un bouton, « Déconnecter », qui ferme la session sans toucher au cookie : le
+client se reconnecte seul en quelques secondes, sans rien retaper et sans que User Manager soit
+consulté. L'écran se rafraîchit toutes les dix secondes — **l'exploitant regardait la ligne
+revenir**. C'est le genre de détail qui fait douter de toute la console.
+
+La colonne MAC, qui ne disait rien à personne à cet endroit, a cédé la place à « Entré par ».
+Neuf pastilles ambre, une verte : la couleur dit le geste à faire. Et deux boutons, parce
+qu'ils ne veulent pas dire la même chose — **déconnecter libère la place, couper empêche de
+revenir**. Escalader l'un vers l'autre en silence forcerait un client en règle à retaper son
+code.
+
+**Supprimer un compte était pire que le bloquer.** Effacer le compte ne fermait pas la session
+et ne touchait pas aux cookies ; le client restait en ligne. Et une fois le compte disparu,
+**il n'y a plus de nom à qui rattacher la coupure** — plus moyen de rattraper l'oubli depuis
+cette console. L'ordre compte : couper tant que le compte existe, supprimer ensuite.
+
+**Éprouvé** : l'écran affiche bien neuf « cookie » et un « code saisi », exactement ce que rend
+le routeur. Je n'ai cliqué sur aucun des deux boutons — ces dix sessions sont de vrais clients
+en train de naviguer ; le chemin de coupure a été éprouvé au tour précédent sur un compte
+jetable. 646 comptes, 57 cookies, 10 sessions : rien touché.
+
 ### 2026-09-20 — Trois boutons « Suspendre » qui ne suspendaient pas
 
 Le défaut le plus cher de la journée, et il ne se voyait pas à l'écran.

@@ -1,6 +1,10 @@
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { mikrotikApi } from '../api/mikrotik';
+import { hotspotApi } from '../api/hotspot';
+import { phraseCoupure } from '../api/coupure';
+import { ENTREE_SESSION, libellé, revientSeul } from '../api/libelles';
 import { useRouterSelection } from '../routers/RouterContext';
 import { useAuth } from '../auth/AuthContext';
 import {
@@ -54,9 +58,30 @@ export function SessionsPage() {
     refetchInterval: 10_000,
   });
 
+  const [compteRendu, setCompteRendu] = useState<string | null>(null);
+
   const disconnectMutation = useMutation({
     mutationFn: (sessionId: string) => mikrotikApi.disconnect(routerId!, sessionId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mikrotik-active-sessions'] }),
+    onSuccess: () => {
+      setCompteRendu(null);
+      queryClient.invalidateQueries({ queryKey: ['mikrotik-active-sessions'] });
+    },
+  });
+
+  /**
+   * La coupure qui tient, par opposition à la simple déconnexion.
+   *
+   * Fermer la session ne suffit pas pour qui est entré par cookie : le client
+   * se reconnecte seul en quelques secondes, et l'écran — qui se rafraîchit
+   * toutes les dix secondes — le montre revenir. Effacer ses cookies est ce
+   * qui le tient dehors.
+   */
+  const couperMutation = useMutation({
+    mutationFn: (username: string) => hotspotApi.cutAccess(username, routerId),
+    onSuccess: (coupure) => {
+      setCompteRendu(phraseCoupure(coupure));
+      queryClient.invalidateQueries({ queryKey: ['mikrotik-active-sessions'] });
+    },
   });
 
   return (
@@ -121,21 +146,59 @@ export function SessionsPage() {
           <h2 className="text-sm font-medium text-slate-500">
             Tickets actifs ({sessionsQuery.data.length})
           </h2>
-          <Table head={['Code', 'IP', 'MAC', 'Connecté depuis', 'Débit reçu/envoyé', '']}>
+
+          {compteRendu && (
+            <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              {compteRendu}
+            </p>
+          )}
+
+          {sessionsQuery.data.some((s) => revientSeul(s.loginBy)) && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Les sessions marquées <strong>cookie</strong> se refont toutes seules : le client n'a
+              rien à retaper, et le routeur ne consulte même pas User Manager. Les déconnecter les
+              montre revenir au rafraîchissement suivant. <strong>Couper l'accès</strong> efface
+              leurs cookies : c'est ce qui les tient dehors.
+            </p>
+          )}
+          <Table head={['Code', 'IP', 'Entré par', 'Connecté depuis', 'Reçu / envoyé', '']}>
             {sessionsQuery.data.map((session) => (
               <tr key={session.id}>
                 <td className="px-3 py-2 font-mono">{session.username}</td>
                 <td className="px-3 py-2">{session.address}</td>
-                <td className="px-3 py-2 text-slate-500">{session.macAddress}</td>
+                {/* La MAC ne disait rien à personne à cet endroit ; la façon dont
+                    la session est entrée décide, elle, du geste à faire. */}
+                <td className="px-3 py-2">
+                  <Badge tone={libellé(ENTREE_SESSION, session.loginBy).ton}>
+                    {libellé(ENTREE_SESSION, session.loginBy).label}
+                  </Badge>
+                </td>
                 <td className="px-3 py-2">{formatDuration(session.uptimeSeconds)}</td>
                 <td className="px-3 py-2 text-slate-500">
                   {formatBytes(session.bytesIn)} / {formatBytes(session.bytesOut)}
                 </td>
-                <td className="px-3 py-2 text-right">
+                <td className="space-x-2 whitespace-nowrap px-3 py-2 text-right">
                   {canWrite && (
-                    <Button variant="danger" onClick={() => disconnectMutation.mutate(session.id)}>
-                      Déconnecter
-                    </Button>
+                    <>
+                      {/* Deux gestes, parce qu'ils ne veulent pas dire la même
+                          chose. Déconnecter libère la place ; couper empêche
+                          de revenir. Escalader l'un vers l'autre en silence
+                          forcerait un client en règle à retaper son code. */}
+                      <Button
+                        variant="secondary"
+                        disabled={disconnectMutation.isPending}
+                        onClick={() => disconnectMutation.mutate(session.id)}
+                      >
+                        Déconnecter
+                      </Button>
+                      <Button
+                        variant="danger"
+                        disabled={couperMutation.isPending}
+                        onClick={() => couperMutation.mutate(session.username)}
+                      >
+                        Couper l'accès
+                      </Button>
+                    </>
                   )}
                 </td>
               </tr>
