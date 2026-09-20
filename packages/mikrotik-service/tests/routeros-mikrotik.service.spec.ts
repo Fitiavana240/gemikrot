@@ -391,6 +391,58 @@ describe('RouterOSMikrotikService', () => {
     });
   });
 
+  describe('updatePppSecret', () => {
+    const COMPTE = {
+      '.id': '*7',
+      name: 'rakoto',
+      profile: '1Mois',
+      service: 'pppoe',
+      disabled: 'false',
+    };
+
+    it("n'écrit que les champs fournis", async () => {
+      client.get.mockResolvedValueOnce([COMPTE]);
+      client.patch.mockResolvedValueOnce(COMPTE);
+
+      await service.updatePppSecret('rakoto', { comment: 'déménagé' });
+
+      // Le profil porte le débit. Un formulaire qui renverrait tout
+      // l'écraserait avec ce qu'il avait chargé — et un changement fait
+      // ailleurs entre-temps disparaîtrait sans bruit.
+      expect(client.patch).toHaveBeenCalledWith('/ppp/secret/*7', { comment: 'déménagé' });
+    });
+
+    it('traduit les noms applicatifs en vocabulaire RouterOS', async () => {
+      client.get.mockResolvedValueOnce([COMPTE]);
+      client.patch.mockResolvedValueOnce(COMPTE);
+
+      await service.updatePppSecret('rakoto', { remoteAddress: '10.0.0.5', profile: '3Mois' });
+
+      expect(client.patch).toHaveBeenCalledWith('/ppp/secret/*7', {
+        'remote-address': '10.0.0.5',
+        profile: '3Mois',
+      });
+    });
+
+    it('refuse une demande vide plutôt que de faire un appel pour rien', async () => {
+      client.get.mockResolvedValueOnce([COMPTE]);
+
+      await expect(service.updatePppSecret('rakoto', {})).rejects.toThrow(
+        MikrotikValidationError,
+      );
+      expect(client.patch).not.toHaveBeenCalled();
+    });
+
+    it("refuse un compte inconnu au lieu d'en créer un", async () => {
+      client.get.mockResolvedValueOnce([]);
+
+      await expect(
+        service.updatePppSecret('inconnu', { comment: 'x' }),
+      ).rejects.toThrow(MikrotikNotFoundError);
+      expect(client.patch).not.toHaveBeenCalled();
+    });
+  });
+
   /**
    * Les écritures sur les menus **singleton**, éprouvées sur le hAP réel le
    * 2026-09-20 — et d'abord de la mauvaise façon.
