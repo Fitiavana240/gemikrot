@@ -61,6 +61,14 @@ export interface HotspotCookie {
   username: string;
   macAddress: string;
   expiresInSeconds: number;
+  /**
+   * Ce que devient le compte derrière ce cookie.
+   *
+   * `bloque` et `absent` sont des reliquats : quelqu'un a bloqué ou supprimé
+   * le compte et le cookie est resté. Dans une liste d'une cinquantaine de
+   * lignes, ils étaient introuvables à l'œil.
+   */
+  etatDuCompte: 'actif' | 'bloque' | 'absent';
 }
 
 export interface SessionView {

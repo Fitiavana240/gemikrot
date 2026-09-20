@@ -299,9 +299,47 @@ export class HotspotService {
    * vivant rouvre une session sans repasser par RADIUS : c'est ce qui laisse
    * un accès coupé fonctionner encore, parfois plusieurs jours.
    */
+  /**
+   * Les cookies, avec l'état du compte derrière chacun.
+   *
+   * La liste brute est inexploitable : sur ce parc elle compte une
+   * cinquantaine de lignes, et ce qui mérite un geste s'y perd. Le croisé
+   * avec les comptes a trouvé, du premier coup, **un cookie dont le compte
+   * n'existe plus** et **sept cookies de comptes délibérément bloqués** — les
+   * seconds étant les victimes du défaut corrigé le même jour, où bloquer un
+   * compte laissait ses cookies en place.
+   *
+   * Que RouterOS honore ou non le cookie d'un compte désactivé n'est **pas
+   * éprouvé ici** — il faudrait un appareil client pour le savoir. Mais un
+   * reliquat qu'on ne peut ni voir ni effacer est un doute permanent, et
+   * l'effacer ne coûte rien à personne : le client en règle retape son code.
+   *
+   * Trois lectures au lieu d'une, sur un onglet qu'on ouvre exprès.
+   */
   async getCookies(routerId?: string) {
     const mikrotik = await this.client(routerId);
-    return mikrotik.getHotspotCookies();
+    const [cookies, hotspotUsers, umUsers] = await Promise.all([
+      mikrotik.getHotspotCookies(),
+      mikrotik.getHotspotUsers(),
+      mikrotik.getUserManagerUsers(),
+    ]);
+
+    const actifs = new Set<string>();
+    const bloqués = new Set<string>();
+    for (const compte of [...hotspotUsers, ...umUsers]) {
+      (compte.disabled ? bloqués : actifs).add(compte.username);
+    }
+
+    return cookies.map((cookie) => ({
+      ...cookie,
+      // Un compte actif l'emporte sur un homonyme bloqué : le même nom peut
+      // exister des deux côtés, HotSpot et User Manager.
+      etatDuCompte: actifs.has(cookie.username)
+        ? ('actif' as const)
+        : bloqués.has(cookie.username)
+          ? ('bloque' as const)
+          : ('absent' as const),
+    }));
   }
 
   async deleteCookie(id: string, adminUserId?: string, routerId?: string) {

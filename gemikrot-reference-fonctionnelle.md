@@ -867,6 +867,35 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — Huit cookies que personne ne pouvait voir
+
+Une mesure, pas une intuition : **59 cookies pour 10 sessions**. Quarante-neuf reconnexions
+latentes. Croisés avec les comptes du routeur, ils se répartissent ainsi :
+
+```
+actif   51      bloque   7      absent   1
+```
+
+**Sept cookies appartiennent à des comptes délibérément bloqués**, et un à un compte qui
+n'existe plus. Les sept sont les victimes du défaut corrigé le même jour : bloquer un compte
+laissait ses cookies en place. Ils étaient introuvables — la liste ne classait rien, et ce qui
+appelle un geste se perdait dans une cinquantaine de lignes toutes pareilles.
+
+**Ce que je n'affirme pas** : que RouterOS honore le cookie d'un compte désactivé. Le savoir
+demanderait un appareil client, et je ne l'ai pas éprouvé. Mais un reliquat qu'on ne peut ni
+voir ni effacer est un doute permanent, et l'effacer ne coûte rien à un client en règle, qui
+retape son code. La console les montre donc, groupés en tête de liste, avec un effacement d'un
+geste.
+
+**Je n'ai pas cliqué dessus.** Ce sont les cookies de vrais clients ; construire la capacité
+est mon travail, décider de s'en servir est celui de l'exploitant.
+
+Une observation au passage, gardée pour plus tard : plusieurs de ces adresses MAC portent le
+bit « administrée localement » (`4E:`, `16:`, `E2:`, `06:`, `E4:`). Ce sont des **MAC
+aléatoires**, celles que les téléphones récents changent par réseau. Un client qui fait tourner
+sa MAC laisse un cookie derrière lui à chaque rotation — ce qui explique une partie du volume,
+et mériterait son propre examen.
+
 ### 2026-09-20 — « Déconnecter », et le client revient dix secondes plus tard
 
 Relevé sur le routeur, pas supposé — les dix sessions en cours, avec leur mode d'entrée :

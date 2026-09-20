@@ -385,6 +385,27 @@ function CookiesTab() {
     onSuccess: refresh,
     onError,
   });
+
+  /**
+   * Efface d'un geste les cookies qui n'ont plus de compte actif derrière eux.
+   *
+   * Un par un, parce que l'échec sur l'un ne doit pas empêcher les autres —
+   * un cookie peut avoir expiré entre l'affichage et le clic — et parce que
+   * le journal garde ainsi une trace par cookie effacé.
+   */
+  const purger = useMutation({
+    mutationFn: async (ids: string[]) => {
+      for (const id of ids) {
+        try {
+          await hotspotApi.deleteCookie(id, currentId);
+        } catch {
+          /* déjà parti : rien à faire, on continue */
+        }
+      }
+    },
+    onSuccess: refresh,
+    onError,
+  });
   const cut = useMutation({
     mutationFn: (username: string) => hotspotApi.cutAccess(username, currentId),
     onSuccess: refresh,
@@ -397,6 +418,13 @@ function CookiesTab() {
     byUser.set(cookie.username, (byUser.get(cookie.username) ?? 0) + 1);
   }
 
+  const reliquats = (cookies.data ?? []).filter((c) => c.etatDuCompte !== 'actif');
+  // Les reliquats en tête : dans une cinquantaine de lignes, ce qui appelle un
+  // geste ne doit pas être à chercher.
+  const listés = [...(cookies.data ?? [])].sort(
+    (a, b) => Number(a.etatDuCompte === 'actif') - Number(b.etatDuCompte === 'actif'),
+  );
+
   return (
     <div className="space-y-4">
       {error && <ErrorBanner>{error}</ErrorBanner>}
@@ -407,10 +435,49 @@ function CookiesTab() {
         cookies, ce que fait « Couper l'accès ».
       </div>
 
+      {reliquats.length > 0 && (
+        <Card title={`${reliquats.length} cookie(s) sans compte actif derrière`}>
+          <p className="text-sm text-slate-600">
+            Quelqu'un a bloqué ou supprimé ces comptes, et leurs cookies sont restés. Que le
+            routeur les honore encore ou non, ce sont des reliquats qu'on ne pouvait ni voir ni
+            effacer — et les effacer ne coûte rien à un client en règle, qui retape son code.
+          </p>
+          <ul className="mt-2 space-y-1 text-sm">
+            {reliquats.map((c) => (
+              <li key={c.id} className="flex items-center gap-2">
+                <Badge tone={c.etatDuCompte === 'absent' ? 'red' : 'amber'}>
+                  {c.etatDuCompte === 'absent' ? 'compte supprimé' : 'compte bloqué'}
+                </Badge>
+                <span className="font-medium">{c.username}</span>
+                <span className="font-mono text-xs text-slate-500">{c.macAddress}</span>
+              </li>
+            ))}
+          </ul>
+          {canWrite && (
+            <div className="mt-3">
+              <Button
+                variant="danger"
+                disabled={purger.isPending}
+                onClick={() => purger.mutate(reliquats.map((c) => c.id))}
+              >
+                {purger.isPending ? 'Effacement…' : `Effacer ces ${reliquats.length} cookie(s)`}
+              </Button>
+            </div>
+          )}
+        </Card>
+      )}
+
       <Table head={['Compte', 'Appareil', 'Expire dans', 'Cookies du compte', '']}>
-        {cookies.data?.map((cookie) => (
+        {listés.map((cookie) => (
           <tr key={cookie.id}>
-            <td className="px-3 py-2 font-medium">{cookie.username}</td>
+            <td className="px-3 py-2 font-medium">
+              {cookie.username}
+              {cookie.etatDuCompte !== 'actif' && (
+                <Badge tone={cookie.etatDuCompte === 'absent' ? 'red' : 'amber'}>
+                  {cookie.etatDuCompte === 'absent' ? 'compte supprimé' : 'compte bloqué'}
+                </Badge>
+              )}
+            </td>
             <td className="px-3 py-2 font-mono text-xs text-slate-500">{cookie.macAddress}</td>
             <td className="px-3 py-2">{formatUptime(cookie.expiresInSeconds)}</td>
             <td className="px-3 py-2 text-slate-500">{byUser.get(cookie.username)}</td>
