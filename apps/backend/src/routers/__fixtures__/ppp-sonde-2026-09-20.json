@@ -1,0 +1,75 @@
+{
+  "relevéLe": "2026-09-20T06:09:26.620Z",
+  "routeur": "https://192.168.88.1",
+  "méthode": "objets créés le temps du sondage puis supprimés",
+  "/ppp/profile": [
+    {
+      ".id": "*1",
+      "address-list": "",
+      "bridge-learning": "default",
+      "change-tcp-mss": "yes",
+      "comment": "GeMikrot — sondage, à supprimer",
+      "default": "false",
+      "dns-server": "8.8.8.8",
+      "local-address": "10.77.0.1",
+      "name": "gemikrot-sonde-profil",
+      "on-down": "",
+      "on-up": "",
+      "only-one": "yes",
+      "rate-limit": "2M/2M",
+      "remote-address": "gemikrot-sonde-pool",
+      "use-compression": "default",
+      "use-encryption": "default",
+      "use-ipv6": "yes",
+      "use-mpls": "default",
+      "use-upnp": "default"
+    }
+  ],
+  "/ppp/secret": [
+    {
+      ".id": "*1",
+      "caller-id": "",
+      "comment": "GeMikrot — sondage, à supprimer",
+      "disabled": "false",
+      "ipv6-routes": "",
+      "last-logged-out": "1970-01-01 00:00:00",
+      "limit-bytes-in": "0",
+      "limit-bytes-out": "0",
+      "name": "gemikrot-sonde-compte",
+      "password": "***",
+      "profile": "gemikrot-sonde-profil",
+      "routes": "",
+      "service": "pppoe"
+    }
+  ],
+  "/interface/pppoe-server/server": [
+    {
+      ".id": "*1",
+      "accept-untagged": "true",
+      "authentication": "pap,chap,mschap1,mschap2",
+      "default-profile": "gemikrot-sonde-profil",
+      "disabled": "true",
+      "interface": "ether4",
+      "invalid": "false",
+      "keepalive-timeout": "10",
+      "max-mru": "auto",
+      "max-mtu": "auto",
+      "max-sessions": "unlimited",
+      "mrru": "disabled",
+      "one-session-per-host": "true",
+      "pado-delay": "0",
+      "pppoe-over-vlan-range": "",
+      "service-name": "gemikrot-sonde-svc"
+    }
+  ],
+  "/ip/pool": [
+    {
+      ".id": "*3",
+      "available": "11",
+      "name": "gemikrot-sonde-pool",
+      "ranges": "10.77.0.10-10.77.0.20",
+      "total": "11",
+      "used": "0"
+    }
+  ]
+}

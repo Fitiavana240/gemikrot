@@ -4,6 +4,7 @@ import { ILogger } from './logging/logger.interface';
 import * as RouterMapper from './mappers/router.mapper';
 import * as HotspotMapper from './mappers/hotspot.mapper';
 import * as UmMapper from './mappers/user-manager.mapper';
+import * as PppMapper from './mappers/ppp.mapper';
 import { validate } from './validation/validate';
 import {
   assignProfileSchema,
@@ -29,6 +30,7 @@ import {
   updateProfileSchema,
   updateUserManagerUserSchema,
   usernameParamSchema,
+  createPppSecretSchema,
 } from './validation/schemas';
 import {
   AssignProfileDto,
@@ -48,6 +50,7 @@ import {
   UpdateLimitationDto,
   UpdateProfileDto,
   UpdateUserManagerUserDto,
+  CreatePppSecretDto,
 } from './dto/commands.dto';
 import { IpBindingType } from './dto/hotspot.dto';
 import type { UserManagerUserDto } from './dto/user-manager.dto';
@@ -826,6 +829,101 @@ export class RouterOSMikrotikService implements IMikrotikService {
   private async findUserManagerUserByUsername(username: string) {
     const users = await this.getUserManagerUsers();
     return users.find((user) => user.username === username) ?? null;
+  }
+
+
+  // ---------- PPPoE ----------
+
+  /**
+   * Les comptes PPPoE. Le débit ne se lit pas ici : il vit sur le profil,
+   * contrairement au HotSpot où chaque compte peut porter le sien.
+   */
+  async getPppSecrets() {
+    const raw = await this.client.get<any[]>('/ppp/secret');
+    return raw.map(PppMapper.mapPppSecret);
+  }
+
+  async getPppProfiles() {
+    const raw = await this.client.get<any[]>('/ppp/profile');
+    return raw.map(PppMapper.mapPppProfile);
+  }
+
+  /** Les sessions en cours. Vide tant qu'aucun abonné n'est connecté. */
+  async getPppActive() {
+    const raw = await this.client.get<any[]>('/ppp/active');
+    return raw.map(PppMapper.mapPppActive);
+  }
+
+  async getPppoeServers() {
+    const raw = await this.client.get<any[]>('/interface/pppoe-server/server');
+    return raw.map(PppMapper.mapPppoeServer);
+  }
+
+  /** Les bassins d'adresses, que les profils désignent par leur nom. */
+  async getIpPools() {
+    const raw = await this.client.get<any[]>('/ip/pool');
+    return raw.map(PppMapper.mapIpPool);
+  }
+
+  async createPppSecret(input: CreatePppSecretDto) {
+    const data = validate(createPppSecretSchema, input);
+
+    const existing = await this.findPppSecretByUsername(data.username);
+    if (existing) {
+      throw new MikrotikConflictError(`Le compte PPPoE "${data.username}" existe déjà`, {
+        username: data.username,
+      });
+    }
+
+    this.logger.info('Création compte PPPoE', { username: data.username });
+    const raw = await this.client.put<any>('/ppp/secret', {
+      name: data.username,
+      password: data.password,
+      service: data.service ?? 'pppoe',
+      ...(data.profile ? { profile: data.profile } : {}),
+      ...(data.remoteAddress ? { 'remote-address': data.remoteAddress } : {}),
+      ...(data.comment ? { comment: data.comment } : {}),
+    });
+    return PppMapper.mapPppSecret(raw);
+  }
+
+  /**
+   * Suspend ou réactive un abonné. Désactiver le compte n'interrompt pas la
+   * session en cours : PPPoE ne revérifie l'authentification qu'à la
+   * reconnexion. Pour couper tout de suite, fermer aussi la session.
+   */
+  async setPppSecretDisabled(username: string, disabled: boolean) {
+    const validUsername = validate(usernameParamSchema, username);
+    const existing = await this.findPppSecretByUsername(validUsername);
+    if (!existing) throw new MikrotikNotFoundError('Compte PPPoE', validUsername);
+
+    this.logger.info(disabled ? 'Suspension abonné PPPoE' : 'Réactivation abonné PPPoE', {
+      username: validUsername,
+    });
+    const raw = await this.client.patch<any>(`/ppp/secret/${existing.id}`, {
+      disabled: disabled ? 'true' : 'false',
+    });
+    return PppMapper.mapPppSecret(raw);
+  }
+
+  async deletePppSecret(username: string) {
+    const validUsername = validate(usernameParamSchema, username);
+    const existing = await this.findPppSecretByUsername(validUsername);
+    if (!existing) throw new MikrotikNotFoundError('Compte PPPoE', validUsername);
+
+    this.logger.info('Suppression compte PPPoE', { username: validUsername });
+    await this.client.delete(`/ppp/secret/${existing.id}`);
+  }
+
+  /** Ferme une session en cours, sans toucher au compte. */
+  async disconnectPppActive(id: string) {
+    this.logger.info('Fermeture session PPPoE', { id });
+    await this.client.delete(`/ppp/active/${id}`);
+  }
+
+  private async findPppSecretByUsername(username: string) {
+    const secrets = await this.getPppSecrets();
+    return secrets.find((secret) => secret.username === username) ?? null;
   }
 
 }

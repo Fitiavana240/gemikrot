@@ -184,3 +184,20 @@ export const createWalledGardenIpEntrySchema = z.object({
 });
 
 export const routerosIdSchema = z.string().min(1).max(64).regex(/^\*?[0-9A-Fa-f]+$/);
+
+/**
+ * Un nom de compte PPPoE finit dans une commande RouterOS : il est restreint
+ * aux mêmes caractères que les autres identifiants, avant tout appel réseau.
+ */
+export const createPppSecretSchema = z.object({
+  username: z
+    .string()
+    .min(3, 'Le nom du compte doit contenir au moins 3 caractères')
+    .max(64)
+    .regex(/^[a-zA-Z0-9_.@-]+$/, 'Caractères non autorisés dans le nom du compte'),
+  password: z.string().min(4).max(128),
+  profile: z.string().max(64).optional(),
+  service: z.enum(['pppoe', 'any', 'pptp', 'l2tp', 'ovpn', 'sstp']).optional(),
+  remoteAddress: z.string().max(45).optional(),
+  comment: z.string().max(255).optional(),
+});

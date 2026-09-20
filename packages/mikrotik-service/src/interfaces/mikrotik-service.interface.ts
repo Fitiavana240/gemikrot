@@ -46,7 +46,15 @@ import {
   UpdateLimitationDto,
   UpdateProfileDto,
   UpdateUserManagerUserDto,
+  CreatePppSecretDto,
 } from '../dto/commands.dto';
+import {
+  IpPoolDto,
+  PppActiveDto,
+  PppProfileDto,
+  PppSecretDto,
+  PppoeServerDto,
+} from '../dto/ppp.dto';
 
 /**
  * Contrat UNIQUE par lequel le reste du backend (services métier,
@@ -176,4 +184,34 @@ export interface IMikrotikService {
   deleteLimitation(name: string): Promise<void>;
   attachLimitationToProfile(input: AttachLimitationDto): Promise<UserManagerProfileLimitationDto>;
   detachLimitationFromProfile(input: AttachLimitationDto): Promise<void>;
+
+  // ---------- PPPoE ----------
+
+  /**
+   * L'autre façon de vendre l'accès : l'abonné ouvre une session
+   * authentifiée au lieu de saisir un code sur une page captive. Sert le
+   * marché des abonnements à domicile, que le HotSpot ne couvre pas.
+   *
+   * Formes relevées sur un hAP ac² en 7.24.4 et figées dans
+   * `tests/mappers/ppp.spec.ts`, à l'exception des sessions actives, qu'aucun
+   * relevé ne peut produire sans un abonné réellement connecté.
+   */
+  getPppSecrets(): Promise<PppSecretDto[]>;
+  /** C'est le profil qui porte le débit et l'adressage, pas le compte. */
+  getPppProfiles(): Promise<PppProfileDto[]>;
+  getPppActive(): Promise<PppActiveDto[]>;
+  getPppoeServers(): Promise<PppoeServerDto[]>;
+  /** Les bassins d'adresses, que les profils désignent par leur nom. */
+  getIpPools(): Promise<IpPoolDto[]>;
+
+  createPppSecret(input: CreatePppSecretDto): Promise<PppSecretDto>;
+  /**
+   * Suspendre ne coupe pas la session en cours : PPPoE ne revérifie
+   * l'authentification qu'à la reconnexion. Pour couper tout de suite,
+   * fermer aussi la session avec `disconnectPppActive`.
+   */
+  setPppSecretDisabled(username: string, disabled: boolean): Promise<PppSecretDto>;
+  deletePppSecret(username: string): Promise<void>;
+  disconnectPppActive(id: string): Promise<void>;
 }
+

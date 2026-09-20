@@ -142,3 +142,19 @@ export interface CreateWalledGardenIpEntryDto {
   protocol?: string;
   comment?: string;
 }
+
+/**
+ * Création d'un abonné PPPoE. Le débit ne se règle pas ici : il vit sur le
+ * profil, que ce compte désigne par son nom.
+ */
+export interface CreatePppSecretDto {
+  username: string;
+  password: string;
+  /** Nom d'un profil existant. Sans lui, RouterOS applique `default`. */
+  profile?: string;
+  /** `pppoe` par défaut ; `any` accepte tous les services. */
+  service?: string;
+  /** Adresse imposée à cet abonné, au lieu du bassin du profil. */
+  remoteAddress?: string;
+  comment?: string;
+}

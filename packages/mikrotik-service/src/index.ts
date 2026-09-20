@@ -9,6 +9,7 @@ export * from './dto/router.dto';
 export * from './dto/hotspot.dto';
 export * from './dto/user-manager.dto';
 export * from './dto/commands.dto';
+export * from './dto/ppp.dto';
 
 export * from './errors/mikrotik.errors';
 

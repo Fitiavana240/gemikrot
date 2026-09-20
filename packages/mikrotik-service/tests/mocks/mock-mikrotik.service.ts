@@ -48,6 +48,14 @@ import {
   UpdateProfileDto,
   UpdateUserManagerUserDto,
 } from '../../src/dto/commands.dto';
+import {
+  IpPoolDto,
+  PppActiveDto,
+  PppProfileDto,
+  PppSecretDto,
+  PppoeServerDto,
+} from '../../src/dto/ppp.dto';
+import { CreatePppSecretDto } from '../../src/dto/commands.dto';
 import { MikrotikConflictError, MikrotikNotFoundError } from '../../src/errors/mikrotik.errors';
 
 /**
@@ -644,6 +652,77 @@ export class MockMikrotikService implements IMikrotikService {
         `${input.profileName}/${input.limitationName}`,
       );
     }
+  }
+
+
+  // ---------- PPPoE ----------
+  //
+  // Le parc de démonstration ne vend pas de PPPoE : ces collections sont
+  // vides, et un test qui en a besoin les alimente par `seedPppSecret`.
+
+  pppSecrets: PppSecretDto[] = [];
+  pppProfiles: PppProfileDto[] = [];
+  pppActive: PppActiveDto[] = [];
+
+  async getPppSecrets(): Promise<PppSecretDto[]> {
+    return [...this.pppSecrets];
+  }
+
+  async getPppProfiles(): Promise<PppProfileDto[]> {
+    return [...this.pppProfiles];
+  }
+
+  async getPppActive(): Promise<PppActiveDto[]> {
+    return [...this.pppActive];
+  }
+
+  async getPppoeServers(): Promise<PppoeServerDto[]> {
+    return [];
+  }
+
+  async getIpPools(): Promise<IpPoolDto[]> {
+    return [];
+  }
+
+  async createPppSecret(input: CreatePppSecretDto): Promise<PppSecretDto> {
+    if (this.pppSecrets.some((s) => s.username === input.username)) {
+      throw new MikrotikConflictError(`Le compte PPPoE "${input.username}" existe déjà`, {
+        username: input.username,
+      });
+    }
+    const secret: PppSecretDto = {
+      id: `*${this.pppSecrets.length + 1}`,
+      username: input.username,
+      disabled: false,
+      profile: input.profile ?? null,
+      service: input.service ?? 'pppoe',
+      comment: input.comment ?? null,
+      remoteAddress: input.remoteAddress ?? null,
+      limitBytesIn: null,
+      limitBytesOut: null,
+      lastLoggedOut: null,
+    };
+    this.pppSecrets.push(secret);
+    return secret;
+  }
+
+  async setPppSecretDisabled(username: string, disabled: boolean): Promise<PppSecretDto> {
+    const secret = this.pppSecrets.find((s) => s.username === username);
+    if (!secret) throw new MikrotikNotFoundError('Compte PPPoE', username);
+    secret.disabled = disabled;
+    return secret;
+  }
+
+  async deletePppSecret(username: string): Promise<void> {
+    const before = this.pppSecrets.length;
+    this.pppSecrets = this.pppSecrets.filter((s) => s.username !== username);
+    if (this.pppSecrets.length === before) {
+      throw new MikrotikNotFoundError('Compte PPPoE', username);
+    }
+  }
+
+  async disconnectPppActive(id: string): Promise<void> {
+    this.pppActive = this.pppActive.filter((s) => s.id !== id);
   }
 
   // ---------- Aides de test ----------
