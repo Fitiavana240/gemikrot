@@ -1,6 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { plansApi, type CreatePlanInput } from '../api/plans';
+import { hotspotTabsApi } from '../api/mikrotik-tabs';
+import { ChampDuree } from '../components/Edition';
+import { formatDuration } from '../api/user-manager';
+import { useRouterSelection } from '../routers/RouterContext';
 import { useAuth } from '../auth/AuthContext';
 import { libellé, STATUT_SIMPLE } from '../api/libelles';
 import { useCurrency } from '../api/money';
@@ -16,9 +20,30 @@ const EMPTY_FORM: CreatePlanInput = {
 
 export function PlansPage() {
   const { canWrite } = useAuth();
+  const { currentId } = useRouterSelection();
   const { currency, format } = useCurrency();
   const queryClient = useQueryClient();
   const offres = useQuery({ queryKey: ['plans'], queryFn: plansApi.list });
+  /**
+   * Les profils du routeur, pour confronter chaque offre à ce qui existe
+   * vraiment.
+   *
+   * Une offre désigne un profil par son nom ; renommé ou supprimé depuis
+   * WinBox, le lien casse en silence et l'offre reste « actif », vendable. Ce
+   * parc en portait une dans ce cas. La panne ne se déclarait qu'à la
+   * génération, un échec par ticket, devant le client.
+   *
+   * L'absence de réponse du routeur ne conclut rien : on ne dit « introuvable »
+   * que si le routeur a répondu.
+   */
+  const profilsRouteur = useQuery({
+    queryKey: ['hotspot-profiles', currentId],
+    queryFn: () => hotspotTabsApi.profiles(currentId),
+    retry: false,
+  });
+  const nomsProfils = profilsRouteur.isSuccess
+    ? new Set((profilsRouteur.data ?? []).map((p) => p.name))
+    : null;
   const plans = offres.data;
   const [form, setForm] = useState<CreatePlanInput>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
@@ -75,13 +100,16 @@ export function PlansPage() {
                 onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
               />
             </FormField>
-            <FormField label="Validité (secondes)">
-              <Input
-                type="number"
-                required
-                min={1}
-                value={form.validityDurationSeconds}
-                onChange={(e) => setForm({ ...form, validityDurationSeconds: Number(e.target.value) })}
+            {/* Le champ demandait des secondes : une offre « 2 heures » s'y
+                saisissait « 7200 », et une de quinze minutes obligeait à un
+                calcul mental à chaque création. Le composant partagé choisit
+                l'unité qui tombe juste, comme partout ailleurs dans la console. */}
+            <FormField label="Validité">
+              <ChampDuree
+                secondes={form.validityDurationSeconds}
+                onChange={(secondes) =>
+                  setForm({ ...form, validityDurationSeconds: secondes ?? 0 })
+                }
               />
             </FormField>
             <FormField label="Démarre">
@@ -103,6 +131,17 @@ export function PlansPage() {
         </Card>
       )}
 
+      {nomsProfils &&
+        (plans ?? []).some(
+          (p) => p.status === 'ACTIVE' && !nomsProfils.has(p.mikrotikProfileName),
+        ) && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            Une offre au moins désigne un profil qui n'existe plus sur le routeur. Elle reste
+            vendable, et <strong>chaque ticket généré échouera</strong> — le routeur refuse un
+            profil qu'il ne connaît pas. « Synchroniser » recrée le profil manquant.
+          </div>
+        )}
+
       {offres.isPending ? (
         <TableSkeleton columns={4} />
       ) : offres.isError ? (
@@ -113,8 +152,15 @@ export function PlansPage() {
             <tr key={plan.id}>
               <td className="px-3 py-2">{plan.name}</td>
               <td className="px-3 py-2">{format(plan.price)}</td>
-              <td className="px-3 py-2">{Math.round(plan.validityDurationSeconds / 3600)} h</td>
-              <td className="px-3 py-2 font-mono text-xs text-slate-500">{plan.mikrotikProfileName}</td>
+              {/* « 720 h » pour un forfait au mois : exact, et illisible. La
+                  même fonction qu'ailleurs choisit l'unité qui tombe juste. */}
+              <td className="px-3 py-2">{formatDuration(plan.validityDurationSeconds)}</td>
+              <td className="px-3 py-2 font-mono text-xs text-slate-500">
+                {plan.mikrotikProfileName}
+                {nomsProfils && !nomsProfils.has(plan.mikrotikProfileName) && (
+                  <Badge tone="red">absent du routeur</Badge>
+                )}
+              </td>
               <td className="px-3 py-2">
                 <Badge tone={libellé(STATUT_SIMPLE, plan.status).ton}>
                   {libellé(STATUT_SIMPLE, plan.status).label}

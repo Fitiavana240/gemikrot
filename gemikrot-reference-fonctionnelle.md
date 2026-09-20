@@ -867,6 +867,36 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — Une offre vendable dont le profil n'existe plus
+
+Confronté les huit offres de l'application aux profils du routeur. Les durées concordent
+partout — pas de fuite de ce côté. Mais **une offre désigne un profil absent du routeur** et
+reste « actif », donc vendable.
+
+Sondé plutôt que supposé : créer un compte HotSpot avec un profil inexistant rend un **400**.
+Rien n'est créé, l'échec est franc — mais il arrive **au comptoir**, une fois par ticket : un
+lot de cinquante échoue cinquante fois, devant le client. (Au passage, la réponse lue était
+« Le routeur a répondu une erreur — RouterOS a répondu 400 » : le filtre d'exception écrit ce
+matin fait son travail sur un cas que je n'avais pas construit.)
+
+Le formulaire de génération vérifiait déjà le profil **User Manager** avant de lancer, avec un
+message rouge explicite. Le côté **HotSpot** n'avait rien. Le contrôle est désormais symétrique.
+
+Et surtout, l'écran Offres confronte maintenant chaque offre au routeur : pastille rouge
+« absent du routeur » sur la ligne, bandeau au-dessus de la table. On attrape le défaut là où il
+naît — un profil renommé ou supprimé dans WinBox — et non à la vente. L'absence de réponse du
+routeur ne conclut rien : on ne dit « introuvable » que si le routeur a répondu.
+
+Deux restes du même écran, corrigés en passant : le champ de validité demandait des **secondes**
+— une offre de deux heures s'y saisissait « 7200 » — alors que le composant partagé qui choisit
+l'unité existe depuis ce matin ; et la colonne Validité affichait « 720 h » pour un forfait au
+mois, exact et illisible. Elle lit maintenant « 30 j ».
+
+**Note sur les données** : les six tickets rattachés à cette offre datent du 18 septembre et
+n'ont jamais atteint le routeur (`target` vide, pas de compte). Je ne les ai pas touchés —
+effacer des lignes d'une base de production n'est pas une décision à prendre à la place de
+l'exploitant. 646 comptes intacts.
+
 ### 2026-09-20 — 228 tickets dans le tiroir, sans plafond
 
 Parti des MAC aléatoires, arrivé ailleurs. La mesure intermédiaire : **28 des 59 cookies

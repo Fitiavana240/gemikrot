@@ -8,6 +8,7 @@ import { useAuth } from '../auth/AuthContext';
 import { libellé, STATUT_TICKET } from '../api/libelles';
 import { TabBar, type TabDef } from '../components/TabBar';
 import { userManagerApi } from '../api/user-manager';
+import { hotspotTabsApi } from '../api/mikrotik-tabs';
 import { BatchesPage } from './BatchesPage';
 import { TicketPrintPage } from './TicketTemplatesPage';
 import { useRouterSelection } from '../routers/RouterContext';
@@ -199,6 +200,21 @@ function CibleGeneration({
     enabled: Boolean(plan) && cible === 'USER_MANAGER',
     retry: false,
   });
+  /**
+   * Le même contrôle du côté HotSpot, qui ne l'avait pas.
+   *
+   * Sondé sur le routeur : créer un compte avec un profil inexistant rend un
+   * **400**, donc rien n'est créé — l'échec est franc, pas silencieux. Mais il
+   * arrive **au comptoir**, une fois sur deux devant le client, et une fois
+   * par ticket : un lot de cinquante échoue cinquante fois. Sur ce parc, une
+   * offre sur huit désigne déjà un profil absent du routeur.
+   */
+  const profilsHotspot = useQuery({
+    queryKey: ['hotspot-profiles-check', currentId],
+    queryFn: () => hotspotTabsApi.profiles(currentId),
+    enabled: Boolean(plan) && cible === 'HOTSPOT',
+    retry: false,
+  });
 
   if (!plan) {
     return (
@@ -215,7 +231,10 @@ function CibleGeneration({
   // le profil HotSpot en cible User Manager envoyait chercher dans la
   // mauvaise table — et faisait échouer le contrôle d'existence par-dessus.
   const attendu = hotspot ? plan.mikrotikProfileName : plan.umProfileName;
-  const trouvé = attendu ? profils.data?.some((p) => p.name === attendu) : undefined;
+  const requêteProfils = hotspot ? profilsHotspot : profils;
+  const trouvé = attendu
+    ? requêteProfils.data?.some((p) => p.name === attendu)
+    : undefined;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm">
@@ -280,22 +299,22 @@ function CibleGeneration({
           HotSpot accepte.
         </p>
       )}
-      {!hotspot && attendu && profils.isPending && (
+      {attendu && requêteProfils.isPending && (
         <p className="mt-1.5 text-xs text-slate-400">Vérification du profil sur le routeur…</p>
       )}
-      {!hotspot && attendu && profils.isError && (
+      {attendu && requêteProfils.isError && (
         <p className="mt-1.5 text-xs text-amber-700">
           Le routeur n'a pas répondu : impossible de vérifier que le profil existe.
         </p>
       )}
-      {!hotspot && trouvé === false && (
+      {trouvé === false && (
         <p className="mt-1.5 text-xs text-red-600">
-          L'offre désigne le profil « {attendu} », introuvable dans User Manager. Il a sans doute
-          été renommé ou supprimé dans WinBox — resynchronisez l'offre depuis l'écran Offres
-          avant de générer.
+          L'offre désigne le profil « {attendu} », introuvable {hotspot ? 'dans le HotSpot' : 'dans User Manager'}. Il a
+          sans doute été renommé ou supprimé dans WinBox — resynchronisez l'offre depuis l'écran
+          Offres avant de générer, sinon <strong>chaque ticket du lot échouera</strong>.
         </p>
       )}
-      {!hotspot && trouvé === true && (
+      {trouvé === true && (
         <p className="mt-1.5 text-xs text-emerald-700">Profil trouvé sur le routeur.</p>
       )}
 
