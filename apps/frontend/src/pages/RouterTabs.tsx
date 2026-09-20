@@ -1,14 +1,18 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   formatDebit,
   formatDuree,
+  formatOctets,
   hotspotTabsApi,
   umTabsApi,
 } from '../api/mikrotik-tabs';
+import { useAuth } from '../auth/AuthContext';
+import { ApiError } from '../api/client';
 import { useRouterSelection } from '../routers/RouterContext';
 import {
   Badge,
+  Button,
   EmptyState,
   ErrorNote,
   Input,
@@ -63,40 +67,123 @@ function useFiltre<T>(items: T[] | undefined, champs: (item: T) => (string | nul
 
 export function HotspotUsersTab() {
   const { currentId } = useRouterSelection();
+  const { canWrite } = useAuth();
+  const queryClient = useQueryClient();
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [àSupprimer, setÀSupprimer] = useState<string | null>(null);
+
   const requête = useQuery({
     queryKey: ['hotspot-users', currentId],
     queryFn: () => hotspotTabsApi.users(currentId),
   });
-  const { terme, setTerme, filtrés } = useFiltre(requête.data, (u) => [u.username, u.profile, u.comment]);
+  const { terme, setTerme, filtrés } = useFiltre(requête.data, (u) => [
+    u.username,
+    u.profile,
+    u.comment,
+  ]);
+
+  const onError = (e: unknown) =>
+    setErreur(e instanceof ApiError ? e.message : 'Le routeur a refusé cette action.');
+  const rafraîchir = () => {
+    setErreur(null);
+    void queryClient.invalidateQueries({ queryKey: ['hotspot-users', currentId] });
+  };
+
+  const bloquer = useMutation({
+    mutationFn: ({ username, disabled }: { username: string; disabled: boolean }) =>
+      hotspotTabsApi.setUserDisabled(username, disabled, currentId),
+    onSuccess: rafraîchir,
+    onError,
+  });
+  const supprimer = useMutation({
+    mutationFn: (username: string) => hotspotTabsApi.deleteUser(username, currentId),
+    onSuccess: () => {
+      setÀSupprimer(null);
+      rafraîchir();
+    },
+    onError,
+  });
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-slate-600">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-3xl text-sm text-slate-600">
           La table du HotSpot lui-même. Un compte d'ici n'expire pas à une date : seul le profil
-          borne sa session, et la borne repart à chaque reconnexion.
+          borne sa session, et la borne repart à chaque reconnexion. Le trafic affiché est cumulé
+          depuis la création du compte.
         </p>
         <span className="shrink-0 text-sm text-slate-500">{filtrés.length} compte(s)</span>
       </div>
+
       <Input
         value={terme}
         onChange={(e) => setTerme(e.target.value)}
         placeholder="Filtrer par nom, profil ou commentaire"
         className="max-w-sm"
       />
+
+      {erreur && <ErrorNote>{erreur}</ErrorNote>}
+
+      {/* Une suppression perd le trafic consommé et le nom porté par le
+          commentaire : la confirmer nomme ce qu'on perd, plutôt que de
+          demander « êtes-vous sûr ». */}
+      {àSupprimer && (
+        <ErrorNote>
+          Supprimer « {àSupprimer} » efface son trafic consommé et son commentaire, sans retour
+          possible. Le bloquer suffit le plus souvent.
+          <span className="ml-3 inline-flex gap-2">
+            <Button variant="danger" onClick={() => supprimer.mutate(àSupprimer)}>
+              Supprimer quand même
+            </Button>
+            <Button variant="secondary" onClick={() => setÀSupprimer(null)}>
+              Annuler
+            </Button>
+          </span>
+        </ErrorNote>
+      )}
+
       <Liste
         requête={{ ...requête, data: filtrés }}
-        colonnes={['Compte', 'Profil', 'Serveur', 'État', 'Commentaire']}
+        colonnes={['Compte', 'Client', 'Profil', 'Durée', 'Reçu', 'Envoyé', 'État', '']}
         vide={{ titre: 'Aucun compte HotSpot', aide: 'Cette table est vide sur le routeur.' }}
         ligne={(u) => (
-          <tr key={u.id}>
+          <tr key={u.id} className={u.disabled ? 'opacity-60' : undefined}>
             <td className="px-3 py-2 font-mono text-xs">{u.username}</td>
-            <td className="px-3 py-2">{u.profile || '—'}</td>
-            <td className="px-3 py-2 text-slate-500">{u.server}</td>
-            <td className="px-3 py-2">
-              <Badge tone={u.disabled ? 'red' : 'green'}>{u.disabled ? 'désactivé' : 'actif'}</Badge>
+            {/* Sur ce parc, le commentaire porte le nom de la personne :
+                c'est le seul lien entre un compte et quelqu'un. */}
+            <td className="max-w-[12rem] truncate px-3 py-2">{u.comment ?? '—'}</td>
+            <td className="px-3 py-2 text-slate-600">{u.profile || '—'}</td>
+            <td className="px-3 py-2 tabular-nums text-slate-500">
+              {formatDuree(u.uptimeSeconds)}
+              {u.limitUptimeSeconds != null && (
+                <span className="text-slate-400"> / {formatDuree(u.limitUptimeSeconds)}</span>
+              )}
             </td>
-            <td className="max-w-xs truncate px-3 py-2 text-xs text-slate-500">{u.comment ?? '—'}</td>
+            <td className="px-3 py-2 tabular-nums text-slate-500">{formatOctets(u.bytesIn)}</td>
+            <td className="px-3 py-2 tabular-nums text-slate-500">{formatOctets(u.bytesOut)}</td>
+            <td className="px-3 py-2">
+              <Badge tone={u.disabled ? 'red' : 'green'}>
+                {u.disabled ? 'bloqué' : 'actif'}
+              </Badge>
+            </td>
+            <td className="space-x-2 whitespace-nowrap px-3 py-2 text-right">
+              {canWrite && (
+                <>
+                  <Button
+                    variant="secondary"
+                    disabled={bloquer.isPending}
+                    onClick={() =>
+                      bloquer.mutate({ username: u.username, disabled: !u.disabled })
+                    }
+                  >
+                    {u.disabled ? 'Débloquer' : 'Bloquer'}
+                  </Button>
+                  <Button variant="danger" onClick={() => setÀSupprimer(u.username)}>
+                    Supprimer
+                  </Button>
+                </>
+              )}
+            </td>
           </tr>
         )}
       />

@@ -88,6 +88,55 @@ export class HotspotService {
     return mikrotik.getDhcpLeases();
   }
 
+  /**
+   * Bloque ou reactive un compte HotSpot.
+   *
+   * Desactiver plutot que supprimer : le compte porte le trafic consomme et,
+   * sur ce parc, le nom de la personne dans son commentaire. L'effacer perd
+   * les deux.
+   *
+   * Attention toutefois : desactiver ne coupe pas une session en cours, et un
+   * cookie encore valide rouvre l'acces sans repasser par le compte. Pour
+   * couper vraiment, passer par `cut-access`, qui purge aussi cookies et
+   * session.
+   */
+  async setUserDisabled(
+    username: string,
+    disabled: boolean,
+    adminUserId?: string,
+    routerId?: string,
+  ) {
+    const mikrotik = await this.client(routerId);
+    const compte = await mikrotik.setHotspotUserDisabled(username, disabled);
+    await this.audit.log({
+      adminUserId,
+      routerId,
+      action: disabled ? 'DISABLE_HOTSPOT_USER' : 'ENABLE_HOTSPOT_USER',
+      targetType: 'HotspotUser',
+      targetId: username,
+    });
+    return compte;
+  }
+
+  /**
+   * Supprime un compte HotSpot du routeur.
+   *
+   * Irreversible, et le trafic consomme comme le commentaire disparaissent
+   * avec. Le blocage est presque toujours le bon geste ; la suppression sert
+   * a nettoyer un compte cree par erreur.
+   */
+  async deleteUser(username: string, adminUserId?: string, routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    await mikrotik.deleteHotspotUser(username);
+    await this.audit.log({
+      adminUserId,
+      routerId,
+      action: 'DELETE_HOTSPOT_USER',
+      targetType: 'HotspotUser',
+      targetId: username,
+    });
+  }
+
   async overview(routerId?: string) {
     const mikrotik = await this.client(routerId);
     const [servers, profiles, cookies, active] = await Promise.all([

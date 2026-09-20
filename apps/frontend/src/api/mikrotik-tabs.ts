@@ -24,8 +24,17 @@ export interface HotspotUser {
   username: string;
   profile: string;
   disabled: boolean;
+  /** Sur ce parc, le commentaire porte le nom de la personne. */
   comment: string | null;
-  server: string;
+  server: string | null;
+  bytesIn: number;
+  bytesOut: number;
+  /** Temps deja consomme, cumule sur toutes les sessions du compte. */
+  uptimeSeconds: number;
+  /** Plafond, absent du routeur tant qu'il n'est pas pose : `null`, pas zero. */
+  limitUptimeSeconds: number | null;
+  limitBytesIn: number | null;
+  limitBytesOut: number | null;
 }
 
 export interface HotspotProfile {
@@ -90,12 +99,32 @@ export interface UmAssignment {
   state: string;
 }
 
+/** Octets -> « 24,4 Gio ». Les multiples de 1024, comme RouterOS les compte. */
+export function formatOctets(octets: number): string {
+  if (!octets) return '—';
+  const unites = ['o', 'Kio', 'Mio', 'Gio', 'Tio'];
+  let valeur = octets;
+  let rang = 0;
+  while (valeur >= 1024 && rang < unites.length - 1) {
+    valeur /= 1024;
+    rang += 1;
+  }
+  return `${valeur.toFixed(rang === 0 ? 0 : 1)} ${unites[rang]}`;
+}
+
 export const hotspotTabsApi = {
   users: (routerId?: string) => api.get<HotspotUser[]>(`/hotspot/users${q(routerId)}`),
   profiles: (routerId?: string) => api.get<HotspotProfile[]>(`/hotspot/profiles${q(routerId)}`),
   hosts: (routerId?: string) => api.get<HotspotHost[]>(`/hotspot/hosts${q(routerId)}`),
   ipBindings: (routerId?: string) => api.get<IpBinding[]>(`/hotspot/ip-bindings${q(routerId)}`),
   dhcpLeases: (routerId?: string) => api.get<DhcpLease[]>(`/hotspot/dhcp-leases${q(routerId)}`),
+  /** Bloque ou reactive un compte sans le supprimer : l'historique reste. */
+  setUserDisabled: (username: string, disabled: boolean, routerId?: string) =>
+    api.patch<HotspotUser>(`/hotspot/users/${encodeURIComponent(username)}/disabled${q(routerId)}`, {
+      disabled,
+    }),
+  deleteUser: (username: string, routerId?: string) =>
+    api.delete<void>(`/hotspot/users/${encodeURIComponent(username)}${q(routerId)}`),
 };
 
 export const umTabsApi = {

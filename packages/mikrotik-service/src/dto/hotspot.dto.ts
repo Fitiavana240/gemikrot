@@ -31,6 +31,13 @@ export interface HotspotUserDto {
   server: string | null;
   bytesIn: number;
   bytesOut: number;
+  /**
+   * Temps deja consomme par ce compte, cumule sur toutes ses sessions.
+   * C'est la colonne « Uptime » de WinBox — a ne pas confondre avec
+   * `limitUptimeSeconds`, qui est le plafond et non la consommation.
+   */
+  uptimeSeconds: number;
+  /** Absent du routeur tant qu'aucun plafond n'est pose : `null`, pas zero. */
   limitUptimeSeconds: number | null;
   limitBytesIn: number | null;
   limitBytesOut: number | null;

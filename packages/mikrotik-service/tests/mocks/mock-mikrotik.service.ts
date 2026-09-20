@@ -165,6 +165,7 @@ export class MockMikrotikService implements IMikrotikService {
       server: input.server ?? null,
       bytesIn: 0,
       bytesOut: 0,
+      uptimeSeconds: 0,
       limitUptimeSeconds: null,
       limitBytesIn: null,
       limitBytesOut: null,

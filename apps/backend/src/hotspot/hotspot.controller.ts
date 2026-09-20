@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { AdminRole } from '@prisma/client';
 import { Roles } from '../auth/roles.decorator.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
@@ -48,6 +48,29 @@ export class HotspotController {
   @Get('dhcp-leases')
   dhcpLeases(@Query('routerId') routerId?: string) {
     return this.hotspot.dhcpLeases(routerId);
+  }
+
+  /** Bloquer ou reactiver, sans perdre le trafic ni le commentaire. */
+  @Roles(...CAN_CONFIGURE)
+  @Patch('users/:username/disabled')
+  setUserDisabled(
+    @Param('username') username: string,
+    @Body('disabled') disabled: boolean,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('routerId') routerId?: string,
+  ) {
+    return this.hotspot.setUserDisabled(username, disabled, user.id, routerId);
+  }
+
+  /** Suppression definitive : le trafic consomme part avec le compte. */
+  @Roles(...CAN_CONFIGURE)
+  @Delete('users/:username')
+  deleteUser(
+    @Param('username') username: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('routerId') routerId?: string,
+  ) {
+    return this.hotspot.deleteUser(username, user.id, routerId);
   }
 
   @Get('walled-garden')
