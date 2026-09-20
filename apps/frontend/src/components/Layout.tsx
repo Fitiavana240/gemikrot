@@ -104,8 +104,16 @@ export function Layout() {
         />
       )}
 
+      {/*
+        `lg:sticky` et non `lg:static` : en statique, la barre s'étirait sur
+        toute la hauteur du document — 33 000 px sur la table des 646 comptes —
+        et son `overflow-y-auto` n'entrait jamais en jeu. À mi-page, la
+        navigation avait disparu vers le haut, et il fallait tout remonter
+        pour changer d'écran. Collée à `h-screen`, elle reste et défile chez
+        elle quand ses groupes dépassent.
+      */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-56 shrink-0 overflow-y-auto border-r border-slate-200 bg-white p-4 transition-transform lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 w-56 shrink-0 overflow-y-auto border-r border-slate-200 bg-white p-4 transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
           ouvert ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -114,7 +122,13 @@ export function Layout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 lg:px-6">
+        {/*
+          Collée elle aussi : elle porte le sélecteur de routeur et la
+          déconnexion, les deux seules commandes dont on peut avoir besoin au
+          milieu d'une longue table. Sous le tiroir (z-40) et son voile
+          (z-30), pour ne pas passer par-dessus sur téléphone.
+        */}
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
