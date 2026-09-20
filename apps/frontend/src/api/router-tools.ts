@@ -308,6 +308,8 @@ export const routerToolsApi = {
   structure: (routerId: string) => api.get<StructureReseau>(`${base(routerId)}/structure`),
   automatisations: (routerId: string) =>
     api.get<Automatisations>(`${base(routerId)}/automatisations`),
+  ethernet: (routerId: string) => api.get<PortEthernet[]>(`${base(routerId)}/ethernet`),
+  certificats: (routerId: string) => api.get<Certificat[]>(`${base(routerId)}/certificates`),
   services: (routerId: string) => api.get<IpService[]>(`${base(routerId)}/services`),
   cloud: (routerId: string) => api.get<IpCloud>(`${base(routerId)}/cloud`),
   arp: (routerId: string) => api.get<ArpEntry[]>(`${base(routerId)}/arp`),
@@ -514,4 +516,42 @@ export interface TachePlanifiee {
 export interface Automatisations {
   scripts: ScriptDuRouteur[];
   taches: TachePlanifiee[];
+}
+
+/**
+ * Un port cuivre. `fullDuplex` a trois états : `null` sans lien, `true` sain,
+ * et `false` qui est une **anomalie** et non un réglage.
+ */
+export interface PortEthernet {
+  id: string;
+  name: string;
+  status: string;
+  running: boolean;
+  disabled: boolean;
+  rate: string | null;
+  fullDuplex: boolean | null;
+  autoNegotiation: boolean;
+  advertise: string[];
+  partnerAdvertise: string[];
+  collisions: number;
+  fragments: number;
+  fcsErrors: number;
+  rxBytes: number;
+  txBytes: number;
+  comment: string | null;
+}
+
+export interface Certificat {
+  id: string;
+  name: string;
+  commonName: string;
+  subjectAltNames: string[];
+  selfSigned: boolean;
+  hasPrivateKey: boolean;
+  fingerprint: string;
+  keyType: string;
+  keySizeBits: number | null;
+  invalidBefore: string | null;
+  invalidAfter: string | null;
+  expiresInSeconds: number | null;
 }

@@ -1289,6 +1289,37 @@ export class RouterOSMikrotikService implements IMikrotikService {
     };
   }
 
+  /**
+   * L'état physique des ports cuivre, et de quoi expliquer une anomalie.
+   *
+   * Le duplex négocié n'est **pas** dans `/interface/ethernet` : il faut un
+   * `monitor`, qui accepte heureusement tous les ports en un appel (sondé sur
+   * le hAP en 7.24.4 : `.id` prend une liste séparée par des virgules et rend
+   * une entrée par port, `no-link` compris).
+   */
+  async getPortsEthernet() {
+    const ports = await this.client.get<any[]>('/interface/ethernet');
+    if (ports.length === 0) return [];
+
+    const mesures = await this.client
+      .post<any[]>('/interface/ethernet/monitor', {
+        '.id': ports.map((p) => p.name).join(','),
+        once: '',
+      })
+      // Sans le `monitor`, la configuration seule reste utile : mieux vaut une
+      // vue partielle qu'un écran en panne.
+      .catch(() => [] as any[]);
+
+    const parNom = new Map(mesures.map((m) => [m?.name, m]));
+    return ports.map((p) => ToolsMapper.mapEthernetPort(p, parNom.get(p?.name)));
+  }
+
+  /** Les certificats du routeur, dont celui qui sert l'API. */
+  async getCertificates() {
+    const raw = await this.client.get<any[]>('/certificate').catch(() => []);
+    return raw.map(ToolsMapper.mapCertificate);
+  }
+
   // ---------- Stockage ----------
 
   async getRouterFiles() {

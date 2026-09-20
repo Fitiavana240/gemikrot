@@ -439,3 +439,67 @@ export interface RouterScheduleDto {
   policy: string[];
   disabled: boolean;
 }
+
+/**
+ * Un port cuivre — `/interface/ethernet` plus son `monitor`.
+ *
+ * Les deux lectures sont fusionnées parce que les champs décisifs se
+ * répartissent entre elles : la configuration porte les compteurs d'erreurs et
+ * la liste annoncée, le `monitor` porte le débit et le duplex **réellement
+ * négociés**. Aucune ne suffit seule à dire si un port va bien.
+ */
+export interface EthernetPortDto {
+  id: string;
+  name: string;
+  /** `link-ok`, `no-link`… tel que le routeur le nomme. */
+  status: string;
+  running: boolean;
+  disabled: boolean;
+  /** `100Mbps`, `1Gbps`… `null` tant qu'aucun lien n'est établi. */
+  rate: string | null;
+  /** `null` sans lien. **`false` est une anomalie**, pas un réglage. */
+  fullDuplex: boolean | null;
+  autoNegotiation: boolean;
+  /** Les modes que **ce** port propose à la négociation. */
+  advertise: string[];
+  /** Les modes que la machine d'en face propose. Vide sans lien. */
+  partnerAdvertise: string[];
+  /**
+   * Collisions. Sur une liaison commutée en duplex intégral, ce compteur doit
+   * rester à zéro : toute valeur non nulle signale un duplex à moitié.
+   */
+  collisions: number;
+  /** Trames tronquées — câble abîmé, ou conséquence des collisions. */
+  fragments: number;
+  /** Séquences de contrôle fausses : presque toujours le câble. */
+  fcsErrors: number;
+  rxBytes: number;
+  txBytes: number;
+  comment: string | null;
+}
+
+/**
+ * Un certificat du routeur — `/certificate`.
+ *
+ * Celui qui sert l'API REST décide si la console peut vérifier à qui elle
+ * parle. Un certificat auto-signé sans nom alternatif oblige à désactiver
+ * la vérification TLS, ce qui laisse la porte ouverte à l'interception.
+ */
+export interface CertificateDto {
+  id: string;
+  name: string;
+  commonName: string;
+  /** Les noms pour lesquels le certificat est **aussi** valable. */
+  subjectAltNames: string[];
+  /** Vrai pour un certificat qui se signe lui-même. */
+  selfSigned: boolean;
+  /** Vrai si la clé privée est sur le routeur : sans elle, il ne peut servir. */
+  hasPrivateKey: boolean;
+  fingerprint: string;
+  keyType: string;
+  keySizeBits: number | null;
+  invalidBefore: string | null;
+  invalidAfter: string | null;
+  /** Secondes restantes, négatif si déjà expiré. `null` si illisible. */
+  expiresInSeconds: number | null;
+}

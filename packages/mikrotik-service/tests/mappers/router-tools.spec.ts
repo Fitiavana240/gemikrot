@@ -5,6 +5,8 @@ import {
   mapNetworkInterfaceStats,
   mapRouterLogEntry,
   mapRouterScript,
+  mapEthernetPort,
+  mapCertificate,
   mapRouterSchedule,
   mapSimpleQueue,
   splitPaire,
@@ -244,5 +246,111 @@ describe('mapRouterSchedule', () => {
     // ferait annoncer « toutes les 0 s » à l'écran.
     expect(mapRouterSchedule({ '.id': '*1', interval: '00:00:00' }).intervalSeconds).toBeNull();
     expect(mapRouterSchedule({ '.id': '*1' }).intervalSeconds).toBeNull();
+  });
+});
+
+/**
+ * Relevé exact d'ether3 sur le hAP : le port négocié en demi-duplex, avec
+ * 378 048 collisions, parce que `100M-baseT-full` a été retiré de sa liste.
+ */
+const ETHER3 = {
+  '.id': '*3',
+  name: 'ether3',
+  running: 'true',
+  disabled: 'false',
+  'auto-negotiation': 'true',
+  advertise: '10M-baseT-half,10M-baseT-full,100M-baseT-half,1G-baseT-half,1G-baseT-full',
+  'tx-collision': '378048',
+  'rx-fragment': '63301',
+  'rx-fcs-error': '0',
+  'rx-bytes': '396207599',
+  'tx-bytes': '9012345678',
+};
+
+const MONITOR3 = {
+  name: 'ether3',
+  status: 'link-ok',
+  rate: '100Mbps',
+  'full-duplex': 'false',
+  'link-partner-advertising': '10M-baseT-half,10M-baseT-full,100M-baseT-half,100M-baseT-full',
+};
+
+describe('mapEthernetPort', () => {
+  it('prend le duplex dans le monitor, absent de la configuration', () => {
+    expect(mapEthernetPort(ETHER3, MONITOR3).fullDuplex).toBe(false);
+    expect(mapEthernetPort(ETHER3, MONITOR3).rate).toBe('100Mbps');
+  });
+
+  it('rend le duplex `null` sans lien, et non `false`', () => {
+    // Trois états, pas deux : un port débranché n'a pas de duplex, et le
+    // ramener à `false` le ferait passer pour une anomalie à l'écran.
+    const sansLien = mapEthernetPort(
+      { '.id': '*4', name: 'ether4', running: 'false' },
+      { name: 'ether4', status: 'no-link' },
+    );
+    expect(sansLien.fullDuplex).toBeNull();
+    expect(sansLien.rate).toBeNull();
+    expect(sansLien.status).toBe('no-link');
+  });
+
+  it('garde les deux listes annoncées, qui portent la cause de la panne', () => {
+    const p = mapEthernetPort(ETHER3, MONITOR3);
+    expect(p.advertise).not.toContain('100M-baseT-full');
+    expect(p.partnerAdvertise).toContain('100M-baseT-full');
+    expect(p.collisions).toBe(378_048);
+    expect(p.fragments).toBe(63_301);
+  });
+
+  it('reste lisible quand le monitor a échoué', () => {
+    // Le `monitor` est un appel séparé : s'il tombe, la configuration seule
+    // doit continuer de rendre un port, pas faire échouer tout l'écran.
+    const p = mapEthernetPort(ETHER3);
+    expect(p.name).toBe('ether3');
+    expect(p.status).toBe('link-ok');
+    expect(p.fullDuplex).toBeNull();
+    expect(p.partnerAdvertise).toEqual([]);
+  });
+});
+
+/** Relevé exact du certificat qui sert l'API REST sur le hAP. */
+const CERT = {
+  '.id': '*1',
+  name: 'wifitati-api-cert',
+  'common-name': '192.168.88.1',
+  'subject-alt-name': '',
+  authority: 'true',
+  issued: 'false',
+  'private-key': 'true',
+  fingerprint: '50c8d4f2be234675000e4b1b5eea2a5b23fdeb7e8dac381c3b66218a6f6ae0b9',
+  'key-type': 'rsa',
+  'key-size': '2048',
+  'invalid-before': '2026-09-18 17:00:17',
+  'invalid-after': '2036-09-15 17:00:17',
+  'expires-after': '521w16h1m7s',
+};
+
+describe('mapCertificate', () => {
+  it('reconnaît un certificat auto-signé', () => {
+    // `authority` seul ne suffit pas : une autorité importée le porte aussi.
+    // C'est `issued` faux qui dit que le certificat s'est signé lui-même.
+    expect(mapCertificate(CERT).selfSigned).toBe(true);
+    expect(mapCertificate({ ...CERT, issued: 'true' }).selfSigned).toBe(false);
+  });
+
+  it('rend une liste vide quand aucun nom alternatif n’est déclaré', () => {
+    // C'est ce vide qui oblige à désactiver la vérification TLS : le
+    // distinguer d'une liste à un élément est tout l'intérêt du champ.
+    expect(mapCertificate(CERT).subjectAltNames).toEqual([]);
+    expect(
+      mapCertificate({ ...CERT, 'subject-alt-name': 'IP:10.88.0.2,DNS:routeur' })
+        .subjectAltNames,
+    ).toEqual(['IP:10.88.0.2', 'DNS:routeur']);
+  });
+
+  it('lit le temps restant depuis la durée du routeur', () => {
+    const restant = mapCertificate(CERT).expiresInSeconds!;
+    // 521 semaines ≈ 10 ans.
+    expect(restant).toBeGreaterThan(9 * 365 * 86_400);
+    expect(mapCertificate(CERT).keySizeBits).toBe(2048);
   });
 });

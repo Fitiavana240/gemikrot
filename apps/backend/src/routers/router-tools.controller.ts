@@ -154,6 +154,18 @@ export class RouterToolsController {
     return (await this.clients.forRouter(routerId)).getStructureReseau();
   }
 
+  /** Les ports cuivre : débit, duplex négocié, collisions. */
+  @Get('ethernet')
+  async ethernet(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getPortsEthernet();
+  }
+
+  /** Les certificats du routeur, dont celui qui sert l'API. */
+  @Get('certificates')
+  async certificates(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getCertificates();
+  }
+
   /** Scripts et ordonnanceur : ce qui peut s'exécuter sans personne. */
   @Get('automatisations')
   async automatisations(@Param('routerId') routerId: string) {

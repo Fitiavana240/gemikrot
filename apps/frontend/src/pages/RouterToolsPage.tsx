@@ -16,6 +16,8 @@ import { TunnelTab } from './TunnelTab';
 import { StructureTab } from './StructureTab';
 import { AutomatisationsTab } from './AutomatisationsTab';
 import { JournalTab } from './JournalTab';
+import { PortsTab } from './PortsTab';
+import { CertificatsTab } from './CertificatsTab';
 import { TabBar, type TabDef } from '../components/TabBar';
 import {
   Badge,
@@ -1079,9 +1081,11 @@ function FichiersTab() {
 const ONGLETS = {
   debit: { titre: 'Débit par client', rendu: () => <QueuesTab /> },
   liens: { titre: 'Interfaces', rendu: () => <InterfacesTab /> },
+  ports: { titre: 'Ports cuivre', rendu: () => <PortsTab /> },
   structure: { titre: 'Structure du réseau', rendu: () => <StructureTab /> },
   wifi: { titre: 'Wi-Fi et RADIUS', rendu: () => <WifiTab /> },
   tunnel: { titre: 'Tunnel (VPN)', rendu: () => <TunnelTab /> },
+  certificats: { titre: 'Certificats', rendu: () => <CertificatsTab /> },
   automatisations: {
     titre: 'Ce qui tourne tout seul',
     rendu: () => <AutomatisationsTab />,

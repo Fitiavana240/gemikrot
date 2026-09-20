@@ -23,6 +23,8 @@ import {
   DhcpClientDto,
   RouterScriptDto,
   RouterScheduleDto,
+  EthernetPortDto,
+  CertificateDto,
 } from '../dto/router-tools.dto';
 
 /** RouterOS rend ses booléens en chaînes. */
@@ -436,5 +438,71 @@ export function mapRouterSchedule(raw: any): RouterScheduleDto {
     owner: raw?.owner ?? '',
     policy: listePolitique(raw?.policy),
     disabled: flag(raw?.disabled),
+  };
+}
+
+/** `"10M-baseT-full,1G-baseT-full"` → liste. Vide quand absent. */
+function listeModes(raw: unknown): string[] {
+  return String(raw ?? '')
+    .split(',')
+    .map((m) => m.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Fusionne la configuration d'un port et son état négocié.
+ *
+ * `monitor` est un appel séparé sur RouterOS, et c'est lui seul qui porte le
+ * duplex réel — le menu `/interface/ethernet` ne le contient pas. Les lire
+ * séparément donnerait deux demi-vérités.
+ */
+export function mapEthernetPort(raw: any, monitor?: any): EthernetPortDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    name: raw?.name ?? '',
+    status: monitor?.status ?? (flag(raw?.running) ? 'link-ok' : 'no-link'),
+    running: flag(raw?.running),
+    disabled: flag(raw?.disabled),
+    rate: monitor?.rate || null,
+    // Trois états, pas deux : sans lien il n'y a pas de duplex à rapporter, et
+    // `false` par défaut ferait passer un port débranché pour une anomalie.
+    fullDuplex: monitor?.['full-duplex'] == null ? null : flag(monitor['full-duplex']),
+    autoNegotiation: flag(raw?.['auto-negotiation']),
+    advertise: listeModes(raw?.advertise),
+    partnerAdvertise: listeModes(monitor?.['link-partner-advertising']),
+    collisions: Number(raw?.['tx-collision'] ?? 0),
+    fragments: Number(raw?.['rx-fragment'] ?? 0),
+    fcsErrors: Number(raw?.['rx-fcs-error'] ?? 0),
+    rxBytes: Number(raw?.['rx-bytes'] ?? 0),
+    txBytes: Number(raw?.['tx-bytes'] ?? 0),
+    comment: raw?.comment || null,
+  };
+}
+
+export function mapCertificate(raw: any): CertificateDto {
+  const après = raw?.['invalid-after'] || null;
+  // `expires-after` est une durée RouterOS (« 521w16h1m7s ») quand le
+  // certificat est encore valable, et absente une fois expiré : l'absence est
+  // donc porteuse de sens, et ne doit pas se confondre avec « inconnu ».
+  const restant = raw?.['expires-after'] != null
+    ? parseRouterOsDuration(raw['expires-after'])
+    : après
+      ? Math.round((Date.parse(après.replace(' ', 'T')) - Date.now()) / 1000)
+      : null;
+
+  return {
+    id: raw?.['.id'] ?? '',
+    name: raw?.name ?? '',
+    commonName: raw?.['common-name'] ?? '',
+    subjectAltNames: listeModes(raw?.['subject-alt-name']),
+    // `authority` vrai et `issued` faux : le certificat est sa propre autorité.
+    selfSigned: flag(raw?.authority) && !flag(raw?.issued),
+    hasPrivateKey: flag(raw?.['private-key']),
+    fingerprint: raw?.fingerprint ?? '',
+    keyType: raw?.['key-type'] ?? '',
+    keySizeBits: raw?.['key-size'] != null ? Number(raw['key-size']) : null,
+    invalidBefore: raw?.['invalid-before'] || null,
+    invalidAfter: après,
+    expiresInSeconds: Number.isFinite(restant as number) ? (restant as number) : null,
   };
 }
