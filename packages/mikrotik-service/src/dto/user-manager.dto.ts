@@ -75,6 +75,15 @@ export interface UserManagerUserProfileDto {
   /** `null` quand l'échéance est illimitée ou pas encore démarrée. */
   endTime: string | null;
   state: UserManagerUserProfileState;
+  /**
+   * Vrai quand l'attribution désigne un compte qui n'existe plus.
+   *
+   * RouterOS résout la référence en nom tant que le compte existe, et rend
+   * l'identifiant brut — `*10` — quand il a disparu. Relevé sur le hAP en
+   * 7.24.4 : dix-huit attributions ont survécu à leurs comptes, et la console
+   * affichait `*10` dans la colonne « Compte » comme si c'était un nom.
+   */
+  usernameIntrouvable: boolean;
 }
 
 export interface UserManagerSessionDto {

@@ -103,14 +103,22 @@ export function mapUserManagerUserProfile(raw: any): UserManagerUserProfileDto {
       ? null
       : String(rawEndTime);
 
+  const username = String(raw?.user ?? raw?.username ?? '');
+
   return {
     id: raw?.['.id'] ?? '',
-    username: raw?.user ?? raw?.username ?? '',
+    username,
     profileName: raw?.profile ?? '',
     endTime,
     state: mapUserProfileState(raw?.state),
+    // Un identifiant RouterOS là où un nom est attendu : la référence est
+    // morte. Le nom d'un vrai compte ne peut pas prendre cette forme.
+    usernameIntrouvable: REFERENCE_MORTE.test(username),
   };
 }
+
+/** `*10`, `*1A` — la forme d'un `.id` RouterOS, jamais celle d'un nom. */
+const REFERENCE_MORTE = /^\*[0-9A-Fa-f]+$/;
 
 /**
  * Session comptabilisée par RADIUS. Les champs sont ceux relevés sur un hAP

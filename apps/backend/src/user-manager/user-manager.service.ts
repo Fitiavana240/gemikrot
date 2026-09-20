@@ -76,6 +76,8 @@ export interface ProfileView extends UserManagerProfileDto {
   planName: string | null;
   limitationNames: string[];
   accountCount: number;
+  /** Attributions désignant un compte disparu du routeur. */
+  attributionsOrphelines: number;
 }
 
 /**
@@ -183,9 +185,17 @@ export class UserManagerService {
         limitationNames: junctions
           .filter((j) => j.profileName === profile.name)
           .map((j) => j.limitationName),
+        // Les attributions orphelines sont exclues du compte : elles désignent
+        // des comptes qui n'existent plus, et le profil annonçait « 16 comptes »
+        // pour seize fantômes. Elles sont dites à part, pas noyées dans le total.
         accountCount: new Set(
-          assignments.filter((a) => a.profileName === profile.name).map((a) => a.username),
+          assignments
+            .filter((a) => a.profileName === profile.name && !a.usernameIntrouvable)
+            .map((a) => a.username),
         ).size,
+        attributionsOrphelines: assignments.filter(
+          (a) => a.profileName === profile.name && a.usernameIntrouvable,
+        ).length,
       };
     });
   }

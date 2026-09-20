@@ -720,6 +720,13 @@ export function UmAssignmentsTab() {
         application arrêtée. Un compte peut en porter plusieurs — un rachat en ajoute une, il ne
         remplace pas la précédente.
       </p>
+      {(requête.data ?? []).some((a) => a.usernameIntrouvable) && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Certaines attributions désignent un <strong>compte qui n'existe plus</strong> : User
+          Manager ne les efface pas quand le compte part. Elles ne servent plus personne, mais
+          elles continuaient d'être comptées comme des comptes sur l'écran Profils.
+        </p>
+      )}
       <ListeDuRouteur
         requête={requête}
         colonnes={['Compte', 'Profil', 'Expire le', 'État']}
@@ -729,11 +736,24 @@ export function UmAssignmentsTab() {
         }}
         ligne={(a) => (
           <tr key={a.id}>
-            <td className="px-3 py-2 font-mono text-xs">{a.username}</td>
+            {/* Un identifiant RouterOS là où un nom est attendu veut dire que
+                le compte a disparu et que l'attribution lui a survécu. L'écrire
+                tel quel le faisait passer pour un nom de compte. */}
+            <td className="px-3 py-2 font-mono text-xs">
+              {a.usernameIntrouvable ? (
+                <span className="text-slate-400">référence {a.username}</span>
+              ) : (
+                a.username
+              )}
+            </td>
             <td className="px-3 py-2">{a.profileName}</td>
             <td className="px-3 py-2 text-slate-500">{a.endTime ?? '—'}</td>
             <td className="px-3 py-2">
-              <Badge tone={TON[a.state] ?? 'slate'}>{a.state}</Badge>
+              {a.usernameIntrouvable ? (
+                <Badge tone="red">compte disparu</Badge>
+              ) : (
+                <Badge tone={TON[a.state] ?? 'slate'}>{a.state}</Badge>
+              )}
             </td>
           </tr>
         )}

@@ -122,6 +122,15 @@ export interface UmAssignment {
   profileName: string;
   endTime: string | null;
   state: string;
+  /**
+   * L'attribution désigne un compte qui n'existe plus.
+   *
+   * RouterOS résout la référence en nom tant que le compte vit, et rend
+   * l'identifiant brut — `*10` — une fois qu'il a disparu. La console
+   * affichait cet identifiant dans la colonne « Compte » comme si c'était un
+   * nom.
+   */
+  usernameIntrouvable: boolean;
 }
 
 /** Octets -> « 24,4 Gio ». Les multiples de 1024, comme RouterOS les compte. */

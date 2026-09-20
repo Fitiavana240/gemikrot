@@ -867,6 +867,43 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — `*10` dans la colonne « Compte »
+
+Parti pour écrire le miroir du contrôle précédent — les comptes du routeur qu'aucun ticket ne
+réclame — et tombé sur autre chose en chemin.
+
+La liste des comptes User Manager rendait **21 comptes** à une mesure, **3** à la suivante. Avant
+de conclure quoi que ce soit :
+
+- **le journal d'audit ne montre aucune suppression** depuis des heures, et seulement mes propres
+  artefacts nommés (`ZZ-*`, `ZZT-*`) ;
+- **la clé USB est montée et la base saine** : `/usb1-part1/user-manager`, 172 Ko, 975 Mo libres,
+  paquet installé et actif ;
+- **les attributions rendent toujours 21 lignes**, et les profils comptent toujours 16 + 2.
+
+Les comptes n'ont donc pas « disparu » du routeur d'un bloc : ils ont disparu de
+`/user-manager/user`, en laissant leurs attributions derrière eux. **Ce que la console faisait de
+ces orphelines est le vrai défaut**, et il ne dépend pas de la cause :
+
+```
+Compte        Profil           État
+*7            2Heure-500Ar     waiting     ← lu comme un nom de compte
+*10           4Heure-1000Ar    waiting
+```
+
+RouterOS résout `user` en **nom** tant que le compte existe, et rend l'**identifiant brut** une
+fois qu'il a disparu. La console écrivait donc `*10` dans une colonne intitulée « Compte », avec
+une pastille d'état grise, comme un compte ordinaire en attente. Et l'écran Profils les comptait
+: « **16 comptes** » pour seize fantômes.
+
+Elles sont désormais nommées — « référence *10 », pastille rouge « compte disparu », bandeau
+d'explication — et **décomptées à part** : « 0 + 16 disparu(s) ».
+
+**Une conséquence que la vérification à l'écran a rattrapée.** Exclure les orphelines du nombre
+de comptes — ce qu'elles méritent — a fait tomber `accountCount` à zéro, et donc **apparaître le
+bouton « Supprimer »** sur deux profils encore référencés seize fois. La garde tient compte des
+deux désormais. C'est le genre de dégât qu'on ne voit pas en relisant son propre diff.
+
 ### 2026-09-20 — « 10 tickets disponibles », pour 602 dans le tiroir
 
 La Vue d'ensemble annonce ce qu'elle est : « ce qu'il faut savoir en ouvrant la console : ce qui

@@ -294,7 +294,14 @@ function ProfilesTab() {
               <td className="px-3 py-2 text-slate-500">
                 {profile.limitationNames.length ? profile.limitationNames.join(', ') : '—'}
               </td>
-              <td className="px-3 py-2">{profile.accountCount}</td>
+              <td className="px-3 py-2">
+                {profile.accountCount}
+                {profile.attributionsOrphelines > 0 && (
+                  <span className="ml-1.5 text-xs text-amber-700">
+                    + {profile.attributionsOrphelines} disparu(s)
+                  </span>
+                )}
+              </td>
               <td className="px-3 py-2">
                 {profile.planName ? (
                   <Badge tone="green">{profile.planName}</Badge>
@@ -309,10 +316,14 @@ function ProfilesTab() {
                     <Button variant="secondary" onClick={() => setÀModifier(profile)}>
                       Modifier
                     </Button>
-                    {/* Supprimer reste interdit tant qu'un compte s'y
+                    {/* Supprimer reste interdit tant qu'une attribution s'y
                         rattache : RouterOS refuserait, et l'échec serait
-                        moins clair que l'absence du bouton. */}
-                    {profile.accountCount === 0 && (
+                        moins clair que l'absence du bouton.
+                        **Les orphelines comptent aussi.** Les exclure du
+                        décompte des comptes — ce qu'elles méritent, elles ne
+                        désignent personne — faisait apparaître le bouton sur des
+                        profils encore référencés seize fois. */}
+                    {profile.accountCount === 0 && profile.attributionsOrphelines === 0 && (
                       <Button variant="danger" onClick={() => remove.mutate(profile.name)}>
                         Supprimer
                       </Button>

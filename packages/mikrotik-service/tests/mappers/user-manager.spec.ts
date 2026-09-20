@@ -58,6 +58,39 @@ describe('mappers User Manager', () => {
       expect(assignment.state).toBe('used');
     });
 
+    /**
+     * Relevé sur le hAP en 7.24.4, et pas deviné.
+     *
+     * RouterOS résout `user` en nom tant que le compte existe, et rend
+     * l'identifiant brut — `*10` — une fois qu'il a disparu ; il n'efface pas
+     * les attributions pour autant. Dix-huit d'entre elles ont survécu à leurs
+     * comptes sur ce parc, et la console écrivait `*10` dans la colonne
+     * « Compte » comme si c'était un nom — tout en les comptant comme des
+     * comptes sur l'écran Profils, qui annonçait « 16 » pour seize fantômes.
+     */
+    it('reconnait une attribution dont le compte a disparu', () => {
+      const orpheline = mapUserManagerUserProfile({
+        '.id': '*1A',
+        'end-time': 'unlimited',
+        profile: '4Heure-1000Ar',
+        state: 'waiting',
+        user: '*10',
+      });
+
+      expect(orpheline.usernameIntrouvable).toBe(true);
+      // Le nom brut est conservé : c'est la seule trace de ce qui manque.
+      expect(orpheline.username).toBe('*10');
+    });
+
+    it('ne prend pas un vrai nom pour une reference morte', () => {
+      // Un nom de compte ne peut pas avoir la forme d'un `.id` RouterOS, mais
+      // se tromper ici ferait disparaître des comptes vivants de l'écran.
+      for (const nom of ['test1h', 'ZZG-D8SXHVKSH6', 'Alexandre', '2B49DQZY59']) {
+        const vivante = mapUserManagerUserProfile({ user: nom, profile: 'p', state: 'waiting' });
+        expect(vivante.usernameIntrouvable).toBe(false);
+      }
+    });
+
     it('ne fabrique pas de date quand la validité n\'a pas démarré', () => {
       // Cas réel d'un profil `first-auth` avant la première connexion.
       const assignment = mapUserManagerUserProfile({

@@ -20,6 +20,13 @@ export interface UserManagerProfile {
   planName: string | null;
   limitationNames: string[];
   accountCount: number;
+  /**
+   * Attributions désignant un compte disparu du routeur.
+   *
+   * Elles étaient comptées comme des comptes : un profil annonçait « 16 »
+   * pour seize fantômes. Dites à part, jamais additionnées.
+   */
+  attributionsOrphelines: number;
 }
 
 export interface UserManagerLimitation {
