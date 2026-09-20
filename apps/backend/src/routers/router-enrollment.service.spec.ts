@@ -76,8 +76,13 @@ describe('RouterEnrollmentService', () => {
       expect(invitation.script).toContain('/user/add name=gemikrot-api');
       expect(invitation.script).not.toMatch(/name=admin\b/);
 
-      // L'API ne doit plus écouter que dans le tunnel.
-      expect(invitation.script).toContain('/ip/service/set www-ssl address=10.88.0.1/32');
+      // L'autorisation du serveur s'ajoute aux existantes : remplacer la
+      // liste couperait l'accès actuel si le tunnel ne montait pas, et il
+      // faudrait revenir par Winbox pour le rétablir.
+      expect(invitation.script).toContain(':local acl [/ip/service/get www-ssl address]');
+      expect(invitation.script).toContain(
+        '/ip/service/set www-ssl address=($acl,10.88.0.1/32)',
+      );
 
       // Le rappel, avec le jeton — qui n'existe qu'ici. Il part par Internet
       // et non par le tunnel : le serveur ne connaîtra la clé publique de ce

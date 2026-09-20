@@ -289,9 +289,12 @@ export class RouterEnrollmentService {
 /user/add name=${API_USERNAME} group=gemikrot password="${params.apiPassword}" \\
     comment="GeMikrot — compte applicatif"
 
-# 4. L'API n'écoute plus que dans le tunnel. Depuis Internet ou depuis le
-#    réseau des clients, elle devient inatteignable.
-/ip/service/set www-ssl address=${serverAddress}/32 disabled=no
+# 4. L'API accepte le serveur par le tunnel. L'autorisation s'AJOUTE à
+#    celles déjà en place : remplacer la liste couperait l'accès actuel si le
+#    tunnel ne montait pas, et il faudrait revenir par Winbox pour le rétablir.
+#    Une fois le tunnel éprouvé, retirer les autres à la main resserre l'accès.
+:local acl [/ip/service/get www-ssl address]
+/ip/service/set www-ssl address=($acl,${serverAddress}/32) disabled=no
 
 # 5. On prévient le serveur, en lui donnant la clé publique de ce routeur.
 :local pub [/interface/wireguard/get [find name=${WG_INTERFACE}] public-key]
