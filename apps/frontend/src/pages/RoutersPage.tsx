@@ -94,6 +94,29 @@ export function RoutersPage() {
       setError(null);
       setInvitation(result);
       setNewRouterLabel('');
+      queryClient.invalidateQueries({ queryKey: ['router-enrollments'] });
+    },
+    onError,
+  });
+
+  /**
+   * Les invitations ouvertes.
+   *
+   * Elles existaient côté serveur sans qu'aucun écran ne les montre : on
+   * préparait un script, on quittait la page, et plus rien ne disait qu'un
+   * raccordement était en cours — ni qu'une adresse de tunnel restait
+   * réservée pour lui.
+   */
+  const enrollments = useQuery({
+    queryKey: ['router-enrollments'],
+    queryFn: enrollmentsApi.pending,
+  });
+
+  const annulerInvitation = useMutation({
+    mutationFn: enrollmentsApi.cancel,
+    onSuccess: () => {
+      setError(null);
+      queryClient.invalidateQueries({ queryKey: ['router-enrollments'] });
     },
     onError,
   });
@@ -179,6 +202,47 @@ export function RoutersPage() {
         </Card>
       )}
 
+      {(enrollments.data ?? []).length > 0 && (
+        <Card title="Raccordements en attente">
+          <p className="mb-3 text-sm text-slate-600">
+            Des scripts ont été préparés et n'ont pas encore été exécutés sur leur routeur.
+            Chacun réserve une adresse dans le tunnel jusqu'à son échéance.
+          </p>
+          <Table head={['Routeur', 'Adresse du tunnel', 'Préparé le', 'Valable jusqu’à', '']}>
+            {(enrollments.data ?? []).map((e) => (
+              <tr key={e.id}>
+                <td className="px-3 py-2 font-medium">{e.label}</td>
+                <td className="px-3 py-2 font-mono text-xs">{e.tunnelAddress}</td>
+                <td className="px-3 py-2 text-slate-500">
+                  {new Date(e.createdAt).toLocaleString('fr-FR')}
+                </td>
+                <td className="px-3 py-2 text-slate-500">
+                  {new Date(e.expiresAt).toLocaleTimeString('fr-FR')}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {canWrite && (
+                    <Button
+                      variant="secondary"
+                      disabled={annulerInvitation.isPending}
+                      onClick={() => annulerInvitation.mutate(e.id)}
+                    >
+                      Annuler
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </Table>
+          {/* Le script n'est rendu qu'à sa création : annuler puis refaire est
+              la seule façon de le récupérer, et c'est voulu — il porte un mot
+              de passe en clair. */}
+          <p className="mt-3 text-xs text-slate-500">
+            Le script n'est affiché qu'une fois, à sa préparation : il contient un mot de passe.
+            Pour en obtenir un autre, annulez celui-ci et préparez-en un nouveau.
+          </p>
+        </Card>
+      )}
+
       {invitation && (
         <Card title={`Script pour « ${invitation.label} »`}>
           <p className="mb-2 text-sm text-slate-600">
@@ -189,6 +253,22 @@ export function RoutersPage() {
             Ce script contient un mot de passe. Il n'est affiché qu'une fois : si vous quittez
             cette page, il faudra en préparer un autre.
           </p>
+
+          {/* Le routeur appelle cette adresse. Privée, il ne la joint que
+              depuis le même réseau — et l'échec est muet : les octets sortants
+              montent, les entrants restent à zéro, rien ne dit pourquoi. Ce
+              diagnostic a coûté une heure sur ce projet ; la console le pose
+              maintenant avant, pas après. */}
+          {invitation.endpointPrive && (
+            <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <strong>Ce script ne vaut que sur ce réseau local.</strong> Le routeur appellera{' '}
+              <code className="rounded bg-amber-100 px-1">{invitation.endpoint}</code>, qui est une
+              adresse privée : un routeur situé ailleurs ne la joindra jamais, et le tunnel
+              restera muet sans message d'erreur. Pour un routeur distant, renseignez l'adresse
+              publique du serveur dans <code>WIREGUARD_ENDPOINT_HOST</code> avant de préparer le
+              script.
+            </div>
+          )}
           <pre className="max-h-80 overflow-auto rounded bg-slate-900 p-3 text-xs text-slate-100">
             {invitation.script}
           </pre>

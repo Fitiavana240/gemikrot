@@ -65,6 +65,35 @@ export class WireguardService {
     };
   }
 
+  /**
+   * L'adresse que le routeur appellera est-elle privée ?
+   *
+   * Un routeur ne joint une adresse privée que s'il est sur le même réseau.
+   * En développement c'est normal — le serveur tourne sur le poste, à côté du
+   * routeur. Remis à un exploitant dont le routeur est ailleurs, le même
+   * script échoue **en silence** : WireGuard n'a personne à qui parler, les
+   * octets sortants montent, les entrants restent à zéro, et rien ne dit
+   * pourquoi. Ce diagnostic a déjà coûté une heure sur ce projet ; autant
+   * que la console le pose avant, pas après.
+   */
+  get endpointPrive(): boolean {
+    const hôte = this.settings.endpointHost.trim();
+    if (hôte === '') return false;
+    // Un nom de domaine est présumé public : on ne le résout pas, et se
+    // tromper dans ce sens ne fait qu'omettre un avertissement.
+    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(hôte)) return false;
+
+    const [a, b] = hôte.split('.').map(Number);
+    return (
+      a === 10 ||
+      a === 127 ||
+      (a === 192 && b === 168) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      // Lien-local : ce que rend une machine sans bail DHCP.
+      (a === 169 && b === 254)
+    );
+  }
+
   /** Ce qui manque pour qu'un enrôlement soit possible, en clair. */
   missingConfiguration(): string[] {
     const missing: string[] = [];

@@ -26,6 +26,15 @@ export interface EnrollmentInvitation {
   /** Le script à coller dans le terminal Winbox. Contient le jeton et le mot
    *  de passe en clair : il n'est rendu qu'à cette création, jamais relu. */
   script: string;
+  /**
+   * L'adresse que le routeur appellera, et si elle est privée.
+   *
+   * Une adresse privée ne se joint que depuis le même réseau. Le script est
+   * alors bon pour un essai en local et inutilisable ailleurs — et l'échec
+   * est muet côté routeur.
+   */
+  endpoint: string;
+  endpointPrive: boolean;
 }
 
 @Injectable()
@@ -86,7 +95,33 @@ export class RouterEnrollmentService {
       tunnelAddress,
       expiresAt: enrollment.expiresAt,
       script: this.buildScript({ token, apiPassword, tunnelAddress }),
+      endpoint: `${this.wireguard.settings.endpointHost}:${this.wireguard.settings.endpointPort}`,
+      endpointPrive: this.wireguard.endpointPrive,
     };
+  }
+
+  /**
+   * Retire une invitation qu'on ne compte plus servir.
+   *
+   * Un script préparé par erreur — mauvais nom, changement d'avis — restait
+   * sinon trente minutes dans la liste, son adresse de tunnel réservée avec.
+   *
+   * Seulement ce qui n'a jamais abouti : une invitation consommée a produit
+   * un routeur, et la supprimer effacerait la trace de son raccordement.
+   */
+  async cancel(id: string): Promise<void> {
+    const invitation = await this.prisma.scopedStrict.routerEnrollment.findUnique({
+      where: { id },
+    });
+    if (!invitation) throw new NotFoundException(`Invitation ${id} introuvable`);
+    if (invitation.consumedAt) {
+      throw new BadRequestException(
+        `L'invitation « ${invitation.label} » a déjà servi : le routeur est raccordé.`,
+      );
+    }
+
+    await this.prisma.scopedStrict.routerEnrollment.delete({ where: { id } });
+    this.logger.log(`Invitation annulée : ${invitation.label}`);
   }
 
   /** Les invitations encore ouvertes, pour que l'exploitant s'y retrouve. */

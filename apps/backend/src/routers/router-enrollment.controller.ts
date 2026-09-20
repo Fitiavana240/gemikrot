@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { IsOptional, IsString, Length } from 'class-validator';
 import { Public } from '../auth/public.decorator.js';
 import { AdminRole } from '@prisma/client';
@@ -66,5 +66,12 @@ export class RouterEnrollmentController {
   @Get()
   pending() {
     return this.enrollment.pending();
+  }
+
+  /** Retire une invitation qu'on ne compte plus servir. */
+  @Roles(...CAN_CONFIGURE)
+  @Delete(':id')
+  cancel(@Param('id') id: string) {
+    return this.enrollment.cancel(id);
   }
 }

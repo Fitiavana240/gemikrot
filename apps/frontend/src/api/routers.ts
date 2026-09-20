@@ -94,6 +94,13 @@ export interface EnrollmentInvitation {
   tunnelAddress: string;
   expiresAt: string;
   script: string;
+  /** L'adresse que le routeur appellera, telle qu'elle figure dans le script. */
+  endpoint: string;
+  /**
+   * Vrai quand cette adresse est privée : le script ne vaut alors que sur le
+   * réseau local, et l'échec d'un routeur distant serait muet.
+   */
+  endpointPrive: boolean;
 }
 
 export interface PendingEnrollment {
@@ -107,6 +114,8 @@ export interface PendingEnrollment {
 export const enrollmentsApi = {
   pending: () => api.get<PendingEnrollment[]>('/router-enrollments'),
   invite: (label: string) => api.post<EnrollmentInvitation>('/router-enrollments', { label }),
+  /** Retire une invitation qu'on ne compte plus servir, et libère son adresse. */
+  cancel: (id: string) => api.delete<void>(`/router-enrollments/${id}`),
 };
 
 export const routersApi = {

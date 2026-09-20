@@ -867,6 +867,39 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — L'écran Routeurs et le raccordement
+
+Trois défauts, trouvés en regardant ces écrans plutôt que leurs API.
+
+**L'écran qui ne demandait rien.** La joignabilité est tenue en mémoire par le serveur et
+n'est alimentée qu'**en effet de bord** d'autres appels : après un redémarrage, tout le parc
+affichait « pas encore interrogé ». L'écran dont le métier est de dire si les routeurs
+répondent était le seul à ne pas leur demander, et laissait cliquer « Tester » pour une
+réponse qu'il pouvait aller chercher. Il sonde maintenant à l'ouverture, **une fois et
+seulement les états inconnus** : un routeur déclaré injoignable l'a été par une vraie
+tentative, la répéter ne ferait qu'attendre le délai à chaque affichage.
+
+**Le script qui ne valait que sur ce réseau.** L'invitation rendait un script pointant vers
+`192.168.88.135` — l'adresse locale du poste, celle-là même dont le changement de bail DHCP
+avait coûté une heure de dépannage de tunnel plus tôt dans ce projet. Remis à un exploitant
+dont le routeur est ailleurs, il échoue **en silence** : WireGuard n'a personne à qui parler,
+les octets sortants montent, les entrants restent à zéro. La console pose maintenant ce
+diagnostic **avant**, pas après : une adresse privée déclenche un avertissement nommé, avec
+l'adresse en question et le réglage à corriger. Un nom de domaine est présumé public sans
+être résolu — résoudre depuis le serveur ne dirait rien de ce que verra le routeur.
+
+**Les invitations invisibles.** `enrollmentsApi.pending()` existait dans le client sans
+qu'aucun écran ne l'affiche : on préparait un script, on quittait la page, et plus rien ne
+disait qu'un raccordement était en cours ni qu'une adresse de tunnel restait réservée. Elles
+sont listées, avec leur adresse et leur échéance — et **annulables**, ce qui n'existait pas
+non plus : un script préparé par erreur occupait son adresse trente minutes. L'annulation ne
+touche que ce qui n'a jamais abouti ; une invitation consommée a produit un routeur, et
+l'effacer effacerait la trace de son raccordement.
+
+**Éprouvé** : serveur redémarré, l'écran affiche « joignable » dès son ouverture ; deux
+invitations d'essai créées, l'avertissement s'affiche avec la bonne adresse, puis annulées
+depuis la console — la carte disparaît quand elle est vide.
+
 ### 2026-09-20 — Ce que les écrans quotidiens disaient en anglais
 
 Passé sur les écrans les plus consultés au comptoir, ceux que j'avais le moins regardés.
