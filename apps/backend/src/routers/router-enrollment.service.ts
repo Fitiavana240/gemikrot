@@ -142,8 +142,9 @@ export class RouterEnrollmentService {
         data: {
           tenantId: enrollment.tenantId,
           label: body.identity?.trim() || enrollment.label,
-          // L'adresse du tunnel devient l'hôte : hors du tunnel, l'API n'est
-          // plus joignable — c'est le script lui-même qui l'a restreinte.
+          // L'adresse du tunnel devient l'hôte : c'est par là que le serveur
+          // joindra ce routeur. L'accès direct reste ouvert tant que
+          // l'exploitant ne l'a pas resserré, une fois le tunnel constaté.
           host: enrollment.tunnelAddress,
           restPort: 443,
           credentialsEncrypted: enrollment.credentialsEncrypted,
@@ -258,8 +259,7 @@ export class RouterEnrollmentService {
     apiPassword: string;
     tunnelAddress: string;
   }): string {
-    const { endpointHost, endpointPort, publicKey, serverAddress, subnet } =
-      this.wireguard.settings;
+    const { endpointHost, endpointPort, publicKey, subnet } = this.wireguard.settings;
     const callbackUrl = `${this.config.get<string>('PUBLIC_BASE_URL') ?? `https://${endpointHost}`}/router-enrollments/callback/${params.token}`;
 
     return `# ============================================================
@@ -289,21 +289,21 @@ export class RouterEnrollmentService {
 /user/add name=${API_USERNAME} group=gemikrot password="${params.apiPassword}" \\
     comment="GeMikrot — compte applicatif"
 
-# 4. L'API accepte le serveur par le tunnel. L'autorisation s'AJOUTE à
-#    celles déjà en place : remplacer la liste couperait l'accès actuel si le
-#    tunnel ne montait pas, et il faudrait revenir par Winbox pour le rétablir.
-#    Une fois le tunnel éprouvé, retirer les autres à la main resserre l'accès.
-:local acl [/ip/service/get www-ssl address]
-/ip/service/set www-ssl address=($acl,${serverAddress}/32) disabled=no
+# 4. On prévient le serveur, en lui donnant la clé publique de ce routeur.
+#    Tout est calculé dans la commande elle-même : collées une par une dans le
+#    terminal, des lignes « :local » ne se voient pas l'une l'autre, et la valeur
+#    arriverait vide sans que rien ne le signale.
+/tool/fetch url="${callbackUrl}" http-method=post http-header-field="Content-Type:application/json" http-data=("{\\"publicKey\\":\\"" . [/interface/wireguard/get [find name=${WG_INTERFACE}] public-key] . "\\",\\"identity\\":\\"" . [/system/identity/get name] . "\\"}") output=none
 
-# 5. On prévient le serveur, en lui donnant la clé publique de ce routeur.
-:local pub [/interface/wireguard/get [find name=${WG_INTERFACE}] public-key]
-:local nom [/system/identity/get name]
-/tool/fetch url="${callbackUrl}" http-method=post \\
-    http-header-field="Content-Type:application/json" \\
-    http-data="{\\"publicKey\\":\\"$pub\\",\\"identity\\":\\"$nom\\"}" \\
-    output=none
-:put "Routeur raccorde. Retournez dans la console GeMikrot."
+:put "Raccordement envoye. L'acces a l'API reste inchange : il ne sera"
+:put "restreint au tunnel qu'une fois celui-ci verifie, depuis la console."
+
+# Ce script ne touche PAS au service www-ssl, volontairement. Restreindre
+# l'API avant d'avoir éprouvé le tunnel a déjà coupé un routeur en essai :
+# « set www-ssl address=... » REMPLACE la liste, et la forme censée y ajouter
+# une entrée l'a effacée à la place. Le resserrage est une étape séparée, que
+# la console propose une fois le tunnel constaté — et qui, à ce moment-là,
+# peut être annulée par le tunnel lui-même.
 `;
   }
 }

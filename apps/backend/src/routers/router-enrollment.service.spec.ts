@@ -76,12 +76,17 @@ describe('RouterEnrollmentService', () => {
       expect(invitation.script).toContain('/user/add name=gemikrot-api');
       expect(invitation.script).not.toMatch(/name=admin\b/);
 
-      // L'autorisation du serveur s'ajoute aux existantes : remplacer la
-      // liste couperait l'accès actuel si le tunnel ne montait pas, et il
-      // faudrait revenir par Winbox pour le rétablir.
-      expect(invitation.script).toContain(':local acl [/ip/service/get www-ssl address]');
+      // Le script ne restreint PAS l'accès à l'API. Le faire avant d'avoir
+      // éprouvé le tunnel a coupé un routeur en essai : « set www-ssl
+      // address=... » remplace la liste, et la forme censée y ajouter une
+      // entrée l'a effacée. Le resserrage est une étape séparée.
+      expect(invitation.script).not.toContain('/ip/service/set');
+
+      // Et aucune variable ne traverse deux lignes : collées une par une dans
+      // le terminal, elles ne se voient pas, et la valeur partirait vide.
+      expect(invitation.script.split(/\r?\n/).some((l) => l.startsWith(':local'))).toBe(false);
       expect(invitation.script).toContain(
-        '/ip/service/set www-ssl address=($acl,10.88.0.1/32)',
+        '[/interface/wireguard/get [find name=gemikrot] public-key]',
       );
 
       // Le rappel, avec le jeton — qui n'existe qu'ici. Il part par Internet
