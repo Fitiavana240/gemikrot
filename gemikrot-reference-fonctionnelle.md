@@ -224,9 +224,9 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | ABO-2 | **Suspension et réactivation** sans perdre le compte ni son historique | ⭐⭐⭐ | 🟢 | ✅ |
 | ABO-3 | **Tolérance de 7 jours** après échéance avant suspension, comme demandé. Le statut se dérive correctement des trois états ; la reprise refuse au-delà de la tolérance plutôt que de rouvrir un accès que la base dirait suspendu | ⭐⭐⭐ | 🟢 | ✅ |
 | ABO-4 | **Avertissement avant échéance** au client (SMS). Dépend de COM-1 | ⭐⭐⭐ | 🟡 | ⬜ |
-| ABO-5 | **Suspension automatique** au dépassement de la tolérance : aujourd'hui personne ne suspend tant qu'un humain ne le fait pas | ⭐⭐⭐ | 🟡 | ⬜ |
+| ABO-5 | **Suspension automatique** au dépassement de la tolérance, par le travail d'expiration. Le compte n'est marqué suspendu que si le routeur l'a réellement coupé | ⭐⭐⭐ | 🟡 | ✅ |
 | ABO-6 | **Renouvellement par paiement**, avec rétablissement immédiat et échéance repoussée | ⭐⭐⭐ | 🟡 | 🟡 |
-| ABO-7 | **Coupure effective** identique à TIC-4 (cookies + session) — non branchée sur le chemin abonnement | ⭐⭐⭐ | 🟢 | ⬜ |
+| ABO-7 | **Coupure effective** identique à TIC-4 (cookies + session), branchée sur le chemin abonnement par le travail d'expiration | ⭐⭐⭐ | 🟢 | ✅ |
 
 ---
 
@@ -390,6 +390,20 @@ Facturer les exploitants, piloter plusieurs routeurs pour de bon, atteindre un r
 ---
 
 ## 16. Journal de livraison
+
+### 2026-09-20 (suite) — L'application travaille sans qu'on la regarde
+
+**Vérifié** : 111 tests backend (17 fichiers), 66 dans le paquet, `tsc` propre, migration appliquée, application démarrée.
+
+**Éprouvé contre le hAP réel** : la réconciliation a lu les attributions du routeur, constaté le compte `test1h` expiré depuis le 17 septembre (état `used`), marqué le ticket et **supprimé un vrai cookie sur le routeur**. C'est là tout l'enjeu — User Manager fait respecter l'expiration seul, mais uniquement pour qui repasse par RADIUS ; un cookie vivant rouvre la session sans la consulter, trois jours durant.
+
+Trois cadences, et non « tout, toutes les minutes ». L'**expiration** toutes les minutes ne lit que ce dont l'échéance vient de passer, d'après des dates déjà en base, et c'est le seul travail qui agit. La **réconciliation** relit la collection complète par routeur, toutes les 15 minutes. La **purge** passe la nuit.
+
+Chaque travail prend un **verrou en base** : un routeur lent n'empile pas les exécutions, et deux instances ne balaient pas le même parc en double. Une table plutôt qu'un verrou consultatif, le travail durant des minutes et traversant plusieurs connexions du pool — avec l'avantage que l'état reste lisible. Le verrou expire de lui-même : un processus tué ne bloque pas le parc.
+
+Deux règles que les tests figent. Un exploitant en échec ne prive pas les autres du passage. Et **un abonné n'est marqué suspendu que si le routeur l'a réellement coupé** : sinon la base dirait suspendu pendant que le client navigue, ce qui est pire que de ne rien faire puisque invisible. Quand le routeur est injoignable, l'opération part dans la file différée et le statut suit au passage suivant.
+
+`@nestjs/schedule` a été essayé puis écarté : npm le remonte à la racine de l'espace de travail et entraîne `@nestjs/common` et `core` avec lui, laissant `platform-express` seul en dessous — l'application ne démarre plus. Trois intervalles fixes ne valaient pas ce risque.
 
 ### 2026-09-20 (suite) — Le cloisonnement descend dans la base
 

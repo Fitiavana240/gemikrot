@@ -648,3 +648,25 @@ model RouterEnrollment {
   @@unique([tenantId, routerId])
   @@map("router_enrollments")
 }
+
+/// Verrou de travail planifié, partagé entre instances.
+///
+/// Un routeur lent ne doit pas empiler les exécutions, et deux processus de
+/// l'application ne doivent pas balayer le même parc en même temps. Une table
+/// plutôt qu'un verrou consultatif PostgreSQL : le travail dure des minutes et
+/// traverse plusieurs connexions du pool, là où un verrou consultatif exige de
+/// garder la même connexion — ou une transaction ouverte tout du long.
+///
+/// Effet secondaire utile : l'état est lisible. Un verrou coincé se voit dans
+/// la table, alors qu'un verrou consultatif ne se raconte pas.
+model JobLock {
+  /// Ex. `reconciliation:<routerId>`, `tick-fin`, `purge`.
+  name        String   @id
+  /// Le verrou expire de lui-même : un processus tué ne bloque pas le parc.
+  lockedUntil DateTime @map("locked_until")
+  /// Qui le détient, pour que la table dise quelque chose en cas de blocage.
+  holder      String
+  acquiredAt  DateTime @default(now()) @map("acquired_at")
+
+  @@map("job_locks")
+}

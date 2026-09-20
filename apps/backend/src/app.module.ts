@@ -19,6 +19,7 @@ import { DevicesModule } from './devices/devices.module.js';
 import { UserManagerModule } from './user-manager/user-manager.module.js';
 import { TicketsModule } from './tickets/tickets.module.js';
 import { HotspotModule } from './hotspot/hotspot.module.js';
+import { SchedulingModule } from './scheduling/scheduling.module.js';
 import { PublicModule } from './public/public.module.js';
 
 @Module({
@@ -42,6 +43,7 @@ import { PublicModule } from './public/public.module.js';
     TicketsModule,
     HotspotModule,
     PublicModule,
+    SchedulingModule,
   ],
   controllers: [AppController],
   providers: [AppService],
