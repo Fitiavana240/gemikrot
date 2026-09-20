@@ -102,7 +102,7 @@ Conséquences observées sur le parc réel (hAP ac², 646 comptes HotSpot, Route
 | SOC-9 | Multi-routeurs réel dans la console | ✅ livré |
 | RTR-11 | Disjoncteur par routeur | ✅ livré, éprouvé sur le routeur réel |
 | RTR-12 | File d'opérations différées | ✅ livré |
-| RTR-13 | Enrôlement par tunnel WireGuard | 🟡 côté serveur éprouvé de bout en bout par HTTP ; reste l'exécution du script sur le routeur |
+| RTR-13 | Enrôlement par tunnel WireGuard | 🟡 script éprouvé sur le hAP réel, enrôlement complet avec la vraie clé du routeur ; le tunnel lui-même n'a jamais été monté |
 | RTR-14 | PPPoE | 🟡 comptes, profils, serveurs et bassins livrés et éprouvés ; sessions actives non relevables |
 
 **Vérifié** : 91 tests backend (13 fichiers), `tsc` propre sur les deux espaces, migrations appliquées, application démarrée sans erreur d'injection et les routes d'enrôlement exposées.
@@ -116,6 +116,17 @@ Trois pièges que le relevé a révélés, et qu'une lecture de la documentation
 **RTR-13, côté serveur, éprouvé le 2026-09-20** : rappel simulé exactement comme le routeur l'enverrait, en HTTP sur l'adresse du réseau. Réponse `201`, routeur créé sur l'adresse de tunnel attribuée, hôte égal à cette adresse, identifiants chiffrés en base, bon exploitant. Le rejeu du même jeton répond `404` — usage unique confirmé. Le pair WireGuard n'étant pas piloté sur ce poste, le journal rend la commande `wg set` exacte au lieu de faire croire le tunnel monté. Les objets de simulation ont été supprimés.
 
 Ce qui reste à éprouver sur RTR-13 se réduit donc à **l'exécution du script dans le terminal Winbox** : que chaque commande RouterOS passe, et que `/tool/fetch` atteigne l'application.
+
+**Répétition WireGuard sur le hAP réel (2026-09-20)** : chaque commande du script passe. Interface `gemikrot` créée avec sa clé privée qui ne quitte pas le routeur, route `10.88.0.0/16` active, groupe et compte applicatif limités créés, `persistent-keepalive=25` accepté. L'enrôlement a été mené à son terme avec la **vraie** clé publique relevée sur le routeur : réponse `201`, invitation consommée et liée, identifiants chiffrés.
+
+Deux défauts que seule cette répétition pouvait révéler, tous deux corrigés :
+
+1. **La ligne censée ajouter l'adresse du tunnel aux adresses autorisées a effacé la liste.** Le routeur n'était plus joignable que par Winbox. Cette ligne avait été ajoutée la veille précisément pour éviter ce scénario. Le script ne restreint donc plus rien : resserrer l'accès devient une étape séparée, après constat du tunnel — et qui peut alors passer par le tunnel.
+2. **Les variables `:local` ne traversent pas deux lignes** collées l'une après l'autre dans le terminal. La clé publique serait partie vide sans que rien ne le signale. Le rappel calcule tout dans la commande elle-même.
+
+Relevé au passage : le champ de `/ip/service` s'appelle `available-from`, `address=` n'en étant qu'un alias déprécié.
+
+**Ce qui reste sur RTR-13** : le tunnel n'a jamais été monté — aucun WireGuard n'écoutait côté serveur, c'était assumé. Et le `/tool/fetch` n'a pas atteint l'application, le pare-feu Windows bloquant l'entrant ; RouterOS avait bien accepté la commande et tenté la connexion, l'échec est réseau et non syntaxique. En production le pare-feu concerné est celui du VPS.
 
 **Ce qui reste** : les sessions actives (`/ppp/active`) ne se relèvent qu'avec un abonné PPPoE réellement connecté. La logique de leur correspondance est testée, leurs **noms de champs** ne le sont pas, et c'est écrit dans le test. À confirmer au premier abonné.
 
