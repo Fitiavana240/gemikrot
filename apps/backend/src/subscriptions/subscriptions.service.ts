@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { PlanProvisioningService } from '../plans/plan-provisioning.service.js';
 import { parseRouterTime } from '../routers/router-time.util.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
+import { RouterAccessService } from '../routers/router-access.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 import type { CreateSubscriptionDto } from './dto/create-subscription.dto.js';
@@ -34,6 +35,7 @@ export class SubscriptionsService {
     private readonly clients: MikrotikClientFactory,
     private readonly provisioning: PlanProvisioningService,
     private readonly tenantContext: TenantContextService,
+    private readonly access: RouterAccessService,
   ) {}
 
   findAll(filter: { status?: SubscriptionStatus; customerId?: string } = {}): Promise<Subscription[]> {
@@ -308,7 +310,18 @@ export class SubscriptionsService {
     const mikrotik = await this.clients.forRouter(subscription.routerId);
 
     try {
-      await mikrotik.setUserManagerUserDisabled(subscription.hotspotUsername, !allowed);
+      // Suspendre par ce chemin était plus faible que la suspension
+      // automatique : le travail planifié appelle `revoke`, qui ferme la
+      // session et efface les cookies, là où le bouton se contentait de
+      // désactiver le compte. Le client suspendu à la main gardait donc son
+      // accès jusqu'à trois jours — la durée de vie des `mac-cookie` ici.
+      if (allowed) {
+        await mikrotik.setUserManagerUserDisabled(subscription.hotspotUsername, false);
+      } else {
+        await this.access.revoke(mikrotik, subscription.hotspotUsername, {
+          disableAccount: true,
+        });
+      }
     } catch (error) {
       // Compte absent du routeur : on le signale sans bloquer la mise à jour
       // du suivi en base, sinon l'abonnement resterait éternellement actif.

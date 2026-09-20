@@ -64,6 +64,7 @@ describe('SubscriptionsService', () => {
   let mikrotik: ReturnType<typeof createFakeMikrotik>;
   let clients: Record<string, ReturnType<typeof vi.fn>>;
   let provisioning: { reconcile: ReturnType<typeof vi.fn> };
+  let access: { revoke: ReturnType<typeof vi.fn> };
 
   function buildService(fakePrisma = prisma) {
     return new SubscriptionsService(
@@ -72,12 +73,14 @@ describe('SubscriptionsService', () => {
       clients as any,
       provisioning as any,
       tenantContext as any,
+      access as any,
     );
   }
 
   beforeEach(() => {
     prisma = createFakePrisma();
     audit = { log: vi.fn(async () => {}) };
+    access = { revoke: vi.fn(async () => ({ cookiesRemoved: 0, sessionsClosed: 0 })) };
     mikrotik = createFakeMikrotik();
     clients = {
       forRouter: vi.fn(async () => mikrotik),
@@ -99,7 +102,11 @@ describe('SubscriptionsService', () => {
 
     expect(suspended.status).toBe('SUSPENDED');
     // Suspension côté User Manager : le compte et son historique sont gardés.
-    expect(mikrotik.setUserManagerUserDisabled).toHaveBeenCalledWith('Mario', true);
+    // Passe par `revoke`, et non par une simple désactivation : un compte
+    // seulement désactivé laisse la session en cours ouverte, et le
+    // `mac-cookie` du client vaut encore trois jours. C'était une suspension
+    // **plus faible** que celle du travail planifié, qui coupe pour de bon.
+    expect(access.revoke).toHaveBeenCalledWith(mikrotik, 'Mario', { disableAccount: true });
     // Décision produit : un appareil suspendu est bloqué, pas seulement
     // renvoyé vers le portail captif.
     expect(mikrotik.setIpBindingType).toHaveBeenCalledWith('*1', 'blocked');

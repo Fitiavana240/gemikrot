@@ -1,4 +1,5 @@
 import { api } from './client';
+import type { Coupure } from './coupure';
 
 /** Ajoute `?routerId=` quand un routeur est sélectionné. */
 function q(routerId: string | undefined, extra?: Record<string, string>): string {
@@ -198,9 +199,10 @@ export const hotspotTabsApi = {
   dhcpLeases: (routerId?: string) => api.get<DhcpLease[]>(`/hotspot/dhcp-leases${q(routerId)}`),
   /** Bloque ou reactive un compte sans le supprimer : l'historique reste. */
   setUserDisabled: (username: string, disabled: boolean, routerId?: string) =>
-    api.patch<HotspotUser>(`/hotspot/users/${encodeURIComponent(username)}/disabled${q(routerId)}`, {
-      disabled,
-    }),
+    api.patch<HotspotUser & { coupure: Coupure | null }>(
+      `/hotspot/users/${encodeURIComponent(username)}/disabled${q(routerId)}`,
+      { disabled },
+    ),
   deleteUser: (username: string, routerId?: string) =>
     api.delete<void>(`/hotspot/users/${encodeURIComponent(username)}${q(routerId)}`),
   createUser: (dto: CreateHotspotUser, routerId?: string) =>

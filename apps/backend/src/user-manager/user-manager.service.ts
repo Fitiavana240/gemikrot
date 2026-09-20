@@ -6,6 +6,7 @@ import type {
   UserManagerUserProfileState,
 } from '@wifitati/mikrotik-service';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { RouterAccessService } from '../routers/router-access.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 import { parseRouterTime } from '../routers/router-time.util.js';
@@ -94,6 +95,7 @@ export class UserManagerService {
     private readonly prisma: PrismaService,
     private readonly clients: MikrotikClientFactory,
     private readonly audit: AuditService,
+    private readonly access: RouterAccessService,
   ) {}
 
   // ==================== Profils ====================
@@ -404,6 +406,20 @@ export class UserManagerService {
     return user;
   }
 
+  /**
+   * Suspendre suppose trois gestes, pas un.
+   *
+   * Désactiver le compte ne coupe rien tout de suite : la session en cours
+   * n'est pas fermée, et le profil serveur de ce parc accepte `mac-cookie`
+   * avec une durée de vie de **trois jours** — le client se reconnecte alors
+   * sans repasser par RADIUS, donc sans que le compte désactivé soit
+   * consulté. Le travail planifié le savait et appelait `revoke` ; le bouton,
+   * non. **L'exploitant qui cliquait obtenait une coupure plus faible que
+   * celle qui serait arrivée toute seule quelques heures plus tard.**
+   *
+   * Ce qui a été réellement coupé est rendu à l'appelant : promettre une
+   * coupure sans dire ce qu'elle a atteint, c'est ce défaut en plus petit.
+   */
   async setAccountDisabled(
     username: string,
     disabled: boolean,
@@ -411,9 +427,19 @@ export class UserManagerService {
     routerId?: string,
   ) {
     const mikrotik = await this.client(routerId);
-    const user = await mikrotik.setUserManagerUserDisabled(username, disabled);
-    await this.log(adminUserId, disabled ? 'DISABLE_UM_USER' : 'ENABLE_UM_USER', username);
-    return user;
+    if (!disabled) {
+      const user = await mikrotik.setUserManagerUserDisabled(username, false);
+      await this.log(adminUserId, 'ENABLE_UM_USER', username);
+      return { ...user, coupure: null };
+    }
+
+    // La désactivation d'abord, parce qu'elle seule rend le compte — il n'y a
+    // pas de lecture unitaire dans l'interface du paquet. `revoke` ne la
+    // refait donc pas.
+    const user = await mikrotik.setUserManagerUserDisabled(username, true);
+    const coupure = await this.access.revoke(mikrotik, username, { disableAccount: false });
+    await this.log(adminUserId, 'DISABLE_UM_USER', username, { ...coupure });
+    return { ...user, coupure };
   }
 
   async deleteAccount(username: string, adminUserId?: string, routerId?: string): Promise<void> {

@@ -148,6 +148,17 @@ export class HotspotService {
     return compte;
   }
 
+  /**
+   * Bloquer suppose trois gestes, pas un.
+   *
+   * Désactiver le compte ne ferme pas la session en cours, et le profil
+   * serveur de ce parc accepte `mac-cookie` avec une durée de vie de **trois
+   * jours** : le client se reconnecte sans que le compte désactivé soit
+   * consulté. L'écran le disait déjà — mais sur l'onglet Cookies, loin du
+   * bouton qui échouait, et derrière une action séparée « Couper l'accès »
+   * qu'il fallait penser à aller chercher. **Documenter un piège n'est pas la
+   * même chose que ne pas en avoir.**
+   */
   async setUserDisabled(
     username: string,
     disabled: boolean,
@@ -156,14 +167,21 @@ export class HotspotService {
   ) {
     const mikrotik = await this.client(routerId);
     const compte = await mikrotik.setHotspotUserDisabled(username, disabled);
+    // `disableAccount: false` : le compte HotSpot vient d'être désactivé
+    // ci-dessus ; `revoke` désactiverait un compte *User Manager*, qui est
+    // autre chose.
+    const coupure = disabled
+      ? await this.access.revoke(mikrotik, username, { disableAccount: false })
+      : null;
     await this.audit.log({
       adminUserId,
       routerId,
       action: disabled ? 'DISABLE_HOTSPOT_USER' : 'ENABLE_HOTSPOT_USER',
       targetType: 'HotspotUser',
       targetId: username,
+      payloadDiff: coupure ? { ...coupure } : undefined,
     });
-    return compte;
+    return { ...compte, coupure };
   }
 
   /**

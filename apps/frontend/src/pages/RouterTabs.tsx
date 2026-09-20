@@ -12,6 +12,7 @@ import {
 } from '../api/mikrotik-tabs';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
+import { phraseCoupure } from '../api/coupure';
 import { ListeDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { GenerationTickets } from '../components/GenerationTickets';
@@ -179,6 +180,7 @@ export function HotspotUsersTab() {
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
   const [erreur, setErreur] = useState<string | null>(null);
+  const [compteRendu, setCompteRendu] = useState<string | null>(null);
   const [àSupprimer, setÀSupprimer] = useState<string | null>(null);
   const [formulaire, setFormulaire] = useState<'aucun' | 'creation' | HotspotUser>('aucun');
 
@@ -196,13 +198,26 @@ export function HotspotUsersTab() {
     setErreur(e instanceof ApiError ? e.message : 'Le routeur a refusé cette action.');
   const rafraîchir = () => {
     setErreur(null);
+    setCompteRendu(null);
     void queryClient.invalidateQueries({ queryKey: ['hotspot-users', currentId] });
   };
 
+  /**
+   * Bloquer coupe pour de bon, et le dit.
+   *
+   * Le serveur ferme désormais la session en cours et efface les cookies du
+   * compte — sans quoi le client restait en ligne, et son `mac-cookie` le
+   * laissait revenir pendant trois jours. Le compte rendu n'est pas une
+   * coquetterie : c'est ce qui permet de vérifier que le client est hors
+   * ligne, plutôt que de le supposer.
+   */
   const bloquer = useMutation({
     mutationFn: ({ username, disabled }: { username: string; disabled: boolean }) =>
       hotspotTabsApi.setUserDisabled(username, disabled, currentId),
-    onSuccess: rafraîchir,
+    onSuccess: (compte) => {
+      rafraîchir();
+      setCompteRendu(phraseCoupure(compte.coupure));
+    },
     onError,
   });
   const supprimer = useMutation({
@@ -299,6 +314,11 @@ export function HotspotUsersTab() {
       />
 
       {erreur && <ErrorNote>{erreur}</ErrorNote>}
+      {compteRendu && (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {compteRendu}
+        </p>
+      )}
 
       {/* Une suppression perd le trafic consommé et le nom porté par le
           commentaire : la confirmer nomme ce qu'on perd, plutôt que de

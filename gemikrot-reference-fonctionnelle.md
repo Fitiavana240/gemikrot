@@ -867,6 +867,45 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — Trois boutons « Suspendre » qui ne suspendaient pas
+
+Le défaut le plus cher de la journée, et il ne se voyait pas à l'écran.
+
+`RouterAccessService` porte, depuis un relevé sur le routeur, ce que coûte une coupure :
+désactiver un compte **ne coupe rien tout de suite**. La session en cours n'est pas fermée, et
+le profil serveur de ce parc accepte `mac-cookie` avec une durée de vie de **trois jours** — le
+client se reconnecte alors sans repasser par RADIUS, donc sans que le compte désactivé soit
+consulté. Deux des six sessions relevées étaient entrées ainsi, `radius: false`.
+
+Le travail planifié le savait : il appelle `revoke`, qui désactive **et** ferme la session
+**et** efface les cookies. Trois boutons, non :
+
+| | avant | après |
+|---|---|---|
+| HotSpot ▸ Comptes ▸ Bloquer | `setHotspotUserDisabled` | + session fermée, cookies effacés |
+| User Manager ▸ Suspendre | `setUserManagerUserDisabled` | idem |
+| Abonnements ▸ Suspendre | `setUserManagerUserDisabled` | `revoke` |
+
+**L'exploitant qui cliquait obtenait une coupure plus faible que celle qui serait arrivée toute
+seule quelques heures plus tard.** Un abonné impayé suspendu à la main gardait son accès
+jusqu'à trois jours.
+
+L'écran HotSpot décrivait pourtant le piège — « une suspension côté User Manager ne les coupe
+pas » — mais sur l'onglet **Cookies**, loin du bouton qui échouait, et derrière une action
+séparée « Couper l'accès » qu'il fallait penser à aller chercher. **Documenter un piège n'est
+pas la même chose que ne pas en avoir.**
+
+Ce qui a été réellement coupé est maintenant rendu et affiché, **y compris quand c'est zéro** :
+« aucune session en cours, aucun cookie à effacer » n'est pas un non-événement, c'est ce qui
+permet d'être sûr que le client est hors ligne au lieu de le supposer.
+
+**Éprouvé sur le routeur** avec un compte HotSpot jetable créé pour l'occasion et un compte
+User Manager d'essai : les deux rendent leur compte rendu, et l'écran l'affiche. La fermeture
+d'une **vraie** session n'a pas été éprouvée ici — les 57 cookies et la session vivante du
+routeur appartiennent à de vrais clients — mais c'est le chemin que le travail planifié
+emprunte depuis toujours, et il a ses propres tests. Compte jetable supprimé, compte d'essai
+réactivé, 646 comptes et 57 cookies intacts.
+
 ### 2026-09-20 — Le squelette qui tournait sans fin
 
 Fin de la traque. Sur les quatre écrans qu'il me restait à éprouver, **trois étaient déjà

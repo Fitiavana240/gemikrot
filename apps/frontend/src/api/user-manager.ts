@@ -1,4 +1,5 @@
 import { api } from './client';
+import type { Coupure } from './coupure';
 import { routerQuery } from '../routers/RouterContext';
 
 export type ProfileStartsWhen = 'first-auth' | 'assigned';
@@ -137,7 +138,7 @@ export const userManagerApi = {
       input,
     ),
   setAccountDisabled: (username: string, disabled: boolean, routerId?: string) =>
-    api.patch<UserManagerAccount>(
+    api.patch<UserManagerAccount & { coupure: Coupure | null }>(
       `/user-manager/users/${encodeURIComponent(username)}/disabled${routerQuery(routerId)}`,
       { disabled },
     ),

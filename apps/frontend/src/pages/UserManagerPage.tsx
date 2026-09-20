@@ -17,6 +17,7 @@ import {
 } from '../api/user-manager';
 import { useAuth } from '../auth/AuthContext';
 import { ETAT_COMPTE_UM, libellé } from '../api/libelles';
+import { phraseCoupure } from '../api/coupure';
 import { PanneDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { GenerationTickets } from '../components/GenerationTickets';
@@ -587,11 +588,22 @@ function AccountsTab() {
     },
     onError,
   });
+  /**
+   * Suspendre coupe pour de bon, et le dit.
+   *
+   * Désactiver le compte ne fermait pas la session en cours, et le
+   * `mac-cookie` du client valait encore trois jours : la suspension
+   * manuelle était **plus faible** que celle du travail planifié. Le compte
+   * rendu permet de vérifier que le client est hors ligne au lieu de le
+   * supposer.
+   */
+  const [coupure, setCoupure] = useState<string | null>(null);
   const toggle = useMutation({
     mutationFn: ({ username, disabled }: { username: string; disabled: boolean }) =>
       userManagerApi.setAccountDisabled(username, disabled, currentId),
-    onSuccess: () => {
+    onSuccess: (compte) => {
       setError(null);
+      setCoupure(phraseCoupure(compte.coupure));
       refresh();
     },
     onError,
@@ -637,6 +649,11 @@ function AccountsTab() {
   return (
     <div className="space-y-4">
       {error && <ErrorBanner>{error}</ErrorBanner>}
+      {coupure && (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {coupure}
+        </p>
+      )}
 
       {àRecoder && (
         <EditionUnChamp
