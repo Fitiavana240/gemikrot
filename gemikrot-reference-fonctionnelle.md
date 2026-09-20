@@ -312,7 +312,7 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 
 | Ref | Description | Impact | Complexité | Implémenté |
 |-----|-------------|--------|------------|------------|
-| SECU-1 | **Isolation testée entre exploitants** : lecture, écriture, suppression, création automatique, et refus hors contexte. 8 tests contre la vraie base, plus 3 au niveau service sur l'import — le seul point d'entrée qui change d'exploitant en cours de route | ⭐⭐⭐ | 🔴 | ✅ |
+| SECU-1 | **Isolation testée entre exploitants** : lecture, écriture, suppression, création automatique, et refus hors contexte. 8 tests contre la vraie base, plus 3 au niveau service sur l'import. **Clés étrangères composites `(tenant_id, id)` sur les 19 relations entre modèles cloisonnés** : la garantie ne dépend plus du code appelant | ⭐⭐⭐ | 🔴 | ✅ |
 | SECU-2 | **Identifiants routeur chiffrés**, jamais renvoyés au navigateur ni journalisés (§RTR-2) | ⭐⭐⭐ | 🟡 | ✅ |
 | SECU-3 | **En-têtes de sécurité HTTP**, `trust proxy` correct derrière le portail captif | ⭐⭐ | 🟢 | ✅ |
 | SECU-4 | **Modèle de ticket confronté à une liste blanche** et refusé s'il contient autre chose que de la mise en forme ; rendu dans une iframe verrouillée où le navigateur interdit toute exécution | ⭐⭐⭐ | 🟡 | ✅ |
@@ -390,6 +390,18 @@ Facturer les exploitants, piloter plusieurs routeurs pour de bon, atteindre un r
 ---
 
 ## 16. Journal de livraison
+
+### 2026-09-20 (suite) — Le cloisonnement descend dans la base
+
+**Vérifié** : 101 tests backend (15 fichiers), 66 dans le paquet, `tsc` propre, application démarrée, migration appliquée.
+
+L'extension Prisma ne protège que le code qui pense à passer par le client cloisonné — la fuite corrigée à l'import l'a montré. Les **19 relations entre modèles cloisonnés** portent désormais une clé étrangère composite `(tenant_id, id)` : une ligne ne peut plus référencer que des lignes du même exploitant, quel que soit le code appelant. Jusqu'ici la base acceptait volontiers un paiement de A rattaché à un client de B.
+
+Les clés simples sont **remplacées**, pas doublées, et la sémantique `ON DELETE` est reprise à l'identique. Onze index uniques ajoutés, dont trois exigés par Prisma sur le côté définissant des relations un-à-un.
+
+Contrôle avant migration : les 19 relations parcourues sur la base de développement, zéro ligne inter-exploitants. PostgreSQL refuserait de toute façon d'ajouter une contrainte que des lignes violent — un échec sur un autre environnement signale des données à réparer, pas une migration à forcer.
+
+Les tests écrivent avec le client **non cloisonné**, délibérément : c'est la seule façon d'éprouver une contrainte de base, en contournant tout ce qui la précède. Vérifié aussi en SQL brut, hors de tout code applicatif : `insert or update on table "payments" violates foreign key constraint "payments_tenant_id_customer_id_fkey"`.
 
 ### 2026-09-20 (suite) — Les deux défauts trouvés à l'audit
 

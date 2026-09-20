@@ -211,6 +211,9 @@ model Router {
   operations           RouterOperation[]
   enrollment           RouterEnrollment?
 
+  /// Cible des clés étrangères composites : une ligne enfant ne peut
+  /// référencer que des lignes du même exploitant.
+  @@unique([tenantId, id])
   @@map("routers")
 }
 
@@ -258,6 +261,9 @@ model Plan {
   @@unique([tenantId, name])
   @@unique([tenantId, mikrotikProfileName])
   @@unique([tenantId, umProfileName])
+  /// Cible des clés étrangères composites : une ligne enfant ne peut
+  /// référencer que des lignes du même exploitant.
+  @@unique([tenantId, id])
   @@map("plans")
 }
 
@@ -270,11 +276,11 @@ model Subscription {
   tenantId    String   @map("tenant_id")
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   customerId         String             @map("customer_id")
-  customer           Customer           @relation(fields: [customerId], references: [id])
+  customer           Customer           @relation(fields: [tenantId, customerId], references: [tenantId, id])
   planId             String             @map("plan_id")
-  plan               Plan               @relation(fields: [planId], references: [id])
+  plan               Plan               @relation(fields: [tenantId, planId], references: [tenantId, id])
   routerId           String             @map("router_id")
-  router             Router             @relation(fields: [routerId], references: [id])
+  router             Router             @relation(fields: [tenantId, routerId], references: [tenantId, id])
   /// Nom du compte tel qu'il existe dans `/user-manager/user`.
   hotspotUsername    String             @map("hotspot_username")
   status             SubscriptionStatus @default(ACTIVE)
@@ -292,6 +298,9 @@ model Subscription {
   @@unique([routerId, hotspotUsername])
   @@index([status])
   @@index([currentPeriodEnd])
+  /// Cible des clés étrangères composites : une ligne enfant ne peut
+  /// référencer que des lignes du même exploitant.
+  @@unique([tenantId, id])
   @@map("subscriptions")
 }
 
@@ -314,6 +323,9 @@ model Customer {
   subscriptions Subscription[]
 
   @@unique([tenantId, phone])
+  /// Cible des clés étrangères composites : une ligne enfant ne peut
+  /// référencer que des lignes du même exploitant.
+  @@unique([tenantId, id])
   @@map("customers")
 }
 
@@ -325,11 +337,11 @@ model Device {
   tenantId    String   @map("tenant_id")
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   customerId   String?    @map("customer_id")
-  customer     Customer?  @relation(fields: [customerId], references: [id])
+  customer     Customer?  @relation(fields: [tenantId, customerId], references: [tenantId, id])
   routerId     String?    @map("router_id")
-  router       Router?    @relation(fields: [routerId], references: [id])
+  router       Router?    @relation(fields: [tenantId, routerId], references: [tenantId, id])
   subscriptionId String?  @map("subscription_id")
-  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+  subscription Subscription? @relation(fields: [tenantId, subscriptionId], references: [tenantId, id])
   macAddress   String     @map("mac_address")
   ipAddress    String?    @map("ip_address")
   hostname     String?
@@ -349,6 +361,9 @@ model Device {
   vouchers Voucher[]
 
   @@index([macAddress])
+  /// Cible des clés étrangères composites : une ligne enfant ne peut
+  /// référencer que des lignes du même exploitant.
+  @@unique([tenantId, id])
   @@map("devices")
 }
 
@@ -357,9 +372,9 @@ model VoucherBatch {
   tenantId    String   @map("tenant_id")
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   routerId    String              @map("router_id")
-  router      Router              @relation(fields: [routerId], references: [id])
+  router      Router              @relation(fields: [tenantId, routerId], references: [tenantId, id])
   planId      String              @map("plan_id")
-  plan        Plan                @relation(fields: [planId], references: [id])
+  plan        Plan                @relation(fields: [tenantId, planId], references: [tenantId, id])
   quantity    Int
   prefix      String?
   status      VoucherBatchStatus  @default(PENDING)
@@ -370,6 +385,9 @@ model VoucherBatch {
   jobs     VoucherJob[]
   vouchers Voucher[]
 
+  /// Cible des clés étrangères composites : une ligne enfant ne peut
+  /// référencer que des lignes du même exploitant.
+  @@unique([tenantId, id])
   @@map("voucher_batches")
 }
 
@@ -396,15 +414,15 @@ model Voucher {
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   code        String        @unique
   batchId     String?       @map("batch_id")
-  batch       VoucherBatch? @relation(fields: [batchId], references: [id])
+  batch       VoucherBatch? @relation(fields: [tenantId, batchId], references: [tenantId, id])
   planId      String        @map("plan_id")
-  plan        Plan          @relation(fields: [planId], references: [id])
+  plan        Plan          @relation(fields: [tenantId, planId], references: [tenantId, id])
   price       Decimal       @db.Decimal(12, 2)
   status      VoucherStatus @default(CREATED)
   customerId  String?       @map("customer_id")
-  customer    Customer?     @relation(fields: [customerId], references: [id])
+  customer    Customer?     @relation(fields: [tenantId, customerId], references: [tenantId, id])
   deviceId    String?       @map("device_id")
-  device      Device?       @relation(fields: [deviceId], references: [id])
+  device      Device?       @relation(fields: [tenantId, deviceId], references: [tenantId, id])
   payment     Payment?
   createdAt   DateTime      @default(now()) @map("created_at")
   activatedAt DateTime?     @map("activated_at")
@@ -422,6 +440,9 @@ model Voucher {
 
   @@index([status])
   @@index([umUsername])
+  /// Cible des clés étrangères composites : une ligne enfant ne peut
+  /// référencer que des lignes du même exploitant.
+  @@unique([tenantId, id])
   @@map("vouchers")
 }
 
@@ -433,9 +454,9 @@ model Payment {
   tenantId    String   @map("tenant_id")
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   customerId         String        @map("customer_id")
-  customer           Customer      @relation(fields: [customerId], references: [id])
+  customer           Customer      @relation(fields: [tenantId, customerId], references: [tenantId, id])
   planId             String        @map("plan_id")
-  plan               Plan          @relation(fields: [planId], references: [id])
+  plan               Plan          @relation(fields: [tenantId, planId], references: [tenantId, id])
   amount             Decimal       @db.Decimal(12, 2)
   /// Devise au moment du paiement, figée même si l'exploitant en change.
   currency           String
@@ -444,9 +465,9 @@ model Payment {
   status             PaymentStatus @default(PENDING)
   /// Un paiement solde soit un voucher (ticket), soit une période d'abonnement.
   voucherId          String?       @unique @map("voucher_id")
-  voucher            Voucher?      @relation(fields: [voucherId], references: [id])
+  voucher            Voucher?      @relation(fields: [tenantId, voucherId], references: [tenantId, id])
   subscriptionId     String?       @map("subscription_id")
-  subscription       Subscription? @relation(fields: [subscriptionId], references: [id])
+  subscription       Subscription? @relation(fields: [tenantId, subscriptionId], references: [tenantId, id])
   verifiedByAdminId  String?       @map("verified_by_admin_id")
   verifiedByAdmin    AdminUser?    @relation(fields: [verifiedByAdminId], references: [id])
   claim              PaymentClaim?
@@ -454,6 +475,11 @@ model Payment {
   verifiedAt         DateTime?     @map("verified_at")
 
   @@unique([tenantId, method, reference])
+  /// Cible des clés étrangères composites : une ligne enfant ne peut
+  /// référencer que des lignes du même exploitant.
+  @@unique([tenantId, id])
+  /// Exigé par la relation composite un-à-un vers voucher.
+  @@unique([tenantId, voucherId])
   @@map("payments")
 }
 
@@ -484,7 +510,7 @@ model PaymentClaim {
   tenantId    String   @map("tenant_id")
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   paymentId   String   @unique @map("payment_id")
-  payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  payment     Payment  @relation(fields: [tenantId, paymentId], references: [tenantId, id], onDelete: Cascade)
   /// Aléatoire, porté par l'URL de suivi. Ne divulgue aucun identifiant :
   /// le code d'accès n'est rendu qu'après vérification du paiement.
   token       String   @unique
@@ -496,6 +522,8 @@ model PaymentClaim {
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@index([tenantId, phone])
+  /// Exigé par la relation composite un-à-un vers payment.
+  @@unique([tenantId, paymentId])
   @@map("payment_claims")
 }
 
@@ -515,7 +543,7 @@ model RouterOperation {
   tenantId      String                @map("tenant_id")
   tenant        Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   routerId      String                @map("router_id")
-  router        Router                @relation(fields: [routerId], references: [id], onDelete: Cascade)
+  router        Router                @relation(fields: [tenantId, routerId], references: [tenantId, id], onDelete: Cascade)
   /// Nature de l'opération — voir ROUTER_OPERATIONS côté service.
   kind          String
   /// Arguments de l'opération. Toutes doivent être rejouables sans dommage.
@@ -613,8 +641,10 @@ model RouterEnrollment {
   consumedAt           DateTime? @map("consumed_at")
   /// Routeur créé par le rappel. Nul tant que le script n'a pas été exécuté.
   routerId             String?   @unique @map("router_id")
-  router               Router?   @relation(fields: [routerId], references: [id])
+  router               Router?   @relation(fields: [tenantId, routerId], references: [tenantId, id])
   createdAt            DateTime  @default(now()) @map("created_at")
 
+  /// Exigé par la relation composite un-à-un vers router.
+  @@unique([tenantId, routerId])
   @@map("router_enrollments")
 }
