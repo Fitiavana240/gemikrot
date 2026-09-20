@@ -26,7 +26,7 @@ const RouterSelectionContext = createContext<RouterContextValue | null>(null);
  * gère deux sites ne veut pas le refaire à chaque écran.
  */
 export function RouterProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     try {
       return localStorage.getItem(STORAGE_KEY);
@@ -38,8 +38,16 @@ export function RouterProvider({ children }: { children: ReactNode }) {
   const routers = useQuery({
     queryKey: ['routers'],
     queryFn: routersApi.list,
-    // Le SUPER_ADMIN n'appartient à aucun exploitant : il n'a pas de routeurs.
-    enabled: isAuthenticated && user?.role !== 'SUPER_ADMIN',
+    // Activée pour tout compte connecté, SUPER_ADMIN compris.
+    //
+    // Elle en était exclue au motif qu'il n'appartient à aucun exploitant —
+    // mais son client d'accès aux données n'est pas cloisonné, et l'API lui
+    // rend donc bien les routeurs. Le sélecteur ne fonctionnait que par
+    // accident : au tout premier rendu le rôle n'est pas encore connu, la
+    // requête partait, et son résultat restait en cache. Sur un chargement
+    // où le rôle est su d'emblée, elle ne partait jamais et tous les écrans
+    // qui dépendent d'un routeur restaient vides.
+    enabled: isAuthenticated,
     retry: false,
   });
 

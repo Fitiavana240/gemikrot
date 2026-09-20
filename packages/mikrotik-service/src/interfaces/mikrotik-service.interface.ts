@@ -61,6 +61,15 @@ import {
   UmRouterDto,
   UmUserGroupDto,
 } from '../dto/router-config.dto';
+import {
+  ArpEntryDto,
+  DhcpServerDto,
+  IpCloudDto,
+  IpServiceDto,
+  NetworkInterfaceStatsDto,
+  RouterLogEntryDto,
+  SimpleQueueDto,
+} from '../dto/router-tools.dto';
 
 /**
  * Contrat UNIQUE par lequel le reste du backend (services métier,
@@ -234,5 +243,25 @@ export interface IMikrotikService {
   getUmAttributes(): Promise<UmAttributeDto[]>;
   /** Protocoles dont le HotSpot suit les connexions (`ftp`, `sip`...). */
   getHotspotServicePorts(): Promise<HotspotServicePortDto[]>;
+
+  // ---------- Diagnostic et debit ----------
+  //
+  // Lecture seule, par decision : modifier ces tables suppose de comprendre
+  // ce qu'on casse sur un routeur qui sert des centaines de clients. La
+  // console montre, WinBox modifie.
+
+  /** Files simples : c'est la que vit le debit reellement alloue a un client. */
+  getSimpleQueues(): Promise<SimpleQueueDto[]>;
+  /** Journal du routeur, du plus recent au plus ancien. */
+  getRouterLog(limit?: number): Promise<RouterLogEntryDto[]>;
+  /** Interfaces avec leurs compteurs : trafic, erreurs, coupures de lien. */
+  getInterfaceStats(): Promise<NetworkInterfaceStatsDto[]>;
+  /** Services d'administration et adresses autorisees a les joindre. */
+  getIpServices(): Promise<IpServiceDto[]>;
+  /** Etat du DDNS fourni par MikroTik. */
+  getIpCloud(): Promise<IpCloudDto>;
+  /** Table ARP : correspondance adresse / materiel. */
+  getArpEntries(): Promise<ArpEntryDto[]>;
+  getDhcpServers(): Promise<DhcpServerDto[]>;
 }
 

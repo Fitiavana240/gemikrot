@@ -4,6 +4,7 @@ import { AuditModule } from '../audit/audit.module.js';
 import { DevicesModule } from '../devices/devices.module.js';
 import { RouterAccessService } from './router-access.service.js';
 import { RouterCredentialsService } from './router-credentials.service.js';
+import { RouterToolsController } from './router-tools.controller.js';
 import { RouterEnrollmentController } from './router-enrollment.controller.js';
 import { RouterEnrollmentService } from './router-enrollment.service.js';
 import { WireguardService } from './wireguard.service.js';
@@ -23,7 +24,12 @@ import { RouterMonitoringController } from './router-monitoring.controller.js';
 @Global()
 @Module({
   imports: [ConfigModule, AuditModule, DevicesModule],
-  controllers: [RoutersController, RouterMonitoringController, RouterEnrollmentController],
+  controllers: [
+    RoutersController,
+    RouterMonitoringController,
+    RouterEnrollmentController,
+    RouterToolsController,
+  ],
   providers: [
     RouterAccessService,
     WireguardService,

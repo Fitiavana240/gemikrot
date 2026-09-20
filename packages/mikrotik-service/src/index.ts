@@ -11,6 +11,7 @@ export * from './dto/user-manager.dto';
 export * from './dto/commands.dto';
 export * from './dto/ppp.dto';
 export * from './dto/router-config.dto';
+export * from './dto/router-tools.dto';
 
 export * from './errors/mikrotik.errors';
 

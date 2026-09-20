@@ -60,6 +60,12 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/sessions', label: 'Connectés', hint: 'Qui est en ligne en ce moment' },
       { to: '/routers', label: 'Routeurs', hint: 'Joignabilité, raccordement, import' },
+      {
+        to: '/diagnostic',
+        label: 'Diagnostic',
+        roles: ADMIN,
+        hint: 'Débit par client, interfaces, journal du routeur, accès',
+      },
     ],
   },
   {

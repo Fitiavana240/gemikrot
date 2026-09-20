@@ -6,6 +6,7 @@ import * as HotspotMapper from './mappers/hotspot.mapper';
 import * as UmMapper from './mappers/user-manager.mapper';
 import * as PppMapper from './mappers/ppp.mapper';
 import * as ConfigMapper from './mappers/router-config.mapper';
+import * as ToolsMapper from './mappers/router-tools.mapper';
 import { validate } from './validation/validate';
 import {
   assignProfileSchema,
@@ -955,6 +956,55 @@ export class RouterOSMikrotikService implements IMikrotikService {
   async getHotspotServicePorts() {
     const raw = await this.client.get<any[]>('/ip/hotspot/service-port');
     return raw.map(ConfigMapper.mapHotspotServicePort);
+  }
+
+
+  // ---------- Diagnostic et debit ----------
+
+  async getSimpleQueues() {
+    const raw = await this.client.get<any[]>('/queue/simple');
+    return raw.map(ToolsMapper.mapSimpleQueue);
+  }
+
+  /**
+   * Journal du routeur, du plus recent au plus ancien.
+   *
+   * Le routeur en garde un millier de lignes : les rendre toutes chargerait
+   * l'ecran pour rien. RouterOS ne sait pas trier a la source, on inverse
+   * donc apres lecture.
+   */
+  async getRouterLog(limit = 200) {
+    const raw = await this.client.get<any[]>('/log');
+    return raw
+      .slice(-limit)
+      .reverse()
+      .map(ToolsMapper.mapRouterLogEntry);
+  }
+
+  async getInterfaceStats() {
+    const raw = await this.client.get<any[]>('/interface');
+    return raw.map(ToolsMapper.mapNetworkInterfaceStats);
+  }
+
+  async getIpServices() {
+    const raw = await this.client.get<any[]>('/ip/service');
+    return raw.map(ToolsMapper.mapIpService);
+  }
+
+  /** `/ip/cloud` rend un objet et non une liste : un routeur, un reglage. */
+  async getIpCloud() {
+    const raw = await this.client.get<any>('/ip/cloud');
+    return ToolsMapper.mapIpCloud(Array.isArray(raw) ? raw[0] : raw);
+  }
+
+  async getArpEntries() {
+    const raw = await this.client.get<any[]>('/ip/arp');
+    return raw.map(ToolsMapper.mapArpEntry);
+  }
+
+  async getDhcpServers() {
+    const raw = await this.client.get<any[]>('/ip/dhcp-server');
+    return raw.map(ToolsMapper.mapDhcpServer);
   }
 
 }

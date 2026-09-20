@@ -10,6 +10,7 @@ import { SubscriptionsPage } from './pages/SubscriptionsPage';
 import { DevicesPage } from './pages/DevicesPage';
 import { RoutersPage } from './pages/RoutersPage';
 import { AuditPage } from './pages/AuditPage';
+import { RouterToolsPage } from './pages/RouterToolsPage';
 import { BatchesPage } from './pages/BatchesPage';
 import { CustomerSheetPage } from './pages/CustomerSheetPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -47,6 +48,8 @@ export function App() {
             <Route path="/subscriptions" element={<SubscriptionsPage />} />
             <Route path="/devices" element={<DevicesPage />} />
             <Route path="/routers" element={<RoutersPage />} />
+            <Route path="/diagnostic" element={<RouterToolsPage />} />
+            <Route path="/diagnostic/:tab" element={<RouterToolsPage />} />
             <Route path="/hotspot" element={<HotspotPage />} />
             <Route path="/hotspot/:tab" element={<HotspotPage />} />
             <Route path="/user-manager" element={<UserManagerPage />} />

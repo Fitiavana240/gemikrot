@@ -62,6 +62,15 @@ import {
   UmRouterDto,
   UmUserGroupDto,
 } from '../../src/dto/router-config.dto';
+import {
+  ArpEntryDto,
+  DhcpServerDto,
+  IpCloudDto,
+  IpServiceDto,
+  NetworkInterfaceStatsDto,
+  RouterLogEntryDto,
+  SimpleQueueDto,
+} from '../../src/dto/router-tools.dto';
 import { MikrotikConflictError, MikrotikNotFoundError } from '../../src/errors/mikrotik.errors';
 
 /**
@@ -750,6 +759,45 @@ export class MockMikrotikService implements IMikrotikService {
   }
 
   async getHotspotServicePorts(): Promise<HotspotServicePortDto[]> {
+    return [];
+  }
+
+  // ---------- Diagnostic et debit ----------
+  //
+  // Vides : aucun test existant n'en depend, et un simulacre qui invente des
+  // lignes ferait passer pour verifie ce qui ne l'est pas.
+
+  async getSimpleQueues(): Promise<SimpleQueueDto[]> {
+    return [];
+  }
+
+  async getRouterLog(): Promise<RouterLogEntryDto[]> {
+    return [];
+  }
+
+  async getInterfaceStats(): Promise<NetworkInterfaceStatsDto[]> {
+    return [];
+  }
+
+  async getIpServices(): Promise<IpServiceDto[]> {
+    return [];
+  }
+
+  async getIpCloud(): Promise<IpCloudDto> {
+    return {
+      ddnsEnabled: 'no',
+      dnsName: null,
+      publicAddress: null,
+      updateTime: false,
+      backToHomeVpn: null,
+    };
+  }
+
+  async getArpEntries(): Promise<ArpEntryDto[]> {
+    return [];
+  }
+
+  async getDhcpServers(): Promise<DhcpServerDto[]> {
     return [];
   }
 
