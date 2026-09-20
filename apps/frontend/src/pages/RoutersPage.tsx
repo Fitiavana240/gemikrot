@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   enrollmentsApi,
@@ -36,6 +36,35 @@ export function RoutersPage() {
     onSuccess: (result) => { setError(null); setTest(result); },
     onError,
   });
+
+  /**
+   * Interroge d'office les routeurs dont l'état est inconnu.
+   *
+   * La joignabilité est tenue en mémoire par le serveur et **n'est alimentée
+   * qu'en effet de bord** d'autres appels : après un redémarrage, tout le parc
+   * affiche « pas encore interrogé ». C'était le cas le plus absurde de la
+   * console — l'écran dont le métier est de dire si les routeurs répondent
+   * était le seul à ne pas leur demander, et laissait cliquer « Tester » pour
+   * une réponse qu'il pouvait aller chercher.
+   *
+   * Une seule fois par ouverture, et seulement pour les états inconnus : un
+   * routeur déjà déclaré injoignable l'a été par une vraie tentative, la
+   * répéter en boucle ne ferait qu'attendre le délai à chaque affichage.
+   */
+  const déjàSondés = useRef(new Set<string>());
+  useEffect(() => {
+    const inconnus = (routers.data ?? []).filter(
+      (r) => r.health.state === 'INCONNU' && !déjàSondés.current.has(r.id),
+    );
+    if (inconnus.length === 0) return;
+
+    for (const routeur of inconnus) déjàSondés.current.add(routeur.id);
+    // Sans passer par la mutation : elle ouvre le panneau de résultat, qui
+    // n'a de sens que pour un test demandé à la main.
+    void Promise.allSettled(inconnus.map((r) => routersApi.testConnection(r.id))).then(() =>
+      queryClient.invalidateQueries({ queryKey: ['routers'] }),
+    );
+  }, [routers.data, queryClient]);
 
   const runImport = useMutation({
     mutationFn: ({ id, dryRun }: { id: string; dryRun: boolean }) => routersApi.import(id, dryRun),
