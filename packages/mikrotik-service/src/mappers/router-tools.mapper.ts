@@ -21,6 +21,8 @@ import {
   BridgeDto,
   BridgePortDto,
   DhcpClientDto,
+  RouterScriptDto,
+  RouterScheduleDto,
 } from '../dto/router-tools.dto';
 
 /** RouterOS rend ses booléens en chaînes. */
@@ -393,6 +395,46 @@ export function mapDhcpClient(raw: any): DhcpClientDto {
     status: raw?.status ?? '',
     address: raw?.address || null,
     gateway: raw?.gateway || null,
+    disabled: flag(raw?.disabled),
+  };
+}
+
+/** `"ftp,read,write"` → `['ftp', 'read', 'write']`. Vide quand absent. */
+function listePolitique(raw: unknown): string[] {
+  return String(raw ?? '')
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
+export function mapRouterScript(raw: any): RouterScriptDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    name: raw?.name ?? '',
+    owner: raw?.owner ?? '',
+    policy: listePolitique(raw?.policy),
+    runCount: Number(raw?.['run-count'] ?? 0),
+    source: raw?.source ?? '',
+    dontRequirePermissions: flag(raw?.['dont-require-permissions']),
+    invalide: flag(raw?.invalid),
+  };
+}
+
+export function mapRouterSchedule(raw: any): RouterScheduleDto {
+  // Un intervalle absent ou `00:00:00` veut dire « une seule fois » : les deux
+  // doivent donner `null`, sans quoi l'interface annoncerait « toutes les 0 s ».
+  const brut = raw?.interval != null ? parseRouterOsDuration(raw.interval) : null;
+  return {
+    id: raw?.['.id'] ?? '',
+    name: raw?.name ?? '',
+    onEvent: raw?.['on-event'] ?? '',
+    intervalSeconds: brut && brut > 0 ? brut : null,
+    startDate: raw?.['start-date'] || null,
+    startTime: raw?.['start-time'] || null,
+    nextRun: raw?.['next-run'] || null,
+    runCount: Number(raw?.['run-count'] ?? 0),
+    owner: raw?.owner ?? '',
+    policy: listePolitique(raw?.policy),
     disabled: flag(raw?.disabled),
   };
 }

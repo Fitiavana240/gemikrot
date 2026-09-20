@@ -1271,6 +1271,24 @@ export class RouterOSMikrotikService implements IMikrotikService {
     };
   }
 
+  /**
+   * Ce qui peut tourner tout seul sur le routeur.
+   *
+   * Les deux menus se lisent ensemble : un script sans entrée d'ordonnanceur
+   * ne s'exécute jamais de lui-même, et une entrée d'ordonnanceur ne veut rien
+   * dire sans savoir ce qu'elle lance. Séparés, chacun ment par omission.
+   */
+  async getAutomatisations() {
+    const [scripts, taches] = await Promise.all([
+      this.client.get<any[]>('/system/script').catch(() => []),
+      this.client.get<any[]>('/system/scheduler').catch(() => []),
+    ]);
+    return {
+      scripts: scripts.map(ToolsMapper.mapRouterScript),
+      taches: taches.map(ToolsMapper.mapRouterSchedule),
+    };
+  }
+
   // ---------- Stockage ----------
 
   async getRouterFiles() {

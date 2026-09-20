@@ -14,6 +14,8 @@ import { useRouterSelection } from '../routers/RouterContext';
 import { WifiTab } from './WifiTab';
 import { TunnelTab } from './TunnelTab';
 import { StructureTab } from './StructureTab';
+import { AutomatisationsTab } from './AutomatisationsTab';
+import { JournalTab } from './JournalTab';
 import { TabBar, type TabDef } from '../components/TabBar';
 import {
   Badge,
@@ -79,48 +81,6 @@ function QueuesTab() {
                 {q.dynamic ? 'HotSpot' : 'posée à la main'}
               </Badge>
             </td>
-          </tr>
-        )}
-      />
-    </div>
-  );
-}
-
-function LogTab() {
-  const { currentId } = useRouterSelection();
-  const requête = useQuery({
-    queryKey: ['tools-log', currentId],
-    queryFn: () => routerToolsApi.log(currentId!, 200),
-    enabled: Boolean(currentId),
-    refetchInterval: 20_000,
-  });
-
-  return (
-    <div className="space-y-3">
-      <p className="max-w-3xl text-sm text-slate-600">
-        Ce que le routeur a noté, du plus récent au plus ancien. C'est ici qu'on lit pourquoi un
-        client a été déconnecté, ou pourquoi une authentification a échoué. Les heures sont celles
-        du routeur.
-      </p>
-      <ListeDuRouteur
-        requête={requête}
-        colonnes={['Quand', 'Sujets', 'Message']}
-        vide={{ titre: 'Journal vide' }}
-        ligne={(l) => (
-          <tr key={l.id} className={l.isProblem ? 'bg-red-50/40' : undefined}>
-            <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-500">
-              {l.time}
-            </td>
-            <td className="px-3 py-2">
-              <span className="flex flex-wrap gap-1">
-                {l.topics.map((t) => (
-                  <Badge key={t} tone={l.isProblem ? 'red' : 'slate'}>
-                    {t}
-                  </Badge>
-                ))}
-              </span>
-            </td>
-            <td className="px-3 py-2 text-xs">{l.message}</td>
           </tr>
         )}
       />
@@ -1122,7 +1082,11 @@ const ONGLETS = {
   structure: { titre: 'Structure du réseau', rendu: () => <StructureTab /> },
   wifi: { titre: 'Wi-Fi et RADIUS', rendu: () => <WifiTab /> },
   tunnel: { titre: 'Tunnel (VPN)', rendu: () => <TunnelTab /> },
-  journal: { titre: 'Journal du routeur', rendu: () => <LogTab /> },
+  automatisations: {
+    titre: 'Ce qui tourne tout seul',
+    rendu: () => <AutomatisationsTab />,
+  },
+  journal: { titre: 'Journal du routeur', rendu: () => <JournalTab /> },
   acces: { titre: 'Accès et DDNS', rendu: () => <AccesTab /> },
   appareils: { titre: 'DHCP et ARP', rendu: () => <AppareilsTab /> },
   'pare-feu': { titre: 'Pare-feu', rendu: () => <PareFeuTab /> },

@@ -79,6 +79,8 @@ import {
   IpServiceDto,
   NetworkInterfaceStatsDto,
   RouterLogEntryDto,
+  RouterScriptDto,
+  RouterScheduleDto,
   SimpleQueueDto,
   WirelessInterfaceDto,
   WirelessClientDto,
@@ -283,6 +285,12 @@ export interface IMikrotikService {
   getSimpleQueues(): Promise<SimpleQueueDto[]>;
   /** Journal du routeur, du plus recent au plus ancien. */
   getRouterLog(limit?: number): Promise<RouterLogEntryDto[]>;
+
+  /** Scripts et ordonnanceur : ce qui peut s'exécuter sans personne. */
+  getAutomatisations(): Promise<{
+    scripts: RouterScriptDto[];
+    taches: RouterScheduleDto[];
+  }>;
   /** Interfaces avec leurs compteurs : trafic, erreurs, coupures de lien. */
   getInterfaceStats(): Promise<NetworkInterfaceStatsDto[]>;
   /** Services d'administration et adresses autorisees a les joindre. */

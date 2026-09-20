@@ -387,3 +387,55 @@ export interface DhcpClientDto {
   gateway: string | null;
   disabled: boolean;
 }
+
+/**
+ * Un script enregistré sur le routeur — `/system/script`.
+ *
+ * Objet le plus puissant du routeur et le plus discret : un script porte ses
+ * propres autorisations dans `policy`, indépendamment de qui le déclenche.
+ * Sondé sur le hAP : `gen-4heure` cumule `write`, `password`, `sensitive` et
+ * `reboot`, ce qui revient à un droit d'administration complet, exécutable par
+ * l'ordonnanceur ou par quiconque atteint le terminal.
+ */
+export interface RouterScriptDto {
+  id: string;
+  name: string;
+  /** Le compte qui a créé le script, pas celui qui l'exécute. */
+  owner: string;
+  /** `read`, `write`, `password`, `sensitive`, `reboot`… */
+  policy: string[];
+  /** Nombre d'exécutions depuis le dernier démarrage. `0` = jamais lancé. */
+  runCount: number;
+  /** Le code, tel quel. Long : à replier dans l'interface. */
+  source: string;
+  /**
+   * Vrai quand le script s'exécute avec les droits de **celui qui le lance**
+   * plutôt qu'avec sa propre `policy`. Le cas le plus sûr des deux.
+   */
+  dontRequirePermissions: boolean;
+  invalide: boolean;
+}
+
+/**
+ * Une entrée de l'ordonnanceur — `/system/scheduler`.
+ *
+ * `onEvent` désigne soit un script nommé, soit du code en ligne. Les deux
+ * comptent : une tâche qui appelle un script hérite de la `policy` de
+ * l'entrée, pas de celle du script.
+ */
+export interface RouterScheduleDto {
+  id: string;
+  name: string;
+  /** Ce qui est lancé : nom de script ou code. */
+  onEvent: string;
+  /** `null` pour une exécution unique. */
+  intervalSeconds: number | null;
+  /** Date de départ, ou `startup` pour « à chaque démarrage ». */
+  startDate: string | null;
+  startTime: string | null;
+  nextRun: string | null;
+  runCount: number;
+  owner: string;
+  policy: string[];
+  disabled: boolean;
+}

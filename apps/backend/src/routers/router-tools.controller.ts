@@ -154,6 +154,12 @@ export class RouterToolsController {
     return (await this.clients.forRouter(routerId)).getStructureReseau();
   }
 
+  /** Scripts et ordonnanceur : ce qui peut s'exécuter sans personne. */
+  @Get('automatisations')
+  async automatisations(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getAutomatisations();
+  }
+
   /** Le client RADIUS : ce qui relie le HotSpot à User Manager. */
   @Get('radius')
   async radius(@Param('routerId') routerId: string) {

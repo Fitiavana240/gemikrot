@@ -4,6 +4,8 @@ import {
   mapIpService,
   mapNetworkInterfaceStats,
   mapRouterLogEntry,
+  mapRouterScript,
+  mapRouterSchedule,
   mapSimpleQueue,
   splitPaire,
 } from '../../src/mappers/router-tools.mapper';
@@ -179,5 +181,68 @@ describe('mapArpEntry', () => {
     expect(arp.fromDhcp).toBe(false);
     expect(arp.complete).toBe(true);
     expect(arp.status).toBe('reachable');
+  });
+});
+
+/**
+ * Relevé exact du hAP en 7.24.4, `GET /rest/system/script`. Le seul script du
+ * parc, jamais exécuté, et porteur d'autorisations d'administration complètes.
+ */
+const SCRIPT = {
+  '.id': '*1',
+  'dont-require-permissions': 'false',
+  invalid: 'false',
+  name: 'gen-4heure',
+  owner: 'admin',
+  policy: 'ftp,reboot,read,write,policy,test,password,sniff,sensitive,romon',
+  'run-count': '0',
+  source: ':put "bonjour"',
+};
+
+describe('mapRouterScript', () => {
+  it('éclate la politique en liste', () => {
+    expect(mapRouterScript(SCRIPT).policy).toContain('write');
+    expect(mapRouterScript(SCRIPT).policy).toContain('password');
+    expect(mapRouterScript(SCRIPT).policy).toHaveLength(10);
+  });
+
+  it('rend zéro exécution comme un nombre, pas comme la chaîne « 0 »', () => {
+    // La différence compte : `'0'` est vrai en JavaScript, et l'interface
+    // afficherait « exécuté 0 fois » comme s'il avait déjà tourné.
+    expect(mapRouterScript(SCRIPT).runCount).toBe(0);
+  });
+
+  it('lit le drapeau qui inverse les autorisations', () => {
+    expect(mapRouterScript(SCRIPT).dontRequirePermissions).toBe(false);
+    expect(
+      mapRouterScript({ ...SCRIPT, 'dont-require-permissions': 'true' }).dontRequirePermissions,
+    ).toBe(true);
+  });
+
+  it('ne casse pas sur un script sans politique', () => {
+    expect(mapRouterScript({ '.id': '*2', name: 'vide' }).policy).toEqual([]);
+  });
+});
+
+describe('mapRouterSchedule', () => {
+  it('lit un intervalle en secondes', () => {
+    const t = mapRouterSchedule({
+      '.id': '*1',
+      name: 'nuit',
+      'on-event': 'gen-4heure',
+      interval: '1d00:00:00',
+      'run-count': '4',
+      policy: 'read,write',
+    });
+    expect(t.intervalSeconds).toBe(86_400);
+    expect(t.onEvent).toBe('gen-4heure');
+    expect(t.runCount).toBe(4);
+  });
+
+  it('rend `null` pour une exécution unique, pas zéro', () => {
+    // RouterOS écrit `00:00:00` pour « une seule fois ». Le laisser passer
+    // ferait annoncer « toutes les 0 s » à l'écran.
+    expect(mapRouterSchedule({ '.id': '*1', interval: '00:00:00' }).intervalSeconds).toBeNull();
+    expect(mapRouterSchedule({ '.id': '*1' }).intervalSeconds).toBeNull();
   });
 });

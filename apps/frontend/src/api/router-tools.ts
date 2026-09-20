@@ -306,6 +306,8 @@ export const routerToolsApi = {
   radius: (routerId: string) => api.get<ClientRadius[]>(`${base(routerId)}/radius`),
   wireguard: (routerId: string) => api.get<EtatTunnel>(`${base(routerId)}/wireguard`),
   structure: (routerId: string) => api.get<StructureReseau>(`${base(routerId)}/structure`),
+  automatisations: (routerId: string) =>
+    api.get<Automatisations>(`${base(routerId)}/automatisations`),
   services: (routerId: string) => api.get<IpService[]>(`${base(routerId)}/services`),
   cloud: (routerId: string) => api.get<IpCloud>(`${base(routerId)}/cloud`),
   arp: (routerId: string) => api.get<ArpEntry[]>(`${base(routerId)}/arp`),
@@ -477,4 +479,39 @@ export interface StructureReseau {
   bridges: Pont[];
   ports: PortDuPont[];
   dhcpClients: BailMontant[];
+}
+
+/**
+ * Un script du routeur. `policy` porte ses autorisations **propres** : elles
+ * ne dépendent pas de qui le déclenche, sauf si `dontRequirePermissions`.
+ */
+export interface ScriptDuRouteur {
+  id: string;
+  name: string;
+  owner: string;
+  policy: string[];
+  runCount: number;
+  source: string;
+  dontRequirePermissions: boolean;
+  invalide: boolean;
+}
+
+/** Une entrée de l'ordonnanceur. `intervalSeconds` nul = exécution unique. */
+export interface TachePlanifiee {
+  id: string;
+  name: string;
+  onEvent: string;
+  intervalSeconds: number | null;
+  startDate: string | null;
+  startTime: string | null;
+  nextRun: string | null;
+  runCount: number;
+  owner: string;
+  policy: string[];
+  disabled: boolean;
+}
+
+export interface Automatisations {
+  scripts: ScriptDuRouteur[];
+  taches: TachePlanifiee[];
 }
