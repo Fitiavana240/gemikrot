@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pppApi, type PppSecret, type UpdatePppSecret } from '../api/ppp';
 import { formatOctets, formatDuree } from '../api/mikrotik-tabs';
 import { formatBits } from '../api/router-tools';
+import { ListeDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { TabBar, type TabDef } from '../components/TabBar';
 import { ConfirmationInline } from '../components/Edition';
@@ -12,12 +13,10 @@ import {
   Button,
   Card,
   EmptyState,
-  ErrorNote,
   FormField,
   Input,
   PageHeader,
   Select,
-  Table,
   TableSkeleton,
 } from '../components/ui';
 
@@ -38,30 +37,6 @@ function useRouteur() {
   return currentId;
 }
 
-/** Affichage commun : attente, erreur, vide, contenu. */
-function Liste<T>({
-  requête,
-  colonnes,
-  vide,
-  ligne,
-}: {
-  requête: { isPending: boolean; isError: boolean; data?: T[]; refetch: () => unknown };
-  colonnes: string[];
-  vide: { titre: string; aide?: string };
-  ligne: (item: T) => React.ReactNode;
-}) {
-  if (requête.isPending) return <TableSkeleton columns={colonnes.length} />;
-  if (requête.isError) {
-    return (
-      <ErrorNote onRetry={() => requête.refetch()}>
-        Le routeur n'a pas répondu — ces tables sont lues en direct.
-      </ErrorNote>
-    );
-  }
-  const lignes = requête.data ?? [];
-  if (lignes.length === 0) return <EmptyState title={vide.titre} hint={vide.aide} />;
-  return <Table head={colonnes}>{lignes.map(ligne)}</Table>;
-}
 
 /**
  * Le formulaire d'un compte, en création comme en modification.
@@ -303,7 +278,7 @@ function ComptesTab() {
         />
       )}
 
-      <Liste
+      <ListeDuRouteur
         requête={comptes}
         colonnes={['Compte', 'Profil', 'Service', 'Adresse', 'Consommé', 'État', '']}
         vide={{
@@ -368,7 +343,7 @@ function ProfilsTab() {
         celui du serveur. Ces tables sont en lecture : créer un profil PPPoE suppose de choisir un
         bassin d'adresses et une politique de routage, ce qui se fait une fois, dans WinBox.
       </p>
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['Profil', 'Débit ↓', 'Débit ↑', 'Adresse locale', 'Bassin distant', 'DNS']}
         vide={{ titre: 'Aucun profil PPPoE' }}
@@ -421,7 +396,7 @@ function SessionsTab() {
         en service au moment du relevé. Si une colonne reste vide alors qu'un abonné est bien
         connecté, c'est le nom du champ qui est faux, pas le routeur — signalez-le.
       </div>
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['Compte', 'Adresse', 'Appareil', 'Depuis', 'Reçu', 'Envoyé', '']}
         vide={{
@@ -468,7 +443,7 @@ function ServeursTab() {
         Le serveur écoute sur une interface et propose un nom de service. Sans serveur actif,
         aucun compte PPPoE ne peut se connecter — quels que soient les comptes déclarés.
       </p>
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['Service', 'Interface', 'Profil par défaut', 'Authentification', 'Sessions', 'État']}
         vide={{
@@ -514,7 +489,7 @@ function BassinsTab() {
         sans autre explication qu'un échec d'authentification — d'où la colonne{' '}
         <em>Disponibles</em>.
       </p>
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['Bassin', 'Plages', 'Total', 'Utilisées', 'Disponibles']}
         vide={{ titre: 'Aucun bassin déclaré' }}

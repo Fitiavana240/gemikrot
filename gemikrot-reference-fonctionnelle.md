@@ -867,6 +867,37 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — Le même défaut, cherché partout plutôt qu'écran par écran
+
+Un comptage : requêtes contre gestion d'erreur, fichier par fichier. **`UserManagerPage` :
+huit requêtes, zéro.** C'est l'écran du seul mécanisme qui compte le temps calendaire, celui
+dont tout le modèle commercial dépend.
+
+Ses trois tables avaient le défaut exact de l'écran Appareils : sans réponse du routeur, `data`
+reste vide, les lignes ne s'affichent pas, et la ligne « aucun profil sur ce routeur » ne
+s'affiche pas davantage — sa garde comparant `undefined` à zéro. Une table à en-têtes, sans un
+mot. **Ici, en conclure que les profils ont disparu envoie restaurer une sauvegarde pour une
+panne de lien.** Même chose pour « 0 compte » affiché sans condition.
+
+**Une troisième copie** de la table lue en direct dormait dans l'écran PPPoE — j'en avais
+trouvé deux. Les trois sont parties ; le bandeau d'échec est séparé du composant, pour les
+tables dont le balisage par ligne ne peut pas l'adopter mais qui doivent dire l'échec pareil.
+
+**`w-auto` n'a jamais rien fait.** Trois écrans le passaient à un champ pour le dimensionner à
+son contenu. `FIELD_BASE` commence par `w-full` ; les deux classes ont la même spécificité, et
+c'est l'ordre de la feuille de style qui tranche, pas celui de l'attribut. Le défaut gagnait à
+chaque fois. Invisible dans une cellule de tableau, qui contraint déjà la largeur — bien
+visible sur le filtre du User Manager, où le champ poussait son étiquette à la ligne. Une
+largeur demandée par l'appelant l'emporte désormais.
+
+Restait `waiting`, recopié tel quel de RouterOS dans une colonne intitulée « État ». Le
+traduire a fait apparaître une redite : « pas encore utilisé » se lisait alors dans deux
+colonnes voisines. L'échéance ne porte plus que des dates.
+
+**Éprouvé** sur un routeur d'essai aux identifiants refusés — les trois tables nomment la bonne
+cause, le compteur dit « non lu » — puis sur le vrai routeur : 11 comptes User Manager
+affichés, filtre sur une seule ligne, et 646 comptes HotSpot.
+
 ### 2026-09-20 — « Internal server error » pour une coupure de courant
 
 Parti d'une mesure. Un routeur injoignable, quatre appels : **16 s, 16 s, puis 12 ms**. Le

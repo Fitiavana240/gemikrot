@@ -92,6 +92,23 @@ export const TYPE_APPAREIL: Record<string, Libellé> = {
 };
 
 /**
+ * Où en est un compte User Manager dans sa validité.
+ *
+ * RouterOS rend ces mots-là, et la console les recopiait tels quels : un
+ * vendeur lisait `waiting` dans une colonne intitulée « État ». Aucun n'est
+ * un incident — ils disent seulement où en est le compte — d'où l'ardoise
+ * partout : le rouge est réservé à la suspension, qui est une décision.
+ */
+export const ETAT_COMPTE_UM: Record<string, Libellé> = {
+  'running-active': { label: 'en cours', ton: 'green' },
+  // Le forfait est allé au bout de sa validité : issue normale, pas panne.
+  used: { label: 'consommé', ton: 'slate' },
+  // Créé mais jamais utilisé : la validité n'a pas commencé à courir.
+  waiting: { label: 'pas encore utilisé', ton: 'slate' },
+  unknown: { label: 'sans profil', ton: 'slate' },
+};
+
+/**
  * Traduit ce qui est connu, et **laisse passer le reste tel quel**.
  *
  * Un statut ajouté côté serveur sans l'être ici doit rester lisible, fût-ce

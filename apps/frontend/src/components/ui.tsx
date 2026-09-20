@@ -24,6 +24,20 @@ const FIELD_SIZE: Record<UiSize, string> = {
 const FIELD_BASE =
   'w-full rounded-lg border border-slate-300 bg-white text-slate-900 transition-colors placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20';
 
+/**
+ * La largeur par défaut d'un champ, sauf si l'appelant en demande une autre.
+ *
+ * `FIELD_BASE` commence par `w-full`, et trois écrans passaient `w-auto` pour
+ * dimensionner un filtre à son contenu. Sans effet : les deux classes ont la
+ * même spécificité, et c'est l'ordre de la feuille de style qui tranche, pas
+ * celui de l'attribut. Le défaut gagnait à chaque fois. Invisible dans une
+ * cellule de tableau, qui contraint déjà la largeur — bien visible sur le
+ * filtre du User Manager, où le champ poussait son étiquette à la ligne.
+ */
+function largeur(className: string): string {
+  return /(^|\s)w-/.test(className) ? FIELD_BASE.replace('w-full ', '') : FIELD_BASE;
+}
+
 export function Button({
   variant = 'primary',
   uiSize = 'sm',
@@ -60,7 +74,7 @@ export function Input({
   className = '',
   ...props
 }: InputHTMLAttributes<HTMLInputElement> & { uiSize?: UiSize }) {
-  return <input {...props} className={`${FIELD_BASE} ${FIELD_SIZE[uiSize]} ${className}`} />;
+  return <input {...props} className={`${largeur(className)} ${FIELD_SIZE[uiSize]} ${className}`} />;
 }
 
 export function Select({
@@ -68,7 +82,7 @@ export function Select({
   className = '',
   ...props
 }: SelectHTMLAttributes<HTMLSelectElement> & { uiSize?: UiSize }) {
-  return <select {...props} className={`${FIELD_BASE} ${FIELD_SIZE[uiSize]} ${className}`} />;
+  return <select {...props} className={`${largeur(className)} ${FIELD_SIZE[uiSize]} ${className}`} />;
 }
 
 export function FormField({ label, children }: { label: string; children: ReactNode }) {

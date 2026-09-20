@@ -16,6 +16,8 @@ import {
   type UserManagerProfile,
 } from '../api/user-manager';
 import { useAuth } from '../auth/AuthContext';
+import { ETAT_COMPTE_UM, libellé } from '../api/libelles';
+import { Compteur, PanneDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { GenerationTickets } from '../components/GenerationTickets';
 import {
@@ -267,8 +269,15 @@ function ProfilesTab() {
         </Card>
       )}
 
+      {/* Une table vide et une table en échec se confondaient à l'œil : sans
+          réponse, `data` reste vide et la ligne « aucun profil » ne s'affiche
+          pas non plus, sa garde comparant `undefined` à zéro. Sur cet écran-là,
+          conclure « les profils ont disparu » envoie restaurer une sauvegarde
+          pour une panne de lien. */}
       {profiles.isLoading ? (
         <p className="text-slate-500">Chargement…</p>
+      ) : profiles.isError ? (
+        <PanneDuRouteur requête={profiles} />
       ) : (
         <Table head={['Profil', 'Validité', 'Démarre', 'Prix', 'Appareils', 'Limitations', 'Comptes', 'Offre', '']}>
           {profiles.data?.map((profile) => (
@@ -495,6 +504,8 @@ function LimitationsTab() {
 
       {limitations.isLoading ? (
         <p className="text-slate-500">Chargement…</p>
+      ) : limitations.isError ? (
+        <PanneDuRouteur requête={limitations} />
       ) : (
         <Table head={['Limitation', 'Descendant', 'Montant', 'Volume', 'Durée', 'Profils', '']}>
           {limitations.data?.map((limitation) => (
@@ -721,13 +732,19 @@ function AccountsTab() {
           <option value="ABONNEMENT">Abonnements</option>
           <option value="HORS_APPLICATION">Hors application</option>
         </Select>
-        <span className="text-sm text-slate-400">
-          {visible?.length ?? 0} compte{(visible?.length ?? 0) > 1 ? 's' : ''}
-        </span>
+        {/* « 0 compte » était écrit même sans réponse du routeur : la longueur
+            d'un tableau vide faute de lecture, sur un parc qui en compte 646. */}
+        <Compteur
+          requête={accounts}
+          nombre={visible?.length ?? 0}
+          unité={(visible?.length ?? 0) > 1 ? 'comptes' : 'compte'}
+        />
       </div>
 
       {accounts.isLoading ? (
         <p className="text-slate-500">Chargement…</p>
+      ) : accounts.isError ? (
+        <PanneDuRouteur requête={accounts} />
       ) : (
         <Table head={['Compte', 'Origine', 'Client', 'Profil', 'Échéance', 'État', '']}>
           {visible?.map((account) => (
@@ -748,21 +765,22 @@ function AccountsTab() {
                 )}
               </td>
               <td className="px-3 py-2 text-slate-500">
-                {account.endTime
-                  ? new Date(account.endTime).toLocaleString('fr-FR')
-                  : account.state === 'waiting'
-                    ? 'pas encore utilisé'
-                    : '—'}
+                {/* Une colonne de dates ne porte que des dates. « Pas encore
+                    utilisé » est un état, et il est dit dans la colonne État —
+                    l'écrire aux deux endroits ne dit pas deux choses. */}
+                {account.endTime ? new Date(account.endTime).toLocaleString('fr-FR') : '—'}
               </td>
               <td className="px-3 py-2">
+                {/* Suspendu l'emporte sur tout le reste : c'est une décision
+                    prise, là où les autres états ne font que constater. Le
+                    dernier cas recopiait la valeur brute de RouterOS — on
+                    lisait `waiting` dans une colonne « État ». */}
                 {account.disabled ? (
                   <Badge tone="red">suspendu</Badge>
-                ) : account.state === 'running-active' ? (
-                  <Badge tone="green">en cours</Badge>
-                ) : account.state === 'used' ? (
-                  <Badge tone="slate">consommé</Badge>
                 ) : (
-                  <Badge tone="slate">{account.state ?? 'sans profil'}</Badge>
+                  <Badge tone={libellé(ETAT_COMPTE_UM, account.state ?? 'unknown').ton}>
+                    {libellé(ETAT_COMPTE_UM, account.state ?? 'unknown').label}
+                  </Badge>
                 )}
               </td>
               <td className="px-3 py-2">

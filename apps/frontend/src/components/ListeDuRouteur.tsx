@@ -3,6 +3,25 @@ import { phrasePanne } from '../api/pannes';
 import { EmptyState, ErrorNote, Table, TableSkeleton } from './ui';
 
 /**
+ * Le bandeau d'une table lue en direct dont la lecture a échoué.
+ *
+ * Séparé de `ListeDuRouteur` parce que toutes les tables ne peuvent pas
+ * prendre ce composant : certaines portent un balisage par ligne trop
+ * particulier. Elles doivent quand même **dire** l'échec, et le dire pareil.
+ */
+export function PanneDuRouteur({
+  requête,
+}: {
+  requête: { error?: unknown; refetch: () => unknown };
+}) {
+  return (
+    <ErrorNote onRetry={() => requête.refetch()}>
+      {phrasePanne(requête.error)} Cette table est lue en direct, elle n'a pas de copie en base.
+    </ErrorNote>
+  );
+}
+
+/**
  * Table lue en direct sur le routeur : attente, panne, vide, puis contenu.
  *
  * Elle existait en deux exemplaires identiques, un par écran de configuration
@@ -35,13 +54,7 @@ export function ListeDuRouteur<T>({
 }) {
   if (requête.isPending) return <TableSkeleton columns={colonnes.length} />;
 
-  if (requête.isError) {
-    return (
-      <ErrorNote onRetry={() => requête.refetch()}>
-        {phrasePanne(requête.error)} Cette table est lue en direct, elle n'a pas de copie en base.
-      </ErrorNote>
-    );
-  }
+  if (requête.isError) return <PanneDuRouteur requête={requête} />;
 
   const lignes = requête.data ?? [];
   if (lignes.length === 0) return <EmptyState title={vide.titre} hint={vide.aide} />;
