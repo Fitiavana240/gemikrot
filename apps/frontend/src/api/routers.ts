@@ -23,12 +23,28 @@ export interface RouterView {
   health: RouterHealth;
 }
 
-export const REACHABILITY_LABEL: Record<RouterReachability, { label: string; tone: 'green' | 'amber' | 'red' | 'slate' }> = {
-  JOIGNABLE: { label: 'joignable', tone: 'green' },
-  INJOIGNABLE: { label: 'injoignable', tone: 'red' },
+/**
+ * Chaque état a deux formes, et elles ne sont pas interchangeables.
+ *
+ * `label` tient dans une pastille ; `phrase` se met derrière un nom de
+ * routeur. Coller le premier après « est » donnait « est pas encore
+ * interrogé » — un français cassé, sur l'écran le plus consulté. Un libellé
+ * de badge n'est pas un morceau de phrase, et vouloir les confondre casse
+ * toujours sur le cas qu'on n'avait pas en tête.
+ */
+export const REACHABILITY_LABEL: Record<
+  RouterReachability,
+  { label: string; phrase: string; tone: 'green' | 'amber' | 'red' | 'slate' }
+> = {
+  JOIGNABLE: { label: 'joignable', phrase: 'est joignable', tone: 'green' },
+  INJOIGNABLE: { label: 'injoignable', phrase: 'ne répond pas', tone: 'red' },
   // Le routeur répond mais refuse : identifiants, service REST, droits.
-  REPOND_MAL: { label: 'répond mal', tone: 'amber' },
-  INCONNU: { label: 'pas encore interrogé', tone: 'slate' },
+  REPOND_MAL: { label: 'répond mal', phrase: 'répond mal', tone: 'amber' },
+  INCONNU: {
+    label: 'pas encore interrogé',
+    phrase: "n'a pas encore été interrogé",
+    tone: 'slate',
+  },
 };
 
 export interface ConnectionTest {

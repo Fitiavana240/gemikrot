@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { paymentsApi, type CreatePaymentInput } from '../api/payments';
+import { paymentsApi, PAYMENT_STATUS, type CreatePaymentInput } from '../api/payments';
 import { customersApi } from '../api/customers';
 import { plansApi } from '../api/plans';
 import { vouchersApi } from '../api/vouchers';
@@ -11,14 +11,6 @@ import type { Payment, PaymentMethod } from '../api/types';
 import { Badge, Button, Card, FormField, Input, PageHeader, Select, Table, TableSkeleton } from '../components/ui';
 
 const EMPTY_FORM: CreatePaymentInput = { customerId: '', planId: '', amount: 0, method: 'CASH', reference: '' };
-
-const STATUS_TONE = {
-  PENDING: 'amber',
-  VERIFIED: 'green',
-  REJECTED: 'red',
-  CANCELLED: 'slate',
-  REFUNDED: 'slate',
-} as const;
 
 export function PaymentsPage() {
   const { canWrite } = useAuth();
@@ -165,7 +157,9 @@ export function PaymentsPage() {
               <td className="px-3 py-2">{payment.method}</td>
               <td className="px-3 py-2">{format(payment.amount)}</td>
               <td className="px-3 py-2">
-                <Badge tone={STATUS_TONE[payment.status]}>{payment.status}</Badge>
+                <Badge tone={PAYMENT_STATUS[payment.status].tone}>
+                  {PAYMENT_STATUS[payment.status].label}
+                </Badge>
               </td>
               <td className="px-3 py-2 text-right space-x-2">
                 {canWrite && payment.status === 'PENDING' && (

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { dashboardApi } from '../api/dashboard';
+import { PAYMENT_STATUS } from '../api/payments';
 import { telephoneAffiche } from '../api/customers';
 import { useCurrency } from '../api/money';
 import { REACHABILITY_LABEL, routersApi } from '../api/routers';
@@ -84,7 +85,7 @@ export function DashboardPage() {
       {injoignables.length > 0 && (
         <ErrorNote>
           {injoignables.length === 1
-            ? `Le routeur « ${injoignables[0].label} » est ${REACHABILITY_LABEL[injoignables[0].health.state].label}.`
+            ? `Le routeur « ${injoignables[0].label} » ${REACHABILITY_LABEL[injoignables[0].health.state].phrase}.`
             : `${injoignables.length} routeurs ne répondent pas.`}{' '}
           <Link to="/routers" className="underline">
             Voir les routeurs
@@ -199,12 +200,11 @@ export function DashboardPage() {
               {d.recentPayments.map((p) => (
                 <li key={p.id} className="flex items-center justify-between gap-2">
                   <span className="truncate font-mono text-xs text-slate-500">{p.reference}</span>
-                  <Badge
-                    tone={
-                      p.status === 'VERIFIED' ? 'green' : p.status === 'PENDING' ? 'amber' : 'red'
-                    }
-                  >
-                    {p.status}
+                  {/* Le ton suit désormais le statut réel : « annulé » et
+                      « remboursé » passaient en rouge comme un refus, alors
+                      qu'ils ne demandent rien à personne. */}
+                  <Badge tone={PAYMENT_STATUS[p.status].tone}>
+                    {PAYMENT_STATUS[p.status].label}
                   </Badge>
                 </li>
               ))}
