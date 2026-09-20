@@ -12,10 +12,13 @@ import {
   type CreateProfileInput,
   type UpdateLimitationInput,
   type UpdateProfileInput,
+  type UserManagerLimitation,
+  type UserManagerProfile,
 } from '../api/user-manager';
 import { useAuth } from '../auth/AuthContext';
 import { useRouterSelection } from '../routers/RouterContext';
 import { GenerationTickets } from '../components/GenerationTickets';
+import { ConfirmationInline, EditionDuree, EditionUnChamp } from '../components/Edition';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import {
@@ -114,6 +117,7 @@ function ProfilesTab() {
   const [form, setForm] = useState<CreateProfileInput>(EMPTY_PROFILE);
   /** Le profil pour lequel on génère, quand le panneau est ouvert. */
   const [àGenerer, setÀGenerer] = useState<string | null>(null);
+  const [àModifier, setÀModifier] = useState<UserManagerProfile | null>(null);
 
   const { currentId } = useRouterSelection();
   const profiles = useQuery({
@@ -176,6 +180,30 @@ function ProfilesTab() {
           cible="user-manager"
           profileName={àGenerer}
           onFermer={() => setÀGenerer(null)}
+        />
+      )}
+
+      {àModifier && (
+        <EditionDuree
+          titre={`Validité du profil « ${àModifier.name} »`}
+          description={
+            <>
+              Les comptes <strong>déjà attribués gardent la leur</strong> : RouterOS fige
+              l'échéance au moment de l'attribution. Le changement ne vaut que pour les
+              attributions suivantes — il ne prolonge aucun ticket déjà vendu.
+            </>
+          }
+          libellé="Nouvelle validité"
+          secondesInitiales={àModifier.validityDurationSeconds}
+          enCours={modifier.isPending}
+          onAnnuler={() => setÀModifier(null)}
+          onValider={(secondes) => {
+            modifier.mutate({
+              name: àModifier.name,
+              input: { validityDurationSeconds: secondes },
+            });
+            setÀModifier(null);
+          }}
         />
       )}
 
@@ -264,29 +292,7 @@ function ProfilesTab() {
                 {canWrite && (
                   <div className="flex justify-end gap-1">
                     <Button onClick={() => setÀGenerer(profile.name)}>Générer</Button>
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        const saisie = window.prompt(
-                          `Nouvelle validité de « ${profile.name} », en jours ?\n\n` +
-                            `Les comptes déjà attribués gardent la leur : RouterOS fige ` +
-                            `l'échéance à l'attribution. Le changement ne vaut que pour les suivants.`,
-                          profile.validityDurationSeconds
-                            ? String(profile.validityDurationSeconds / 86_400)
-                            : '',
-                        );
-                        if (saisie === null) return;
-                        const jours = Number(saisie.replace(',', '.'));
-                        if (!Number.isFinite(jours) || jours <= 0) {
-                          setError('La validité doit être un nombre de jours supérieur à zéro.');
-                          return;
-                        }
-                        modifier.mutate({
-                          name: profile.name,
-                          input: { validityDurationSeconds: Math.round(jours * 86_400) },
-                        });
-                      }}
-                    >
+                    <Button variant="secondary" onClick={() => setÀModifier(profile)}>
                       Modifier
                     </Button>
                     {/* Supprimer reste interdit tant qu'un compte s'y
@@ -320,6 +326,7 @@ function LimitationsTab() {
   const queryClient = useQueryClient();
   const { error, setError, onError } = useActionError();
   const [form, setForm] = useState<CreateLimitationInput>(EMPTY_LIMITATION);
+  const [àModifier, setÀModifier] = useState<UserManagerLimitation | null>(null);
 
   const { currentId } = useRouterSelection();
   const limitations = useQuery({
@@ -380,6 +387,40 @@ function LimitationsTab() {
   return (
     <div className="space-y-4">
       {error && <ErrorBanner>{error}</ErrorBanner>}
+
+      {àModifier && (
+        <EditionUnChamp
+          titre={`Débit descendant de « ${àModifier.name} »`}
+          description={
+            <>
+              Contrairement à la validité d'un profil, ceci <strong>s'applique à tous</strong> les
+              abonnés qui utilisent cette limitation, dès leur prochaine connexion — y compris
+              ceux dont le ticket est déjà vendu.
+            </>
+          }
+          libellé="Nouveau débit descendant"
+          unité="Mb/s"
+          type="number"
+          valeurInitiale={
+            àModifier.rateLimit.rxBitsPerSecond
+              ? String(àModifier.rateLimit.rxBitsPerSecond / 1_000_000)
+              : ''
+          }
+          enCours={modifier.isPending}
+          onAnnuler={() => setÀModifier(null)}
+          onValider={(saisie) => {
+            const mbps = Number(saisie.replace(',', '.'));
+            if (!Number.isFinite(mbps) || mbps <= 0) {
+              return 'Le débit doit être un nombre de Mb/s supérieur à zéro.';
+            }
+            modifier.mutate({
+              name: àModifier.name,
+              input: { rateLimitRxBitsPerSecond: Math.round(mbps * 1_000_000) },
+            });
+            setÀModifier(null);
+          }}
+        />
+      )}
 
       {canWrite && (
         <Card title="Créer une limitation">
@@ -468,25 +509,7 @@ function LimitationsTab() {
                   <div className="flex justify-end gap-1">
                     <Button
                       variant="secondary"
-                      onClick={() => {
-                        const actuel = limitation.rateLimit.rxBitsPerSecond;
-                        const saisie = window.prompt(
-                          `Nouveau débit descendant de « ${limitation.name} », en Mb/s ?\n\n` +
-                            `Contrairement à la validité d'un profil, ceci s'applique à tous ` +
-                            `les abonnés qui l'utilisent, dès leur prochaine connexion.`,
-                          actuel ? String(actuel / 1_000_000) : '',
-                        );
-                        if (saisie === null) return;
-                        const mbps = Number(saisie.replace(',', '.'));
-                        if (!Number.isFinite(mbps) || mbps <= 0) {
-                          setError('Le débit doit être un nombre de Mb/s supérieur à zéro.');
-                          return;
-                        }
-                        modifier.mutate({
-                          name: limitation.name,
-                          input: { rateLimitRxBitsPerSecond: Math.round(mbps * 1_000_000) },
-                        });
-                      }}
+                      onClick={() => setÀModifier(limitation)}
                     >
                       Modifier
                     </Button>
@@ -526,6 +549,8 @@ function AccountsTab() {
   const { error, setError, onError } = useActionError();
   const [form, setForm] = useState<CreateAccountInput>(EMPTY_ACCOUNT);
   const [sourceFilter, setSourceFilter] = useState<AccountSource | ''>('');
+  const [àRecoder, setÀRecoder] = useState<string | null>(null);
+  const [àSupprimer, setÀSupprimer] = useState<string | null>(null);
 
   const { currentId } = useRouterSelection();
   const accounts = useQuery({
@@ -597,6 +622,44 @@ function AccountsTab() {
   return (
     <div className="space-y-4">
       {error && <ErrorBanner>{error}</ErrorBanner>}
+
+      {àRecoder && (
+        <EditionUnChamp
+          titre={`Nouveau code pour « ${àRecoder} »`}
+          description={
+            <>
+              Le compte garde son nom, ses attributions et sa validité déjà courue : seul le code
+              à saisir change. C'est ce qu'il faut quand un ticket a été lu à voix haute ou
+              recopié par quelqu'un d'autre.
+            </>
+          }
+          libellé="Nouveau code"
+          placeholder="celui que le client saisira"
+          enCours={changerCode.isPending}
+          onAnnuler={() => setÀRecoder(null)}
+          onValider={(code) => {
+            if (!code.trim()) return 'Indiquez le nouveau code.';
+            changerCode.mutate({ username: àRecoder, password: code.trim() });
+            setÀRecoder(null);
+          }}
+        />
+      )}
+
+      {àSupprimer && (
+        <ConfirmationInline
+          titre={`Supprimer définitivement « ${àSupprimer} » ?`}
+          libelléConfirmer="Supprimer quand même"
+          enCours={supprimer.isPending}
+          onAnnuler={() => setÀSupprimer(null)}
+          onConfirmer={() => {
+            supprimer.mutate(àSupprimer);
+            setÀSupprimer(null);
+          }}
+        >
+          Son historique de sessions part avec, et rien ne le rendra. Pour couper l'accès sans
+          rien perdre, <strong>Suspendre</strong> suffit — le compte reste, il ne répond plus.
+        </ConfirmationInline>
+      )}
 
       {canWrite && (
         <Card title="Créer un compte">
@@ -702,22 +765,7 @@ function AccountsTab() {
               <td className="px-3 py-2">
                 {canWrite && (
                   <div className="flex justify-end gap-1">
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        const code = window.prompt(
-                          `Nouveau code pour « ${account.username} » ?\n\nLe compte garde son nom, ses attributions et sa validité déjà courue.`,
-                        );
-                        // `null` = annulé, chaîne vide = rien saisi. Les deux
-                        // doivent laisser le compte tranquille.
-                        if (code && code.trim()) {
-                          changerCode.mutate({
-                            username: account.username,
-                            password: code.trim(),
-                          });
-                        }
-                      }}
-                    >
+                    <Button variant="secondary" onClick={() => setÀRecoder(account.username)}>
                       Changer le code
                     </Button>
                     <Button
@@ -730,20 +778,7 @@ function AccountsTab() {
                     </Button>
                     <Button
                       variant="danger"
-                      onClick={() => {
-                        // Suspendre garde le compte ; supprimer l'efface avec
-                        // son historique de sessions. Le rappeler ici évite
-                        // qu'on prenne l'un pour l'autre au comptoir.
-                        if (
-                          window.confirm(
-                            `Supprimer définitivement « ${account.username} » ?\n\n` +
-                              `Son historique de sessions part avec. Pour couper l'accès sans ` +
-                              `rien perdre, utilisez plutôt Suspendre.`,
-                          )
-                        ) {
-                          supprimer.mutate(account.username);
-                        }
-                      }}
+                      onClick={() => setÀSupprimer(account.username)}
                     >
                       Supprimer
                     </Button>

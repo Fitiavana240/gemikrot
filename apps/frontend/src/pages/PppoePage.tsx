@@ -6,6 +6,7 @@ import { formatOctets, formatDuree } from '../api/mikrotik-tabs';
 import { formatBits } from '../api/router-tools';
 import { useRouterSelection } from '../routers/RouterContext';
 import { TabBar, type TabDef } from '../components/TabBar';
+import { ConfirmationInline } from '../components/Edition';
 import {
   Badge,
   Button,
@@ -176,6 +177,7 @@ function ComptesTab() {
   const routerId = useRouteur();
   const client = useQueryClient();
   const [formulaire, setFormulaire] = useState<'aucun' | 'creation' | PppSecret>('aucun');
+  const [àSupprimer, setÀSupprimer] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
 
   const comptes = useQuery({
@@ -238,6 +240,22 @@ function ComptesTab() {
         <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">
           {erreur}
         </div>
+      )}
+
+      {àSupprimer && (
+        <ConfirmationInline
+          titre={`Supprimer définitivement « ${àSupprimer} » ?`}
+          libelléConfirmer="Supprimer quand même"
+          enCours={supprimer.isPending}
+          onAnnuler={() => setÀSupprimer(null)}
+          onConfirmer={() => {
+            supprimer.mutate(àSupprimer);
+            setÀSupprimer(null);
+          }}
+        >
+          Son historique de connexions part avec, et le routeur ne le rejoue pas. Pour couper
+          l'accès d'un abonné sans rien perdre, <strong>Suspendre</strong> suffit.
+        </ConfirmationInline>
       )}
 
       {formulaire === 'aucun' ? (
@@ -323,21 +341,7 @@ function ComptesTab() {
                 >
                   {c.disabled ? 'Réactiver' : 'Suspendre'}
                 </Button>
-                <Button
-                  variant="danger"
-                  onClick={() => {
-                    // La suppression est définitive côté routeur, et rien
-                    // ne la rejoue : elle mérite le seul « êtes-vous sûr »
-                    // de cet écran.
-                    if (
-                      window.confirm(
-                        `Supprimer définitivement le compte « ${c.username} » ? Son historique part avec.`,
-                      )
-                    ) {
-                      supprimer.mutate(c.username);
-                    }
-                  }}
-                >
+                <Button variant="danger" onClick={() => setÀSupprimer(c.username)}>
                   Supprimer
                 </Button>
               </div>
