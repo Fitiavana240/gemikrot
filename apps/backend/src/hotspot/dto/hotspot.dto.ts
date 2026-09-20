@@ -108,6 +108,27 @@ export class CreateHotspotUserDto {
   @IsInt()
   @IsPositive()
   limitUptimeSeconds?: number | null;
+
+  /**
+   * Quotas portés par **le compte**, indépendants du profil.
+   *
+   * Le profil borne une session ; ceux-ci bornent l'accès vendu, et se
+   * règlent ticket par ticket. `null` retire le plafond, absent n'y touche pas.
+   */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  limitBytesIn?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  limitBytesOut?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  limitBytesTotal?: number | null;
 }
 
 /** Ne modifie que ce qui est fourni. Le nom identifie le compte. */
@@ -137,6 +158,27 @@ export class UpdateHotspotUserDto {
   @IsInt()
   @IsPositive()
   limitUptimeSeconds?: number | null;
+
+  /**
+   * Quotas portés par **le compte**, indépendants du profil.
+   *
+   * Le profil borne une session ; ceux-ci bornent l'accès vendu, et se
+   * règlent ticket par ticket. `null` retire le plafond, absent n'y touche pas.
+   */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  limitBytesIn?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  limitBytesOut?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  limitBytesTotal?: number | null;
 }
 
 /**

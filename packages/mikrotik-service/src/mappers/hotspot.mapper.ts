@@ -56,6 +56,7 @@ export function mapHotspotUser(raw: any): HotspotUserDto {
     uptimeSeconds: parseRouterOsDuration(raw?.uptime),
     limitUptimeSeconds: raw?.['limit-uptime'] != null ? parseRouterOsDuration(raw['limit-uptime']) : null,
     limitBytesIn: raw?.['limit-bytes-in'] != null ? Number(raw['limit-bytes-in']) : null,
+    limitBytesTotal: raw?.['limit-bytes-total'] != null ? Number(raw['limit-bytes-total']) : null,
     limitBytesOut: raw?.['limit-bytes-out'] != null ? Number(raw['limit-bytes-out']) : null,
   };
 }

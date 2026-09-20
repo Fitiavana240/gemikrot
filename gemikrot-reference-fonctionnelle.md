@@ -867,6 +867,37 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — Un ticket ne dépend pas de son profil
+
+Correction d'une hypothèse que je faisais : **les limites d'un compte ne découlent pas du
+profil**. Le profil borne *une session* ; le compte porte ses propres plafonds, et un vendeur
+peut les régler ticket par ticket sans créer de profil pour autant.
+
+Sondé sur le routeur : un compte HotSpot accepte **quatre plafonds indépendants**, tous
+réglables dès la création.
+
+```
+limit-uptime        temps cumulé connecté
+limit-bytes-in      volume reçu
+limit-bytes-out     volume envoyé
+limit-bytes-total   les deux confondus — distinct de leur somme
+```
+
+La console n'en lisait que trois, n'en écrivait **qu'un seul**, et son formulaire n'en proposait
+qu'un. Les quatre se lisent, s'écrivent et se saisissent désormais — en gigaoctets, personne ne
+comptant en octets au comptoir. Dans la table, le plafond s'affiche **à côté de la
+consommation** : un seul chiffre laisse croire qu'aucune borne n'existe.
+
+**Ce qui n'est pas modifiable, et pourquoi.** L'échéance d'une attribution User Manager
+(`end-time`) est en **lecture seule** : `PATCH` rend `no such command`. RouterOS la calcule
+depuis la validité du profil et le début ; on ne déplace pas une expiration, on réattribue le
+profil — ce qu'un rachat fait déjà, en ajoutant une attribution. C'est aussi pourquoi un compte
+HotSpot n'a pas de date du tout : il ne connaît que du temps consommé.
+
+**Éprouvé bout en bout** sur le routeur : compte créé avec les quatre plafonds, puis un quota
+changé (1 → 5 Go) et un autre retiré dans la même requête — les deux autres intacts, le tout
+confirmé par une relecture indépendante. Compte supprimé ensuite, 646 comptes intacts.
+
 ### 2026-09-20 — Régler la durée du cookie le rallume
 
 Les champs relevés au tour précédent n'étaient que lisibles. Le profil HotSpot n'avait

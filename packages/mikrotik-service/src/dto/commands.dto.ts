@@ -107,6 +107,15 @@ export interface CreateHotspotUserDto {
    * s'écoule même client déconnecté, celui-là ne compte que les sessions.
    */
   limitUptimeSeconds?: number | null;
+  /**
+   * Quotas du **compte**, posés ticket par ticket.
+   *
+   * Ils ne découlent pas du profil : celui-ci borne une session, ceux-ci
+   * bornent l'accès vendu.
+   */
+  limitBytesIn?: number | null;
+  limitBytesOut?: number | null;
+  limitBytesTotal?: number | null;
 }
 
 export interface UpdateHotspotUserDto {
@@ -117,6 +126,15 @@ export interface UpdateHotspotUserDto {
   server?: string;
   /** `null` retire le plafond ; absent ne touche à rien. */
   limitUptimeSeconds?: number | null;
+  /**
+   * Quotas du **compte**, posés ticket par ticket.
+   *
+   * Ils ne découlent pas du profil : celui-ci borne une session, ceux-ci
+   * bornent l'accès vendu. `null` retire le plafond, absent n'y touche pas.
+   */
+  limitBytesIn?: number | null;
+  limitBytesOut?: number | null;
+  limitBytesTotal?: number | null;
 }
 
 export interface CreateHotspotProfileDto {

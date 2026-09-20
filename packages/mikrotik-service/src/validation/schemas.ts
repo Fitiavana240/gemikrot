@@ -140,6 +140,16 @@ export const createHotspotUserSchema = z.object({
    * s'écoule que pendant les sessions.
    */
   limitUptimeSeconds: z.number().int().positive().max(UPTIME_MAX_SECONDES).nullish(),
+  /**
+   * Quotas du compte, indépendants du profil.
+   *
+   * `nullish` et non `optional` : `null` retire le plafond, absent n'y touche
+   * pas. Sans cette distinction, un formulaire qui ne renvoie pas le champ
+   * effacerait un quota qu'on ne voulait pas changer.
+   */
+  limitBytesIn: z.number().int().positive().nullish(),
+  limitBytesOut: z.number().int().positive().nullish(),
+  limitBytesTotal: z.number().int().positive().nullish(),
 });
 
 export const updateHotspotUserSchema = z.object({
@@ -150,6 +160,16 @@ export const updateHotspotUserSchema = z.object({
   server: z.string().max(64).optional(),
   /** `null` retire le plafond ; `undefined` ne touche à rien. */
   limitUptimeSeconds: z.number().int().positive().max(UPTIME_MAX_SECONDES).nullish(),
+  /**
+   * Quotas du compte, indépendants du profil.
+   *
+   * `nullish` et non `optional` : `null` retire le plafond, absent n'y touche
+   * pas. Sans cette distinction, un formulaire qui ne renvoie pas le champ
+   * effacerait un quota qu'on ne voulait pas changer.
+   */
+  limitBytesIn: z.number().int().positive().nullish(),
+  limitBytesOut: z.number().int().positive().nullish(),
+  limitBytesTotal: z.number().int().positive().nullish(),
 });
 
 export const createHotspotProfileSchema = z.object({

@@ -232,6 +232,11 @@ export class RouterOSMikrotikService implements IMikrotikService {
       ...(data.limitUptimeSeconds != null
         ? { 'limit-uptime': `${data.limitUptimeSeconds}s` }
         : {}),
+      // Même règle pour les quotas : omis plutôt que posés à zéro, un
+      // plafond nul rendant le compte inutilisable dès le premier octet.
+      ...(data.limitBytesIn != null ? { 'limit-bytes-in': data.limitBytesIn } : {}),
+      ...(data.limitBytesOut != null ? { 'limit-bytes-out': data.limitBytesOut } : {}),
+      ...(data.limitBytesTotal != null ? { 'limit-bytes-total': data.limitBytesTotal } : {}),
     });
     return HotspotMapper.mapHotspotUser(raw);
   }
@@ -251,6 +256,13 @@ export class RouterOSMikrotikService implements IMikrotikService {
       // exactement comme sur un compte qui n'en a jamais eu.
       payload['limit-uptime'] =
         data.limitUptimeSeconds != null ? `${data.limitUptimeSeconds}s` : '0s';
+    }
+    // Les trois quotas suivent la même convention : `null` retire, absent ne
+    // touche pas. RouterOS exprime « aucun plafond » par zéro sur ces champs.
+    if (data.limitBytesIn !== undefined) payload['limit-bytes-in'] = data.limitBytesIn ?? 0;
+    if (data.limitBytesOut !== undefined) payload['limit-bytes-out'] = data.limitBytesOut ?? 0;
+    if (data.limitBytesTotal !== undefined) {
+      payload['limit-bytes-total'] = data.limitBytesTotal ?? 0;
     }
 
     this.logger.info('Mise à jour compte HotSpot', { username: data.username });

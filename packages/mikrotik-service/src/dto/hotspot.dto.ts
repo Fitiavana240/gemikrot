@@ -39,8 +39,18 @@ export interface HotspotUserDto {
   uptimeSeconds: number;
   /** Absent du routeur tant qu'aucun plafond n'est pose : `null`, pas zero. */
   limitUptimeSeconds: number | null;
+  /**
+   * Quotas portés par **le compte**, indépendants du profil.
+   *
+   * Un profil borne une session ; ces plafonds bornent le ticket lui-même, et
+   * un vendeur peut les régler compte par compte sans toucher au profil. Les
+   * croire hérités du profil ferait passer un ticket spécial pour un ticket
+   * ordinaire.
+   */
   limitBytesIn: number | null;
   limitBytesOut: number | null;
+  /** Plafond des deux sens confondus, distinct de leur somme. */
+  limitBytesTotal: number | null;
 }
 
 /** Type d'une entrée `/ip/hotspot/ip-binding`. */

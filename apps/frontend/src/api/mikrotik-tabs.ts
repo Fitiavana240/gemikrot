@@ -34,8 +34,15 @@ export interface HotspotUser {
   uptimeSeconds: number;
   /** Plafond, absent du routeur tant qu'il n'est pas pose : `null`, pas zero. */
   limitUptimeSeconds: number | null;
+  /**
+   * Quotas du **compte**, indépendants du profil.
+   *
+   * Le profil borne une session ; ceux-ci bornent le ticket vendu. Les croire
+   * hérités ferait passer un ticket spécial pour un ticket ordinaire.
+   */
   limitBytesIn: number | null;
   limitBytesOut: number | null;
+  limitBytesTotal: number | null;
 }
 
 /**
@@ -57,6 +64,15 @@ export interface CreateHotspotUser {
   server?: string;
   comment?: string;
   limitUptimeSeconds?: number | null;
+  /**
+   * Quotas du compte, posés ticket par ticket.
+   *
+   * Ils ne découlent pas du profil : celui-ci borne une session, ceux-ci
+   * bornent l'accès vendu. `null` retire le plafond, absent n'y touche pas.
+   */
+  limitBytesIn?: number | null;
+  limitBytesOut?: number | null;
+  limitBytesTotal?: number | null;
 }
 
 /** Le nom identifie le compte : il n'est pas modifiable. */

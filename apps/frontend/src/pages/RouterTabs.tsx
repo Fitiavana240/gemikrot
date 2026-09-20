@@ -41,6 +41,24 @@ import {
 
 
 /** Filtre en mémoire : ces tables tiennent en quelques centaines de lignes. */
+/** Octets → gigaoctets pour la saisie. Vide quand il n'y a pas de plafond. */
+function enGo(octets: number | null | undefined): string {
+  if (!octets) return '';
+  return String(Math.round((octets / 1_073_741_824) * 100) / 100);
+}
+
+/**
+ * Gigaoctets saisis → octets, ou `null`.
+ *
+ * Un champ vide veut dire « aucun plafond » et non « zéro » : un plafond nul
+ * rendrait le compte inutilisable dès le premier octet.
+ */
+function enOctets(valeur: string): number | null {
+  const nombre = Number(valeur);
+  if (!valeur.trim() || !Number.isFinite(nombre) || nombre <= 0) return null;
+  return Math.round(nombre * 1_073_741_824);
+}
+
 function useFiltre<T>(items: T[] | undefined, champs: (item: T) => (string | null | undefined)[]) {
   const [terme, setTerme] = useState('');
   const bas = terme.trim().toLowerCase();
@@ -79,6 +97,9 @@ function FormulaireCompteHotspot({
     profileName: string;
     comment: string;
     limitUptimeSeconds: number | null;
+    limitBytesIn: number | null;
+    limitBytesOut: number | null;
+    limitBytesTotal: number | null;
   }) => void;
   onAnnuler: () => void;
   enCours: boolean;
@@ -89,6 +110,11 @@ function FormulaireCompteHotspot({
   const [profileName, setProfileName] = useState(compte?.profile ?? '');
   const [comment, setComment] = useState(compte?.comment ?? '');
   const [plafond, setPlafond] = useState<number | null>(compte?.limitUptimeSeconds ?? null);
+  // Les quotas se saisissent en gigaoctets : personne ne compte en octets au
+  // comptoir, et RouterOS les stocke de toute façon en octets.
+  const [quotaReçu, setQuotaReçu] = useState<string>(enGo(compte?.limitBytesIn));
+  const [quotaEnvoyé, setQuotaEnvoyé] = useState<string>(enGo(compte?.limitBytesOut));
+  const [quotaTotal, setQuotaTotal] = useState<string>(enGo(compte?.limitBytesTotal));
 
   return (
     <Card title={modification ? `Modifier « ${compte.username} »` : 'Nouveau compte HotSpot'}>
@@ -104,6 +130,9 @@ function FormulaireCompteHotspot({
             // `null` veut dire « aucun plafond », pas « zéro » — un plafond
             // nul créerait un compte inutilisable dès sa création.
             limitUptimeSeconds: plafond,
+            limitBytesIn: enOctets(quotaReçu),
+            limitBytesOut: enOctets(quotaEnvoyé),
+            limitBytesTotal: enOctets(quotaTotal),
           });
         }}
       >
@@ -149,6 +178,38 @@ function FormulaireCompteHotspot({
               placeholder="Ticket 500Ar"
             />
           </FormField>
+          <FormField label="Volume reçu (Go)">
+            <Input
+              type="number"
+              min={0}
+              step="0.1"
+              value={quotaReçu}
+              onChange={(e) => setQuotaReçu(e.target.value)}
+              placeholder="sans plafond"
+            />
+          </FormField>
+          <FormField label="Volume envoyé (Go)">
+            <Input
+              type="number"
+              min={0}
+              step="0.1"
+              value={quotaEnvoyé}
+              onChange={(e) => setQuotaEnvoyé(e.target.value)}
+              placeholder="sans plafond"
+            />
+          </FormField>
+          <FormField label="Volume total (Go)">
+            {/* Distinct de la somme des deux : RouterOS applique les trois
+                indépendamment, et le premier atteint coupe. */}
+            <Input
+              type="number"
+              min={0}
+              step="0.1"
+              value={quotaTotal}
+              onChange={(e) => setQuotaTotal(e.target.value)}
+              placeholder="sans plafond"
+            />
+          </FormField>
           <FormField label="Plafond de temps">
             {/* Les tickets du parc vont de 2 h à un mois : une unité fixe
                 obligerait à saisir « 720 » pour l'un ou « 0.25 » pour
@@ -164,6 +225,11 @@ function FormulaireCompteHotspot({
           Le plafond compte le temps passé connecté : il s'arrête quand le client se déconnecte
           et reprend à sa reconnexion. Pour une validité qui court même hors ligne, il faut un
           forfait User Manager.
+        </p>
+        <p className="max-w-3xl text-xs text-slate-500">
+          Ces quatre plafonds appartiennent <strong>au compte</strong>, pas au profil : celui-ci
+          borne une session, ceux-là bornent l'accès vendu. On peut donc faire un ticket
+          particulier sans créer de profil pour lui. Laisser vide veut dire « aucun plafond ».
         </p>
         <div className="flex gap-2">
           <Button type="submit" disabled={enCours}>
@@ -354,6 +420,11 @@ export function HotspotUsersTab() {
                 ...(v.limitUptimeSeconds != null
                   ? { limitUptimeSeconds: v.limitUptimeSeconds }
                   : {}),
+                // Omis quand il n'y a pas de plafond : un zéro posé à la
+                // création rendrait le compte inutilisable dès le premier octet.
+                ...(v.limitBytesIn != null ? { limitBytesIn: v.limitBytesIn } : {}),
+                ...(v.limitBytesOut != null ? { limitBytesOut: v.limitBytesOut } : {}),
+                ...(v.limitBytesTotal != null ? { limitBytesTotal: v.limitBytesTotal } : {}),
               });
               return;
             }
@@ -365,6 +436,11 @@ export function HotspotUsersTab() {
             if (v.comment !== (formulaire.comment ?? '')) dto.comment = v.comment;
             if (v.limitUptimeSeconds !== formulaire.limitUptimeSeconds) {
               dto.limitUptimeSeconds = v.limitUptimeSeconds;
+            }
+            if (v.limitBytesIn !== formulaire.limitBytesIn) dto.limitBytesIn = v.limitBytesIn;
+            if (v.limitBytesOut !== formulaire.limitBytesOut) dto.limitBytesOut = v.limitBytesOut;
+            if (v.limitBytesTotal !== formulaire.limitBytesTotal) {
+              dto.limitBytesTotal = v.limitBytesTotal;
             }
             if (Object.keys(dto).length === 0) {
               setFormulaire('aucun');
@@ -444,7 +520,7 @@ export function HotspotUsersTab() {
 
       <ListeDuRouteur
         requête={{ ...requête, data: filtrés }}
-        colonnes={['Compte', 'Client', 'Profil', 'Durée', 'Reçu', 'Envoyé', 'État', '']}
+        colonnes={['Compte', 'Client', 'Profil', 'Durée', 'Reçu', 'Envoyé', 'Plafond total', 'État', '']}
         vide={{ titre: 'Aucun compte HotSpot', aide: 'Cette table est vide sur le routeur.' }}
         ligne={(u) => (
           <tr key={u.id} className={u.disabled ? 'opacity-60' : undefined}>
@@ -459,8 +535,24 @@ export function HotspotUsersTab() {
                 <span className="text-slate-400"> / {formatDuree(u.limitUptimeSeconds)}</span>
               )}
             </td>
-            <td className="px-3 py-2 tabular-nums text-slate-500">{formatOctets(u.bytesIn)}</td>
-            <td className="px-3 py-2 tabular-nums text-slate-500">{formatOctets(u.bytesOut)}</td>
+            {/* Consommé et plafond côte à côte, comme pour la durée : un seul
+                chiffre laisse croire qu'il n'y a pas de borne, alors que le
+                compte peut en porter une que le profil ignore. */}
+            <td className="px-3 py-2 tabular-nums text-slate-500">
+              {formatOctets(u.bytesIn)}
+              {u.limitBytesIn != null && (
+                <span className="text-slate-400"> / {formatOctets(u.limitBytesIn)}</span>
+              )}
+            </td>
+            <td className="px-3 py-2 tabular-nums text-slate-500">
+              {formatOctets(u.bytesOut)}
+              {u.limitBytesOut != null && (
+                <span className="text-slate-400"> / {formatOctets(u.limitBytesOut)}</span>
+              )}
+            </td>
+            <td className="px-3 py-2 tabular-nums text-slate-500">
+              {u.limitBytesTotal != null ? formatOctets(u.limitBytesTotal) : '—'}
+            </td>
             <td className="px-3 py-2">
               <Badge tone={u.disabled ? 'red' : 'green'}>
                 {u.disabled ? 'bloqué' : 'actif'}
