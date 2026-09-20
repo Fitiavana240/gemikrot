@@ -391,6 +391,13 @@ model VoucherBatch {
   prefix      String?
   /// Ou les comptes de ce lot ont ete crees. `null` sur les lots anterieurs.
   target      VoucherTarget?
+  /// Planches A4 écrites sur le routeur pour ce lot, chemins complets.
+  ///
+  /// Gardées ici plutôt que rendues à la volée : un lot généré la veille doit
+  /// pouvoir retrouver sa feuille, et le PDF vit sur la clé USB du routeur,
+  /// pas dans cette base. Vide quand l'écriture a échoué — les tickets, eux,
+  /// existent quand même.
+  planches    String[]            @default([])
   status      VoucherBatchStatus  @default(PENDING)
   createdByAdminId String         @map("created_by_admin_id")
   createdByAdmin   AdminUser      @relation(fields: [createdByAdminId], references: [id])

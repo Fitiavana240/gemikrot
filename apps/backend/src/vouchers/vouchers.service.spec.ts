@@ -102,6 +102,11 @@ describe('VouchersService.generateBatch', () => {
       provisioning as any,
       access as any,
       tenantContext as any,
+      // La planche part sur le routeur : ces tests portent sur les tickets,
+      // et une écriture de fichier ne doit ni les ralentir ni les faire
+      // échouer. L'écriture a ses propres tests.
+      { findAll: async () => [{ perPage: 30, isDefault: true }] } as any,
+      { écrire: async () => ({ planches: [], échecs: [], emplacement: '' }) } as any,
     );
   }
 

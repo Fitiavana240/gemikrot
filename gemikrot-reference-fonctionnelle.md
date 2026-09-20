@@ -867,6 +867,27 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — L'autre chemin de génération, et la planche qui survit au lot
+
+« À chaque génération » veut dire les deux chemins. La génération brute depuis un profil
+déposait sa planche ; celle de l'écran Tickets, non — c'est pourtant la seule qui suit une
+vente, et **la seule qui connaît le prix**, désormais imprimé sur le ticket.
+
+**Où garder le chemin.** Le rendre à la volée aurait suffi à l'instant de la génération et à
+rien d'autre : un lot produit la veille n'aurait plus eu aucun moyen de retrouver sa feuille,
+alors que le PDF, lui, dort toujours sur la clé USB. Les chemins sont donc **portés par le
+lot** — une colonne `planches` — et affichés sur l'écran Lots, sous le nom de l'offre. Vide
+quand l'écriture a échoué : les tickets, eux, existent quand même.
+
+**Éprouvé sur le vrai routeur** : un lot de deux tickets HotSpot généré depuis l'écran Tickets,
+planche écrite en `usb1-part1/tickets/2Heure-500Ar-202609201948.pdf` — 5 074 octets, type
+`.pdf file` — et le chemin lu sur l'écran Lots. Lot, tickets, comptes et planche supprimés
+ensuite ; 646 comptes HotSpot intacts.
+
+Au passage, `prisma generate` a buté sur `EPERM` : le serveur de développement tenait le moteur
+de requêtes. Il faut l'arrêter, générer, puis le laisser repartir — c'est la deuxième fois dans
+ce projet.
+
 ### 2026-09-20 — La planche A4 écrite sur le routeur
 
 Demandé : un PDF A4 à chaque génération, **enregistré sur le routeur et non dans

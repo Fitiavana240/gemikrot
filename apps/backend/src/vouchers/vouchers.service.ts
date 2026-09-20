@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, Voucher, VoucherStatus, VoucherTarget } from '@prisma/client';
 import { MikrotikNotFoundError } from '@wifitati/mikrotik-service';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -8,6 +8,8 @@ import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 import { parseRouterTime } from '../routers/router-time.util.js';
 import { PlanProvisioningService } from '../plans/plan-provisioning.service.js';
 import { RouterAccessService } from '../routers/router-access.service.js';
+import { TicketTemplatesService } from '../tickets/ticket-templates.service.js';
+import { PlancheRouteurService, type RapportPlanches } from '../tickets/planche-routeur.service.js';
 import type { CreateVoucherBatchDto } from './dto/create-voucher-batch.dto.js';
 import { generateVoucherCode } from './voucher-code.util.js';
 
@@ -22,7 +24,11 @@ export class VouchersService {
     private readonly provisioning: PlanProvisioningService,
     private readonly access: RouterAccessService,
     private readonly tenantContext: TenantContextService,
+    private readonly modèles: TicketTemplatesService,
+    private readonly planches: PlancheRouteurService,
   ) {}
+
+  private readonly logger = new Logger(VouchersService.name);
 
   /**
    * `scope` distingue les deux générations : `um` pour les tickets servis par
@@ -200,7 +206,15 @@ export class VouchersService {
           ? await this.provisionOnUserManager(vouchers, plan, routerId)
           : await this.provisionOnHotspot(vouchers, plan, routerId);
 
-      await this.prisma.scoped.voucherBatch.update({ where: { id: batch.id }, data: { status: 'COMPLETED' } });
+      // La planche A4 part sur le routeur, là où vivent les comptes qu'on
+      // vient de créer. Les chemins sont gardés sur le lot : un lot généré la
+      // veille doit pouvoir retrouver sa feuille, et le PDF n'est pas ici.
+      const planches = await this.déposerPlanches(provisioned, plan, routerId);
+
+      await this.prisma.scoped.voucherBatch.update({
+        where: { id: batch.id },
+        data: { status: 'COMPLETED', planches: planches.planches.map((p) => p.chemin) },
+      });
       await this.prisma.scoped.voucherJob.update({
         where: { id: batch.jobs[0].id },
         data: { processed: vouchers.length, status: 'completed', finishedAt: new Date() },
@@ -424,6 +438,7 @@ export class VouchersService {
         prefix: true,
         status: true,
         createdAt: true,
+        planches: true,
         plan: { select: { name: true } },
         router: { select: { label: true } },
         createdByAdmin: { select: { email: true } },
@@ -466,6 +481,60 @@ export class VouchersService {
         },
       };
     });
+  }
+
+  /**
+   * Écrit les planches du lot sur le routeur, sans jamais faire échouer la
+   * génération.
+   *
+   * Les tickets existent déjà en base et sur le routeur quand on arrive ici :
+   * une clé USB absente ne doit pas annuler une vente à venir. L'échec se lit
+   * à l'écran des lots, où la liste des planches reste vide.
+   *
+   * Contrairement à la génération brute depuis un profil, le lot connaît le
+   * **prix** : il est imprimé sur le ticket.
+   */
+  private async déposerPlanches(
+    tickets: Voucher[],
+    plan: { name: string; price: unknown; validityDurationSeconds: number },
+    routerId: string,
+  ): Promise<RapportPlanches> {
+    const vide: RapportPlanches = { planches: [], échecs: [], emplacement: '' };
+    if (tickets.length === 0) return vide;
+
+    try {
+      const mikrotik = await this.clients.forRouter(routerId);
+      const tenant = await this.prisma.tenant.findUniqueOrThrow({
+        where: { id: this.tenantContext.requireTenantId() },
+        select: { wifiName: true, domains: true, currency: true },
+      });
+      const modèles = await this.modèles.findAll();
+      const parPage = modèles.find((m) => m.isDefault)?.perPage ?? modèles[0]?.perPage ?? 30;
+      const money = new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: tenant.currency,
+        maximumFractionDigits: 0,
+      });
+
+      const horodatage = new Date().toISOString().slice(0, 16).replace(/[:T-]/g, '');
+      const étiquette = `${plan.name}-${horodatage}`.replace(/[^A-Za-z0-9_.-]/g, '_');
+
+      return await this.planches.écrire(mikrotik, {
+        tickets: tickets.map((t) => ({
+          code: t.code,
+          offre: plan.name,
+          prix: money.format(Number(t.price)),
+        })),
+        validitéSecondes: plan.validityDurationSeconds,
+        réseau: tenant.wifiName,
+        domaines: tenant.domains,
+        parPage,
+        étiquette,
+      });
+    } catch (error) {
+      this.logger.warn(`Planches du lot non produites : ${String(error)}`);
+      return vide;
+    }
   }
 
   private async provisionOnUserManager(

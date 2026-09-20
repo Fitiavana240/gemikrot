@@ -56,6 +56,14 @@ export interface VoucherBatchRow {
   plan: { name: string } | null;
   router: { label: string } | null;
   createdByAdmin: { email: string } | null;
+  /**
+   * Planches A4 écrites sur le routeur pour ce lot, chemins complets.
+   *
+   * Le PDF vit sur la clé USB du routeur, pas dans cette application : sans ce
+   * chemin à l'écran, on ne saurait pas où le reprendre. Vide quand l'écriture
+   * a échoué — les tickets, eux, existent quand même.
+   */
+  planches?: string[];
   /** Etat de la generation : nul si le lot est anterieur au suivi. */
   job: {
     processed: number;

@@ -86,6 +86,15 @@ export function BatchesPage() {
                 </td>
                 <td className="px-3 py-2">
                   {lot.plan?.name ?? '—'}
+                  {/* La planche est sur le routeur, pas ici : le chemin est la
+                      seule chose qui permette d'aller la rechercher. */}
+                  {(lot.planches?.length ?? 0) > 0 && (
+                    <div className="mt-0.5 space-y-0.5 font-mono text-[11px] text-emerald-700">
+                      {lot.planches!.map((chemin) => (
+                        <div key={chemin}>{chemin}</div>
+                      ))}
+                    </div>
+                  )}
                   {lot.prefix && (
                     <span className="ml-1 font-mono text-xs text-slate-400">{lot.prefix}…</span>
                   )}
