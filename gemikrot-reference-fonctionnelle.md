@@ -102,7 +102,7 @@ Conséquences observées sur le parc réel (hAP ac², 646 comptes HotSpot, Route
 | SOC-9 | Multi-routeurs réel dans la console | ✅ livré |
 | RTR-11 | Disjoncteur par routeur | ✅ livré, éprouvé sur le routeur réel |
 | RTR-12 | File d'opérations différées | ✅ livré |
-| RTR-13 | Enrôlement par tunnel WireGuard | 🟡 côté application livré, script à éprouver sur le matériel |
+| RTR-13 | Enrôlement par tunnel WireGuard | 🟡 côté serveur éprouvé de bout en bout par HTTP ; reste l'exécution du script sur le routeur |
 | RTR-14 | PPPoE | 🟡 comptes, profils, serveurs et bassins livrés et éprouvés ; sessions actives non relevables |
 
 **Vérifié** : 91 tests backend (13 fichiers), `tsc` propre sur les deux espaces, migrations appliquées, application démarrée sans erreur d'injection et les routes d'enrôlement exposées.
@@ -112,6 +112,10 @@ Conséquences observées sur le parc réel (hAP ac², 646 comptes HotSpot, Route
 **RTR-14, où il en est** (2026-09-20) : l'accès au routeur a été rétabli — le service `reverse-proxy` occupait le port 443 aux dépens de `www-ssl`. Le parc n'ayant aucun PPPoE, `scripts/probe-ppp-sonde.ts` a créé le minimum sur `ether4` (rien de branché, serveur posé désactivé), relevé les charges réelles, puis tout supprimé. Les correspondances sont écrites contre ce relevé, figé dans `tests/mappers/ppp.spec.ts`.
 
 Trois pièges que le relevé a révélés, et qu'une lecture de la documentation aurait manqués : le profil PPP porte le débit en **un seul jeton** `"2M/2M"` là où la limitation User Manager utilise deux champs séparés ; `remote-address` contient un **nom de bassin**, pas une adresse ; et `last-logged-out` vaut `1970-01-01 00:00:00` pour un compte jamais connecté, ce qui l'aurait fait passer pour un abonné parti depuis cinquante ans. S'y ajoute que RouterOS mélange deux conventions booléennes dans le même objet — `default: "false"` à côté de `only-one: "yes"` — et que `max-sessions: "unlimited"` donne `NaN` si on le passe à `Number`.
+
+**RTR-13, côté serveur, éprouvé le 2026-09-20** : rappel simulé exactement comme le routeur l'enverrait, en HTTP sur l'adresse du réseau. Réponse `201`, routeur créé sur l'adresse de tunnel attribuée, hôte égal à cette adresse, identifiants chiffrés en base, bon exploitant. Le rejeu du même jeton répond `404` — usage unique confirmé. Le pair WireGuard n'étant pas piloté sur ce poste, le journal rend la commande `wg set` exacte au lieu de faire croire le tunnel monté. Les objets de simulation ont été supprimés.
+
+Ce qui reste à éprouver sur RTR-13 se réduit donc à **l'exécution du script dans le terminal Winbox** : que chaque commande RouterOS passe, et que `/tool/fetch` atteigne l'application.
 
 **Ce qui reste** : les sessions actives (`/ppp/active`) ne se relèvent qu'avec un abonné PPPoE réellement connecté. La logique de leur correspondance est testée, leurs **noms de champs** ne le sont pas, et c'est écrit dans le test. À confirmer au premier abonné.
 
