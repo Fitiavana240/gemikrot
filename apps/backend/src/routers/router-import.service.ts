@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { DeviceType, PlanKind } from '@prisma/client';
 import type { HotspotProfileDto, HotspotUserDto } from '@wifitati/mikrotik-service';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -50,13 +50,23 @@ export class RouterImportService {
     routerId: string,
     options: { dryRun?: boolean; adminUserId?: string } = {},
   ): Promise<ImportReport> {
-    // Lancé par le SUPER_ADMIN, qui n'a pas d'exploitant courant : on se
-    // place explicitement sur celui du routeur importé, sinon les lignes
-    // créées seraient orphelines ou rattachées au mauvais exploitant.
-    const router = await this.prisma.router.findUniqueOrThrow({
+    // L'import se place sur l'exploitant du routeur, parce que le SUPER_ADMIN
+    // qui le déclenche n'en a pas. Mais le routeur doit être résolu **par le
+    // client cloisonné** : lu avec le client brut, un ADMIN qui connaît
+    // l'identifiant d'un routeur d'un autre exploitant déclenchait un import
+    // dans les données de cet autre, et en recevait le détail en réponse.
+    //
+    // `scopedStrict` traite les deux cas : il rend un client non cloisonné au
+    // SUPER_ADMIN, et un client filtré à tout autre.
+    const router = await this.prisma.scopedStrict.router.findFirst({
       where: { id: routerId },
       select: { tenantId: true },
     });
+    if (!router) {
+      // Même réponse qu'un routeur inexistant : l'appartenance d'un routeur à
+      // un autre exploitant ne doit pas se déduire du message d'erreur.
+      throw new NotFoundException(`Routeur ${routerId} introuvable`);
+    }
 
     return this.tenantContext.runAsTenant(router.tenantId, () =>
       this.runImport(routerId, router.tenantId, options),
