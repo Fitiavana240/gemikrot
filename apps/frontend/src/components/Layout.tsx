@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { tenantsApi } from '../api/tenants';
+import { getTenantCible, setTenantCible } from '../api/client';
 import { APP_NAME, BrandMark } from './Brand';
 import { useRouterSelection } from '../routers/RouterContext';
 import { REACHABILITY_LABEL } from '../api/routers';
@@ -48,6 +49,74 @@ function RouterSelector() {
         {routers.map((router) => (
           <option key={router.id} value={router.id}>
             {router.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/**
+ * L'exploitant qu'un SUPER_ADMIN pilote.
+ *
+ * Il n'appartient à aucun exploitant : tant qu'il n'en cible pas un, toute
+ * action qui crée une ligne échoue — le serveur ne saurait à qui la
+ * rattacher. Le laisser découvrir cela en cliquant sur « Générer » était le
+ * défaut ; le choix se fait maintenant ici, une fois.
+ *
+ * Invisible pour les autres comptes, dont le jeton porte déjà l'exploitant.
+ */
+function SelecteurExploitant() {
+  const { user } = useAuth();
+  const [cible, setCible] = useState(getTenantCible);
+
+  const exploitants = useQuery({
+    queryKey: ['tenants-cibles'],
+    queryFn: tenantsApi.list,
+    enabled: user?.role === 'SUPER_ADMIN',
+    retry: false,
+  });
+
+  // Un identifiant retenu qui ne correspond plus à rien scoperait la console
+  // sur un exploitant inexistant : écrans vides sans explication. On le
+  // relâche dès que la liste le dément.
+  useEffect(() => {
+    if (!exploitants.data || !cible) return;
+    if (!exploitants.data.some((t) => t.id === cible)) {
+      setTenantCible(null);
+      setCible(null);
+      window.location.reload();
+    }
+  }, [exploitants.data, cible]);
+
+  if (user?.role !== 'SUPER_ADMIN') return null;
+
+  const liste = exploitants.data ?? [];
+  if (exploitants.isError || liste.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-2">
+      <select
+        value={cible ?? ''}
+        onChange={(e) => {
+          const valeur = e.target.value || null;
+          setTenantCible(valeur);
+          setCible(valeur);
+          // Rechargement plutôt qu'invalidation : l'exploitant change le
+          // sens de *toutes* les données en cache, pas d'une requête.
+          window.location.reload();
+        }}
+        className={`rounded-md border px-2 py-1 text-sm focus:border-sky-500 focus:outline-none ${
+          cible
+            ? 'border-slate-300 bg-white text-slate-700'
+            : 'border-amber-400 bg-amber-50 text-amber-800'
+        }`}
+        title="L'exploitant sur lequel portent les actions"
+      >
+        <option value="">Aucun exploitant ciblé</option>
+        {liste.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.wifiName || t.name}
           </option>
         ))}
       </select>
@@ -148,6 +217,7 @@ export function Layout() {
             <div className="hidden min-w-0 truncate text-sm text-slate-500 sm:block">
               {user?.email} — <span className="font-medium text-slate-700">{user?.role}</span>
             </div>
+            <SelecteurExploitant />
             <RouterSelector />
           </div>
           <button

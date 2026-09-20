@@ -12,6 +12,37 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+const TENANT_KEY = 'wifitati_tenant_cible';
+
+/**
+ * L'exploitant qu'un SUPER_ADMIN pilote.
+ *
+ * Il n'appartient à aucun exploitant : sans en cibler un, toute action qui
+ * crée une ligne échoue, faute de savoir à qui la rattacher. Le choix est
+ * retenu d'une visite à l'autre — le changer à chaque connexion serait une
+ * corvée pour quelqu'un qui n'en gère qu'un.
+ *
+ * Sans effet pour les autres comptes : leur jeton porte déjà leur exploitant,
+ * et le serveur ignore cet en-tête pour eux.
+ */
+export function getTenantCible(): string | null {
+  try {
+    return localStorage.getItem(TENANT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setTenantCible(tenantId: string | null): void {
+  try {
+    if (tenantId) localStorage.setItem(TENANT_KEY, tenantId);
+    else localStorage.removeItem(TENANT_KEY);
+  } catch {
+    // Navigation privée ou stockage refusé : la console marche quand même,
+    // elle oublie simplement le choix au rechargement.
+  }
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -29,6 +60,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set('Content-Type', 'application/json');
   if (token) headers.set('Authorization', `Bearer ${token}`);
+
+  // Envoyé sans condition de rôle : le serveur ne le lit que pour un
+  // SUPER_ADMIN. Le filtrer ici demanderait de connaître le rôle dans une
+  // couche qui n'a que le jeton, et un en-tête ignoré ne coûte rien.
+  const tenantCible = getTenantCible();
+  if (tenantCible) headers.set('X-Tenant-Id', tenantCible);
 
   const res = await fetch(`/api${path}`, { ...options, headers });
 

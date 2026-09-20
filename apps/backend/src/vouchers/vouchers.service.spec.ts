@@ -41,7 +41,12 @@ function createFakePrisma() {
         vouchers.set(data.code, record);
         return record;
       }),
-      findUnique: vi.fn(async ({ where }: any) => vouchers.get(where.code) ?? null),
+      // Les deux clés uniques du modèle : le code, et l'identifiant. Ne
+      // gérer que le premier faisait échouer tout ce qui part d'un `id`.
+      findUnique: vi.fn(async ({ where }: any) => {
+        if (where.code) return vouchers.get(where.code) ?? null;
+        return [...vouchers.values()].find((v) => v.id === where.id) ?? null;
+      }),
       update: vi.fn(async ({ where, data }: any) => {
         const record = [...vouchers.values()].find((v) => v.id === where.id);
         return Object.assign(record ?? {}, data);
@@ -81,7 +86,11 @@ describe('VouchersService.generateBatch', () => {
         actions: [],
       })),
     };
-    access = { revoke: vi.fn(async () => ({ cookiesRemoved: 0, sessionsClosed: 0 })) };
+    access = {
+      revoke: vi.fn(async () => ({ cookiesRemoved: 0, sessionsClosed: 0 })),
+      purgeCookies: vi.fn(async () => 0),
+      closeSessions: vi.fn(async () => 0),
+    };
     vi.mocked(voucherCode.generateVoucherCode).mockReset();
   });
 
@@ -131,6 +140,49 @@ describe('VouchersService.generateBatch', () => {
       profileName: '1JOUR-2000AR',
     });
     expect(result.every((v) => v.umUsername)).toBe(true);
+  });
+
+  /**
+   * Annuler doit couper l'accès, pas seulement changer un statut.
+   *
+   * Les comptes sont créés dès la génération — c'est ce qui fait qu'un ticket
+   * imprimé fonctionne sans être activé. `cancel` se contentant d'écrire en
+   * base, un ticket annulé continuait d'ouvrir l'accès indéfiniment : un code
+   * mal imprimé qu'on croyait retiré restait vendable dans la rue. Constaté
+   * sur le routeur, compte toujours `disabled=false` après annulation.
+   */
+  describe('cancel', () => {
+    async function ticketGénéré(target: 'USER_MANAGER' | 'HOTSPOT') {
+      const codes = ['ANNUL1'];
+      vi.mocked(voucherCode.generateVoucherCode).mockImplementation(() => codes.shift()!);
+      const service = buildService();
+      const [ticket] = await service.generateBatch(
+        { planId: 'plan-1', quantity: 1, target } as any,
+        'admin-1',
+      );
+      return { service, ticket };
+    }
+
+    it("révoque le compte User Manager, cookies et session compris", async () => {
+      const { service, ticket } = await ticketGénéré('USER_MANAGER');
+
+      await service.cancel(ticket.id, 'admin-1');
+
+      // `revoke` fait les trois : désactive, purge les cookies, ferme la
+      // session. Désactiver seul laisserait un cookie rouvrir l'accès.
+      expect(access.revoke).toHaveBeenCalledWith(mikrotik, 'ANNUL1');
+    });
+
+    it("désactive le compte HotSpot et purge ce qui le maintiendrait ouvert", async () => {
+      mikrotik.setHotspotUserDisabled = vi.fn(async () => ({}));
+      const { service, ticket } = await ticketGénéré('HOTSPOT');
+
+      await service.cancel(ticket.id, 'admin-1');
+
+      expect(mikrotik.setHotspotUserDisabled).toHaveBeenCalledWith('ANNUL1', true);
+      expect(access.purgeCookies).toHaveBeenCalledWith(mikrotik, 'ANNUL1');
+      expect(access.closeSessions).toHaveBeenCalledWith(mikrotik, 'ANNUL1');
+    });
   });
 
   /**

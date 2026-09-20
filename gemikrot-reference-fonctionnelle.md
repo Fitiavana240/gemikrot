@@ -839,11 +839,45 @@ plus », qui énonçait une règle là où il n'y a qu'un défaut. Le premier me
 que les comptes seraient créés « sans validité » — `PlanProvisioningService.reconcile` crée
 le profil manquant à la génération, ce que le code confirme.
 
-**Non éprouvé de bout en bout, et pourquoi** : la génération de lots exige un exploitant
-(`requireTenantId`), et le compte de la session est SUPER_ADMIN, qui n'en a aucun — le
-`POST /vouchers/batches` rend `403`. Ce n'est pas un défaut de ce changement, c'est le
-cloisonnement qui fait son travail : un ticket appartient à un exploitant. La vérification
-sur matériel demande une session ADMIN.
+### 2026-09-20 — Le SUPER_ADMIN peut cibler un exploitant
+
+**Reproche fondé de l'exploitant** : j'avais livré un bouton « Générer » qui échouait
+toujours sur son compte, et je l'avais **expliqué au lieu de le corriger**. Une console qui
+propose une action impossible et ne le dit qu'après le clic est en défaut, quelle qu'en soit
+la cause.
+
+Le mécanisme était déjà prévu — le message de `requireTenantId` dit lui-même « le
+SUPER_ADMIN doit cibler un exploitant », et `runAsTenant` existe — mais rien ne le reliait à
+HTTP. Un en-tête `X-Tenant-Id`, lu **uniquement pour un SUPER_ADMIN**, et un sélecteur dans
+la barre du haut.
+
+**Le point qui décide de la forme** : en ciblant, le contournement est abandonné
+(`isSuperAdmin: false`), exactement comme `runAsTenant`. Le garder donnerait des lectures sur
+tout le parc et des écritures sur un seul exploitant, puisque `PrismaService.scoped` ignore
+le cloisonnement dès que le drapeau est levé. En ciblant, le SUPER_ADMIN agit *comme* cet
+exploitant et ne voit que lui.
+
+**Éprouvé de bout en bout** : exploitant ciblé, lot de 2 tickets généré sur `2Heure-500Ar`,
+2 comptes User Manager créés avec leurs attributions (`waiting` / `not-yet-running`) — et le
+profil User Manager `2Heure-500Ar` (2 h) **créé au passage**, l'offre y étant désormais
+rattachée. 646 comptes HotSpot à chaque mesure.
+
+### Défaut trouvé en nettoyant : annuler ne coupait rien
+
+En retirant les tickets d'essai, constat sur le routeur : après `cancel`, les comptes
+restaient `disabled=false`. `cancel` se contentait de changer le statut en base.
+
+Les comptes sont créés **dès la génération** — c'est ce qui fait qu'un ticket imprimé
+fonctionne sans être activé. Un ticket annulé continuait donc d'ouvrir l'accès,
+indéfiniment et sans que rien ne le signale : un code mal imprimé qu'on croyait retiré
+restait utilisable. Antérieur à ce chantier, trouvé en vérifiant plutôt qu'en supposant.
+
+`cancel` coupe désormais l'accès comme `disable` : révocation User Manager, ou désactivation
+HotSpot avec purge des cookies et fermeture des sessions — désactiver seul laisserait un
+cookie rouvrir la session sans repasser par RADIUS. Deux tests figent les deux cibles.
+
+*Au passage*, le faux Prisma des tests ne savait chercher un ticket que par son code, pas par
+son identifiant : tout ce qui part d'un `id` y échouait silencieusement.
 
 **RTR-21 ✅ — l'onglet Paiements du routeur.** `/user-manager/payment` répond, et il est vide :
 ce parc encaisse par Mobile Money, hors du routeur. Les noms de champs viennent donc des

@@ -339,6 +339,16 @@ export class VouchersService {
     return updated;
   }
 
+  /**
+   * Annule un ticket jamais vendu.
+   *
+   * **Coupe aussi l'accès sur le routeur.** Ce ne fut pas toujours le cas :
+   * la méthode se contentait de changer le statut en base. Or les comptes
+   * sont créés dès la génération — c'est ce qui fait qu'un ticket imprimé
+   * fonctionne sans être activé — si bien qu'un ticket annulé continuait
+   * d'ouvrir l'accès, indéfiniment et sans que rien ne le signale. Un code
+   * mal imprimé qu'on croyait retiré restait vendable dans la rue.
+   */
   async cancel(id: string, adminUserId?: string): Promise<Voucher> {
     const voucher = await this.findOne(id);
     if (voucher.status !== VoucherStatus.CREATED) {
@@ -346,12 +356,40 @@ export class VouchersService {
         `Voucher ${voucher.code} déjà attribué : utiliser disable(), pas cancel()`,
       );
     }
+
+    await this.couperAcces(voucher);
+
     const updated = await this.prisma.scoped.voucher.update({
       where: { id },
       data: { status: VoucherStatus.CANCELLED },
     });
     await this.audit.log({ adminUserId, action: 'CANCEL_VOUCHER', targetType: 'Voucher', targetId: id });
     return updated;
+  }
+
+  /**
+   * Ferme l'accès d'un ticket sur le routeur, quelle que soit sa cible.
+   *
+   * Désactiver ne suffit pas : un cookie encore valide rouvre la session sans
+   * repasser par RADIUS, donc sans consulter la validité. Cookies et session
+   * en cours partent avec.
+   *
+   * Un compte absent n'est pas une erreur — un ticket historique n'en a pas
+   * tant qu'il n'est pas vendu.
+   */
+  private async couperAcces(voucher: Voucher): Promise<void> {
+    try {
+      const mikrotik = await this.clients.forDefaultRouter();
+      if (voucher.umUsername) {
+        await this.access.revoke(mikrotik, voucher.umUsername);
+      } else if (voucher.target === VoucherTarget.HOTSPOT) {
+        await mikrotik.setHotspotUserDisabled(voucher.code, true);
+        await this.access.purgeCookies(mikrotik, voucher.code);
+        await this.access.closeSessions(mikrotik, voucher.code);
+      }
+    } catch (error) {
+      if (!(error instanceof MikrotikNotFoundError)) throw error;
+    }
   }
 
 /**
