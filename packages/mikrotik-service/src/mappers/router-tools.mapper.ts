@@ -12,6 +12,9 @@ import {
   RouteDto,
   RouterLogEntryDto,
   SimpleQueueDto,
+  WirelessInterfaceDto,
+  WirelessClientDto,
+  RadiusClientDto,
 } from '../dto/router-tools.dto';
 
 /** RouterOS rend ses booléens en chaînes. */
@@ -250,5 +253,60 @@ export function mapRoute(raw: any): RouteDto {
     connect: flag(raw?.connect),
     dhcp: flag(raw?.dhcp),
     comment: orNull(raw?.comment),
+  };
+}
+
+export function mapWirelessInterface(raw: any): WirelessInterfaceDto {
+  // `tx-power` n'apparaît que si le mode n'est pas automatique : son absence
+  // veut dire « le routeur décide », et non « zéro ».
+  const puissance = raw?.['tx-power'];
+
+  return {
+    id: raw?.['.id'] ?? '',
+    name: raw?.name ?? raw?.['default-name'] ?? '',
+    ssid: raw?.ssid ?? '',
+    band: raw?.band ?? '',
+    channelWidth: raw?.['channel-width'] ?? '',
+    frequency: String(raw?.frequency ?? ''),
+    mode: raw?.mode ?? '',
+    running: flag(raw?.running),
+    disabled: flag(raw?.disabled),
+    hideSsid: flag(raw?.['hide-ssid']),
+    macAddress: raw?.['mac-address'] ?? '',
+    securityProfile: raw?.['security-profile'] ?? '',
+    country: raw?.country ?? '',
+    txPowerDbm: puissance != null && puissance !== '' ? Number(puissance) : null,
+  };
+}
+
+export function mapWirelessClient(raw: any): WirelessClientDto {
+  // RouterOS rend parfois « -63dBm@6Mbps » : on ne garde que les dBm, qui
+  // sont ce qui décide de la qualité ressentie.
+  const signal = String(raw?.['signal-strength'] ?? '').match(/-?\d+/);
+
+  return {
+    id: raw?.['.id'] ?? '',
+    interfaceName: raw?.interface ?? '',
+    macAddress: raw?.['mac-address'] ?? '',
+    signalStrengthDbm: signal ? Number(signal[0]) : null,
+    txRate: raw?.['tx-rate'] ?? null,
+    rxRate: raw?.['rx-rate'] ?? null,
+    uptimeSeconds: raw?.uptime != null ? parseRouterOsDuration(raw.uptime) : null,
+  };
+}
+
+export function mapRadiusClient(raw: any): RadiusClientDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    // RouterOS met les services dans une seule chaîne séparée par des virgules.
+    services: String(raw?.service ?? '')
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter(Boolean),
+    address: raw?.address ?? '',
+    authenticationPort: raw?.['authentication-port'] != null ? Number(raw['authentication-port']) : null,
+    accountingPort: raw?.['accounting-port'] != null ? Number(raw['accounting-port']) : null,
+    disabled: flag(raw?.disabled),
+    timeout: raw?.timeout ?? null,
   };
 }

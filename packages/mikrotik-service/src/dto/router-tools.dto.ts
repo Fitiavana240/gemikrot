@@ -231,3 +231,64 @@ export interface RouteDto {
   dhcp: boolean;
   comment: string | null;
 }
+
+/**
+ * Une radio du routeur.
+ *
+ * Distinguer `disabled` de `running` est tout l'intérêt : une radio peut être
+ * activée sans émettre. Relevé sur ce parc — les deux radios du hAP sont
+ * activées, `running` à faux, et le Wi-Fi vient en réalité de bornes
+ * externes branchées sur `ether2` à `ether5`. La console laissait croire que
+ * le routeur diffusait lui-même.
+ */
+export interface WirelessInterfaceDto {
+  id: string;
+  name: string;
+  ssid: string;
+  /** « 2ghz-b/g/n », « 5ghz-a/n/ac » : la bande telle que RouterOS la nomme. */
+  band: string;
+  channelWidth: string;
+  /** « auto » ou une fréquence en MHz. */
+  frequency: string;
+  mode: string;
+  /** Vrai quand la radio émet réellement, par opposition à simplement activée. */
+  running: boolean;
+  disabled: boolean;
+  hideSsid: boolean;
+  macAddress: string;
+  securityProfile: string;
+  country: string;
+  /** Puissance d'émission en dBm quand elle est fixée ; `null` si automatique. */
+  txPowerDbm: number | null;
+}
+
+/** Un client associé à une radio, avec la qualité de sa liaison. */
+export interface WirelessClientDto {
+  id: string;
+  interfaceName: string;
+  macAddress: string;
+  /** dBm : au-delà de -70 la liaison se dégrade, au-delà de -80 elle ne tient plus. */
+  signalStrengthDbm: number | null;
+  txRate: string | null;
+  rxRate: string | null;
+  uptimeSeconds: number | null;
+}
+
+/**
+ * Le client RADIUS du routeur.
+ *
+ * C'est la pièce qui relie le HotSpot à User Manager : sans entrée active
+ * pour le service `hotspot`, aucun ticket n'est vérifié, quoi que porte la
+ * base des comptes. Sur ce parc elle pointe sur `127.0.0.1` — User Manager
+ * tourne sur le routeur lui-même.
+ */
+export interface RadiusClientDto {
+  id: string;
+  /** Les services que cette entrée sert : `hotspot`, `ppp`, `login`… */
+  services: string[];
+  address: string;
+  authenticationPort: number | null;
+  accountingPort: number | null;
+  disabled: boolean;
+  timeout: string | null;
+}

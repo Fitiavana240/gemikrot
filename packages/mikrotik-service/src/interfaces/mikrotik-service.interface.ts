@@ -80,6 +80,9 @@ import {
   NetworkInterfaceStatsDto,
   RouterLogEntryDto,
   SimpleQueueDto,
+  WirelessInterfaceDto,
+  WirelessClientDto,
+  RadiusClientDto,
 } from '../dto/router-tools.dto';
 
 /**
@@ -298,6 +301,11 @@ export interface IMikrotikService {
   // Manager finit sur une cle USB. La console doit savoir dire ou vivent
   // les donnees avant qu'on l'apprenne autrement.
 
+  /** Les radios du routeur — qui ne sont pas forcément celles qui diffusent. */
+  getWirelessInterfaces(): Promise<WirelessInterfaceDto[]>;
+  getWirelessClients(): Promise<WirelessClientDto[]>;
+  /** Le client RADIUS : la pièce qui relie le HotSpot à User Manager. */
+  getRadiusClients(): Promise<RadiusClientDto[]>;
   getRouterFiles(): Promise<RouterFileDto[]>;
   /**
    * Écrit un fichier **texte** sur le routeur, ASCII et sous 61 440 octets.

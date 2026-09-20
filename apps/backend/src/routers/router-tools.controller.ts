@@ -110,6 +110,29 @@ export class RouterToolsController {
 
   // ---------- Stockage ----------
 
+  /**
+   * Les radios du routeur, et les clients qui y sont associés.
+   *
+   * Les deux ensemble : une radio sans client et un client sans radio ne se
+   * lisent pas de la même façon, et l'exploitant a besoin des deux pour
+   * savoir si le Wi-Fi vient d'ici ou d'ailleurs.
+   */
+  @Get('wireless')
+  async wireless(@Param('routerId') routerId: string) {
+    const mikrotik = await this.clients.forRouter(routerId);
+    const [radios, clients] = await Promise.all([
+      mikrotik.getWirelessInterfaces(),
+      mikrotik.getWirelessClients(),
+    ]);
+    return { radios, clients };
+  }
+
+  /** Le client RADIUS : ce qui relie le HotSpot à User Manager. */
+  @Get('radius')
+  async radius(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getRadiusClients();
+  }
+
   /** Fichiers et dossiers, toutes racines confondues. */
   @Get('files')
   async files(@Param('routerId') routerId: string) {

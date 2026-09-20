@@ -283,6 +283,10 @@ export const routerToolsApi = {
   log: (routerId: string, limit = 200) =>
     api.get<RouterLogEntry[]>(`${base(routerId)}/log?limit=${limit}`),
   interfaces: (routerId: string) => api.get<InterfaceStats[]>(`${base(routerId)}/interfaces`),
+  /** Radios et clients ensemble : l'un ne se lit pas sans l'autre. */
+  wireless: (routerId: string) =>
+    api.get<{ radios: RadioWifi[]; clients: ClientWifi[] }>(`${base(routerId)}/wireless`),
+  radius: (routerId: string) => api.get<ClientRadius[]>(`${base(routerId)}/radius`),
   services: (routerId: string) => api.get<IpService[]>(`${base(routerId)}/services`),
   cloud: (routerId: string) => api.get<IpCloud>(`${base(routerId)}/cloud`),
   arp: (routerId: string) => api.get<ArpEntry[]>(`${base(routerId)}/arp`),
@@ -311,4 +315,55 @@ export function formatBits(bits: number): string {
   if (bits >= 1_000_000) return `${(bits / 1_000_000).toFixed(bits % 1_000_000 ? 1 : 0)} Mb/s`;
   if (bits >= 1_000) return `${Math.round(bits / 1_000)} kb/s`;
   return `${bits} b/s`;
+}
+
+/**
+ * Une radio du routeur.
+ *
+ * `disabled` et `running` ne disent pas la même chose : une radio activée
+ * peut ne pas émettre. Sur ce parc, les deux radios du hAP sont dans ce cas,
+ * et le Wi-Fi vient de bornes branchées sur les ports Ethernet.
+ */
+export interface RadioWifi {
+  id: string;
+  name: string;
+  ssid: string;
+  band: string;
+  channelWidth: string;
+  frequency: string;
+  mode: string;
+  running: boolean;
+  disabled: boolean;
+  hideSsid: boolean;
+  macAddress: string;
+  securityProfile: string;
+  country: string;
+  txPowerDbm: number | null;
+}
+
+export interface ClientWifi {
+  id: string;
+  interfaceName: string;
+  macAddress: string;
+  /** dBm : au-delà de -70 la liaison se dégrade, au-delà de -80 elle lâche. */
+  signalStrengthDbm: number | null;
+  txRate: string | null;
+  rxRate: string | null;
+  uptimeSeconds: number | null;
+}
+
+/**
+ * Le client RADIUS du routeur.
+ *
+ * Sans entrée active pour le service `hotspot`, aucun ticket n'est vérifié —
+ * quoi que porte la base des comptes.
+ */
+export interface ClientRadius {
+  id: string;
+  services: string[];
+  address: string;
+  authenticationPort: number | null;
+  accountingPort: number | null;
+  disabled: boolean;
+  timeout: string | null;
 }

@@ -1194,6 +1194,40 @@ export class RouterOSMikrotikService implements IMikrotikService {
     return raw.map(ToolsMapper.mapRoute);
   }
 
+  // ---------- Sans fil et RADIUS ----------
+
+  /**
+   * Les radios du routeur.
+   *
+   * À lire en sachant que **le routeur n'est pas forcément celui qui diffuse** :
+   * sur ce parc, ses deux radios sont activées mais à l'arrêt, et le Wi-Fi
+   * vient de bornes branchées sur les ports Ethernet. Une radio « activée »
+   * qui n'émet pas n'est pas une panne, c'est un choix d'installation — mais
+   * il faut pouvoir le voir.
+   */
+  async getWirelessInterfaces() {
+    const raw = await this.client.get<any[]>('/interface/wireless');
+    return raw.map(ToolsMapper.mapWirelessInterface);
+  }
+
+  /** Les clients associés aux radios, avec la qualité de leur liaison. */
+  async getWirelessClients() {
+    const raw = await this.client.get<any[]>('/interface/wireless/registration-table');
+    return raw.map(ToolsMapper.mapWirelessClient);
+  }
+
+  /**
+   * Le client RADIUS — la pièce qui relie le HotSpot à User Manager.
+   *
+   * Sans entrée active pour le service `hotspot`, aucun ticket n'est vérifié,
+   * quoi que porte la base des comptes. C'est le genre de réglage qu'on ne
+   * regarde jamais jusqu'au jour où plus rien n'ouvre.
+   */
+  async getRadiusClients() {
+    const raw = await this.client.get<any[]>('/radius');
+    return raw.map(ToolsMapper.mapRadiusClient);
+  }
+
   // ---------- Stockage ----------
 
   async getRouterFiles() {

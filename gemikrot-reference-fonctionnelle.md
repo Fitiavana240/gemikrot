@@ -867,6 +867,48 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — Ce que le routeur porte et que la console ignorait
+
+Tout vient du routeur : la couverture des menus RouterOS est donc une mesure, pas une impression.
+Compté — **50 menus** déjà lus ou écrits par la console. Puis sondé une trentaine d'autres pour
+voir lesquels portent des données sans être couverts. Deux comptaient vraiment.
+
+**Les radios.** Une console Wi-Fi qui ne montre pas le Wi-Fi. Et ce qu'elles disent est
+inattendu :
+
+```
+wlan1  WIFI-TATI  2,4 GHz  activée  running=false
+wlan2  WIFI-TATI  5 GHz    activée  running=false   17 dBm
+```
+
+**Les deux radios du hAP n'émettent pas.** Vérifié avant de conclure à une panne, en regardant
+où passe le trafic :
+
+```
+ether1-WAN-Starlink   109,4 Go reçus          ← le lien montant
+ether5                 70,8 Go envoyés         ← les clients arrivent par là
+wlan1 / wlan2           0,2 / 0,1 Go           dans le pont, mais inactifs
+```
+
+Le Wi-Fi vient de **bornes externes** branchées sur `ether2`–`ether5` ; le hAP fait passerelle,
+portail et User Manager. C'est une installation cohérente, pas un défaut — et l'écran le dit
+ainsi : « ce n'est pas une panne si c'est voulu ». Le peindre en rouge aurait envoyé dépanner
+ce qui fonctionne.
+
+**RADIUS.** La pièce qui relie le portail aux comptes, et que rien n'affichait :
+`hotspot → 127.0.0.1:1812/1813`, actif — User Manager tourne sur le routeur lui-même. Sans
+cette entrée, **aucun ticket n'est vérifié**, quels que soient les 646 comptes enregistrés. Son
+absence est désormais signalée en rouge, parce qu'aucun autre écran ne l'expliquerait.
+
+Le nouvel onglet porte aussi la force du signal des clients sans fil, avec ses seuils : au-delà
+de −70 dBm la liaison se dégrade, au-delà de −80 elle lâche. Un client qui se plaint de lenteur
+alors que son forfait est valide se lit là avant de se chercher ailleurs.
+
+**Restent non couverts**, par ordre de valeur décroissante : `/ip/address` et
+`/interface/bridge` (la structure du réseau), `/system/routerboard` (modèle et micrologiciel),
+`/system/script` et `/system/scheduler` (ce qui tourne tout seul sur le routeur),
+`/ip/firewall/address-list`.
+
 ### 2026-09-20 — Une limitation qu'on ne pouvait modifier qu'à moitié
 
 Les champs étaient lisibles depuis le tour précédent ; restait à pouvoir les saisir. L'état de
