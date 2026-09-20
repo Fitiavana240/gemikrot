@@ -1,4 +1,5 @@
-import { Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { tenantsApi } from '../api/tenants';
@@ -57,6 +58,13 @@ function RouterSelector() {
 export function Layout() {
   const { user, logout } = useAuth();
 
+  const [ouvert, setOuvert] = useState(false);
+  const { pathname } = useLocation();
+
+  // Refermer en changeant d'écran : sur téléphone, le menu recouvre le
+  // contenu, et le laisser ouvert masquerait la page qu'on vient d'ouvrir.
+  useEffect(() => setOuvert(false), [pathname]);
+
   // Le SUPER_ADMIN n'appartient à aucun exploitant : l'appel échouerait.
   const tenant = useQuery({
     queryKey: ['tenant-me'],
@@ -65,35 +73,77 @@ export function Layout() {
     retry: false,
   });
 
+  const marque = (
+    <div className="flex items-center gap-2.5">
+      <BrandMark className="h-8 w-8 shrink-0" />
+      <div className="min-w-0 leading-tight">
+        <div className="text-base font-semibold tracking-tight text-slate-900">{APP_NAME}</div>
+        {/* Le réseau piloté, sous le nom du produit : sur plusieurs
+            exploitants ouverts côte à côte, on sait lequel on regarde. */}
+        <div className="truncate text-xs text-slate-500">
+          {user?.role === 'SUPER_ADMIN' ? 'Plateforme' : tenant.data?.wifiName ?? '…'}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex min-h-screen">
-      <aside className="w-56 shrink-0 border-r border-slate-200 bg-white p-4">
-        <div className="mb-6 flex items-center gap-2.5">
-          <BrandMark className="h-8 w-8" />
-          <div className="leading-tight">
-            <div className="text-base font-semibold tracking-tight text-slate-900">{APP_NAME}</div>
-            {/* Le réseau piloté, sous le nom du produit : sur plusieurs
-                exploitants ouverts côte à côte, on sait lequel on regarde. */}
-            <div className="truncate text-xs text-slate-500">
-              {user?.role === 'SUPER_ADMIN' ? 'Plateforme' : tenant.data?.wifiName ?? '…'}
-            </div>
-          </div>
-        </div>
+      {/*
+        Sous 1024 px, la barre latérale sort du flux et se pose par-dessus.
+        À 224 px de large, la laisser en place mangeait la moitié d'un écran
+        de téléphone et poussait les tableaux hors champ — la console devenait
+        inutilisable au comptoir, là où on s'en sert le plus.
+      */}
+      {ouvert && (
+        <button
+          type="button"
+          aria-label="Fermer le menu"
+          onClick={() => setOuvert(false)}
+          className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden"
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-56 shrink-0 overflow-y-auto border-r border-slate-200 bg-white p-4 transition-transform lg:static lg:translate-x-0 ${
+          ouvert ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="mb-6">{marque}</div>
         <SideNav role={user?.role} />
       </aside>
-      <div className="flex flex-1 flex-col">
-        <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-3">
-          <div className="flex items-center gap-4">
-            <div className="text-sm text-slate-500">
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 lg:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              aria-label="Ouvrir le menu"
+              aria-expanded={ouvert}
+              onClick={() => setOuvert(true)}
+              className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-600 hover:bg-slate-50 lg:hidden"
+            >
+              {/* Trois traits : le seul symbole de menu qu'on reconnaisse
+                  sans l'avoir appris. */}
+              <span aria-hidden className="block h-px w-4 bg-current" />
+              <span aria-hidden className="mt-1 block h-px w-4 bg-current" />
+              <span aria-hidden className="mt-1 block h-px w-4 bg-current" />
+            </button>
+            {/* L'adresse et le rôle disparaissent d'abord : ce sont les
+                informations les moins utiles au travail courant. */}
+            <div className="hidden min-w-0 truncate text-sm text-slate-500 sm:block">
               {user?.email} — <span className="font-medium text-slate-700">{user?.role}</span>
             </div>
             <RouterSelector />
           </div>
-          <button onClick={logout} className="text-sm text-slate-500 hover:text-red-600">
+          <button
+            onClick={logout}
+            className="shrink-0 text-sm text-slate-500 hover:text-red-600"
+          >
             Déconnexion
           </button>
         </header>
-        <main className="flex-1 p-6">
+        <main className="min-w-0 flex-1 p-4 lg:p-6">
           <Outlet />
         </main>
       </div>

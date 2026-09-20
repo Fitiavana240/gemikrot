@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { dashboardApi } from '../api/dashboard';
+import { telephoneAffiche } from '../api/customers';
 import { useCurrency } from '../api/money';
 import { REACHABILITY_LABEL, routersApi } from '../api/routers';
 import { useRouterSelection } from '../routers/RouterContext';
@@ -222,7 +223,15 @@ export function DashboardPage() {
                 <Link to={`/customers/${c.id}`} className="text-sky-700 hover:underline">
                   {c.name}
                 </Link>
-                <span className="text-slate-500">{c.phone}</span>
+                <span
+                  className={
+                    telephoneAffiche(c.phone).provisoire
+                      ? 'text-slate-400 italic'
+                      : 'text-slate-500'
+                  }
+                >
+                  {telephoneAffiche(c.phone).texte}
+                </span>
               </li>
             ))}
           </ul>

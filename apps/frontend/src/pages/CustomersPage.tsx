@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { customersApi, type CreateCustomerInput } from '../api/customers';
+import { customersApi, telephoneAffiche, type CreateCustomerInput } from '../api/customers';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, FormField, Input, PageHeader, Table, TableSkeleton } from '../components/ui';
@@ -91,7 +91,16 @@ export function CustomersPage() {
                   {customer.name}
                 </Link>
               </td>
-              <td className="px-3 py-2">{customer.phone}</td>
+              <td className="px-3 py-2">
+                {(() => {
+                  const t = telephoneAffiche(customer.phone);
+                  return t.provisoire ? (
+                    <span className="text-slate-400 italic">{t.texte}</span>
+                  ) : (
+                    t.texte
+                  );
+                })()}
+              </td>
               <td className="px-3 py-2 text-slate-500">{customer.email ?? '—'}</td>
               <td className="px-3 py-2">
                 <Badge tone={customer.status === 'ACTIVE' ? 'green' : 'red'}>{customer.status}</Badge>

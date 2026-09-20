@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { customersApi } from '../api/customers';
+import { customersApi, telephoneAffiche } from '../api/customers';
 import { formatMoney } from '../api/money';
 import {
   Badge,
@@ -85,7 +85,7 @@ export function CustomerSheetPage() {
     <div className="space-y-6">
       <PageHeader
         title={client.name}
-        description={`${client.phone}${client.email ? ` · ${client.email}` : ''}`}
+        description={`${telephoneAffiche(client.phone).texte}${client.email ? ` · ${client.email}` : ''}`}
         actions={
           <Link to="/customers">
             <Button variant="secondary">Retour au répertoire</Button>

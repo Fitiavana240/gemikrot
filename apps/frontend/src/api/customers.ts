@@ -57,6 +57,21 @@ export interface CustomerSheet {
   }[];
 }
 
+/**
+ * Le routeur ne stocke aucun numéro de téléphone. L'import écrit donc un
+ * identifiant provisoire de la forme `import:<compte>`, faute de mieux —
+ * mais l'afficher tel quel le fait passer pour un vrai numéro, et personne
+ * ne pense à le corriger.
+ */
+export function telephoneAffiche(phone: string | null | undefined): {
+  texte: string;
+  provisoire: boolean;
+} {
+  if (!phone) return { texte: '—', provisoire: false };
+  if (phone.startsWith('import:')) return { texte: 'à renseigner', provisoire: true };
+  return { texte: phone, provisoire: false };
+}
+
 export const customersApi = {
   list: () => api.get<Customer[]>('/customers'),
   get: (id: string) => api.get<Customer>(`/customers/${id}`),

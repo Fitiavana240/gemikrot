@@ -36,7 +36,12 @@ export function Button({
   const styles = {
     primary: 'bg-sky-600 text-white hover:bg-sky-700 disabled:bg-slate-300',
     secondary: 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50',
-    danger: 'bg-red-600 text-white hover:bg-red-700 disabled:bg-slate-300',
+    // Contour plutôt qu'aplat : une action irréversible se répète sur
+    // chaque ligne d'un tableau, et six cents boutons pleins rouges
+    // cessent d'alerter tout en fatiguant l'œil. Le rouge reste, il ne
+    // domine plus — et le geste garde sa confirmation.
+    danger:
+      'border border-red-300 bg-white text-red-700 hover:border-red-400 hover:bg-red-50 disabled:opacity-50',
   };
   const sizes: Record<UiSize, string> = {
     sm: 'rounded-md px-3 py-1.5 text-sm',
