@@ -1,36 +1,13 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { tenantsApi } from '../api/tenants';
 import { APP_NAME, BrandMark } from './Brand';
 import { useRouterSelection } from '../routers/RouterContext';
 import { REACHABILITY_LABEL } from '../api/routers';
-
-const NAV: { to: string; label: string; end?: boolean }[] = [
-  { to: '/', label: 'Dashboard', end: true },
-  { to: '/sessions', label: 'Appareils actifs' },
-  { to: '/subscriptions', label: 'Abonnements' },
-  { to: '/devices', label: 'Appareils' },
-  { to: '/plans', label: 'Offres' },
-  { to: '/customers', label: 'Clients' },
-  { to: '/vouchers', label: 'Tickets' },
-  { to: '/ticket-print', label: 'Imprimer' },
-  { to: '/ticket-templates', label: 'Modèles de ticket' },
-  { to: '/payments', label: 'Paiements' },
-  { to: '/routers', label: 'Routeurs' },
-  { to: '/hotspot', label: 'HotSpot' },
-  { to: '/user-manager', label: 'User Manager' },
-  { to: '/settings', label: 'Paramètres' },
-];
-
-/**
- * Le journal dit qui a fait quoi : le lire n'appartient pas à qui vend. Le
- * masquer dans la navigation évite d'offrir un bouton qui répondrait 403.
- */
-const ADMIN_NAV: typeof NAV = [{ to: '/audit', label: 'Journal' }];
+import { SideNav } from './SideNav';
 
 /** Le SUPER_ADMIN pilote la plateforme, pas un réseau en particulier. */
-const SUPER_ADMIN_NAV: typeof NAV = [{ to: '/tenants', label: 'Exploitants' }];
 
 /**
  * Choix du routeur sur lequel portent les écrans. Masqué quand il n'y en a
@@ -102,26 +79,7 @@ export function Layout() {
             </div>
           </div>
         </div>
-        <nav className="space-y-1">
-          {[
-            ...NAV,
-            ...(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' ? ADMIN_NAV : []),
-            ...(user?.role === 'SUPER_ADMIN' ? SUPER_ADMIN_NAV : []),
-          ].map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                `block rounded-md px-3 py-2 text-sm font-medium ${
-                  isActive ? 'bg-sky-50 text-sky-700' : 'text-slate-600 hover:bg-slate-50'
-                }`
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
+        <SideNav role={user?.role} />
       </aside>
       <div className="flex flex-1 flex-col">
         <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-3">
