@@ -107,6 +107,25 @@ export class UserManagerService {
    * ouverte par cookie n'y figure pas — elle n'est jamais passee par RADIUS,
    * et c'est exactement ce qui rend la lecture des deux necessaire.
    */
+
+  /** Clients RADIUS declares. Le secret partage ne sort jamais du paquet. */
+  async routers(routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    return mikrotik.getUmRouters();
+  }
+
+  /** Groupes d'authentification : methodes acceptees dedans et dehors. */
+  async userGroups(routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    return mikrotik.getUmUserGroups();
+  }
+
+  /** Attributs RADIUS connus du routeur, standards et constructeurs. */
+  async attributes(routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    return mikrotik.getUmAttributes();
+  }
+
   async sessions(username?: string, routerId?: string) {
     const mikrotik = await this.client(routerId);
     return mikrotik.getUserManagerSessions(username);

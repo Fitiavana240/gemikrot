@@ -137,6 +137,18 @@ export class HotspotService {
     });
   }
 
+  /** Profils de serveur : c'est la que vit `login-by` et la duree des cookies. */
+  async serverProfiles(routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    return mikrotik.getHotspotServerProfiles();
+  }
+
+  /** Protocoles dont le HotSpot suit les connexions (`ftp`, `sip`...). */
+  async servicePorts(routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    return mikrotik.getHotspotServicePorts();
+  }
+
   async overview(routerId?: string) {
     const mikrotik = await this.client(routerId);
     const [servers, profiles, cookies, active] = await Promise.all([

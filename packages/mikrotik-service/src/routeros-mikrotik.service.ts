@@ -5,6 +5,7 @@ import * as RouterMapper from './mappers/router.mapper';
 import * as HotspotMapper from './mappers/hotspot.mapper';
 import * as UmMapper from './mappers/user-manager.mapper';
 import * as PppMapper from './mappers/ppp.mapper';
+import * as ConfigMapper from './mappers/router-config.mapper';
 import { validate } from './validation/validate';
 import {
   assignProfileSchema,
@@ -924,6 +925,36 @@ export class RouterOSMikrotikService implements IMikrotikService {
   private async findPppSecretByUsername(username: string) {
     const secrets = await this.getPppSecrets();
     return secrets.find((secret) => secret.username === username) ?? null;
+  }
+
+
+  // ---------- Tables de configuration ----------
+
+  /**
+   * Clients RADIUS de User Manager.
+   *
+   * Le secret partage est retire par la correspondance, pas ici : le retirer
+   * au plus pres de la lecture garantit qu'aucun appelant ne le voit, quelle
+   * que soit la facon dont il obtient la liste.
+   */
+  async getUmRouters() {
+    const raw = await this.client.get<any[]>('/user-manager/router');
+    return raw.map(ConfigMapper.mapUmRouter);
+  }
+
+  async getUmUserGroups() {
+    const raw = await this.client.get<any[]>('/user-manager/user/group');
+    return raw.map(ConfigMapper.mapUmUserGroup);
+  }
+
+  async getUmAttributes() {
+    const raw = await this.client.get<any[]>('/user-manager/attribute');
+    return raw.map(ConfigMapper.mapUmAttribute);
+  }
+
+  async getHotspotServicePorts() {
+    const raw = await this.client.get<any[]>('/ip/hotspot/service-port');
+    return raw.map(ConfigMapper.mapHotspotServicePort);
   }
 
 }

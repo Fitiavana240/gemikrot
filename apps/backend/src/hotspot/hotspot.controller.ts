@@ -73,6 +73,18 @@ export class HotspotController {
     return this.hotspot.deleteUser(username, user.id, routerId);
   }
 
+  /** Profils de serveur : `login-by` et duree de vie des cookies. */
+  @Get('server-profiles')
+  serverProfiles(@Query('routerId') routerId?: string) {
+    return this.hotspot.serverProfiles(routerId);
+  }
+
+  /** Ports applicatifs suivis par le HotSpot. */
+  @Get('service-ports')
+  servicePorts(@Query('routerId') routerId?: string) {
+    return this.hotspot.servicePorts(routerId);
+  }
+
   @Get('walled-garden')
   walledGarden(@Query('routerId') routerId?: string) {
     return this.hotspot.getWalledGarden(routerId);

@@ -112,11 +112,65 @@ export function formatOctets(octets: number): string {
   return `${valeur.toFixed(rang === 0 ? 0 : 1)} ${unites[rang]}`;
 }
 
+/** Un client RADIUS declare. Le secret partage ne sort jamais du serveur. */
+export interface UmRouter {
+  id: string;
+  name: string;
+  address: string;
+  protocol: string;
+  coaPort: number | null;
+  disabled: boolean;
+  /** Seule la presence du secret est exposee, jamais sa valeur. */
+  hasSharedSecret: boolean;
+}
+
+export interface UmUserGroup {
+  id: string;
+  name: string;
+  outerAuths: string[];
+  innerAuths: string[];
+  attributes: string | null;
+  isDefault: boolean;
+}
+
+export interface UmAttribute {
+  id: string;
+  name: string;
+  standardName: string | null;
+  typeId: number | null;
+  valueType: string | null;
+  vendorId: string | null;
+  packetTypes: string[];
+  isDefault: boolean;
+}
+
+export interface HotspotServerProfile {
+  id: string;
+  name: string;
+  /** Methodes acceptees. `cookie` est la porte par laquelle un acces coupe revit. */
+  loginBy: string[];
+  httpCookieLifetimeSeconds: number | null;
+  useRadius: boolean;
+  dnsName: string | null;
+  hotspotAddress: string | null;
+}
+
+export interface HotspotServicePort {
+  id: string;
+  name: string;
+  ports: string;
+  disabled: boolean;
+}
+
 export const hotspotTabsApi = {
   users: (routerId?: string) => api.get<HotspotUser[]>(`/hotspot/users${q(routerId)}`),
   profiles: (routerId?: string) => api.get<HotspotProfile[]>(`/hotspot/profiles${q(routerId)}`),
   hosts: (routerId?: string) => api.get<HotspotHost[]>(`/hotspot/hosts${q(routerId)}`),
   ipBindings: (routerId?: string) => api.get<IpBinding[]>(`/hotspot/ip-bindings${q(routerId)}`),
+  serverProfiles: (routerId?: string) =>
+    api.get<HotspotServerProfile[]>(`/hotspot/server-profiles${q(routerId)}`),
+  servicePorts: (routerId?: string) =>
+    api.get<HotspotServicePort[]>(`/hotspot/service-ports${q(routerId)}`),
   dhcpLeases: (routerId?: string) => api.get<DhcpLease[]>(`/hotspot/dhcp-leases${q(routerId)}`),
   /** Bloque ou reactive un compte sans le supprimer : l'historique reste. */
   setUserDisabled: (username: string, disabled: boolean, routerId?: string) =>
@@ -128,6 +182,11 @@ export const hotspotTabsApi = {
 };
 
 export const umTabsApi = {
+  routers: (routerId?: string) => api.get<UmRouter[]>(`/user-manager/routers${q(routerId)}`),
+  userGroups: (routerId?: string) =>
+    api.get<UmUserGroup[]>(`/user-manager/user-groups${q(routerId)}`),
+  attributes: (routerId?: string) =>
+    api.get<UmAttribute[]>(`/user-manager/attributes${q(routerId)}`),
   sessions: (routerId?: string, username?: string) =>
     api.get<UmSession[]>(`/user-manager/sessions${q(routerId, { username: username ?? '' })}`),
   assignments: (routerId?: string, username?: string) =>

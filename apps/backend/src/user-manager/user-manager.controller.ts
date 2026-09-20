@@ -28,6 +28,24 @@ export class UserManagerController {
   // ---------- Profils ----------
 
   /** Historique des authentifications RADIUS. Filtrable par compte. */
+  /** Clients RADIUS declares. Le secret partage n'est jamais rendu. */
+  @Get('routers')
+  routers(@Query('routerId') routerId?: string) {
+    return this.userManager.routers(routerId);
+  }
+
+  /** Groupes d'authentification. */
+  @Get('user-groups')
+  userGroups(@Query('routerId') routerId?: string) {
+    return this.userManager.userGroups(routerId);
+  }
+
+  /** Attributs RADIUS connus du routeur. */
+  @Get('attributes')
+  attributes(@Query('routerId') routerId?: string) {
+    return this.userManager.attributes(routerId);
+  }
+
   @Get('sessions')
   sessions(@Query('username') username?: string, @Query('routerId') routerId?: string) {
     return this.userManager.sessions(username, routerId);

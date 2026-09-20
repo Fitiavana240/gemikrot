@@ -404,3 +404,213 @@ export function UmAssignmentsTab() {
     </div>
   );
 }
+
+
+export function HotspotServerProfilesTab() {
+  const { currentId } = useRouterSelection();
+  const requête = useQuery({
+    queryKey: ['hotspot-server-profiles', currentId],
+    queryFn: () => hotspotTabsApi.serverProfiles(currentId),
+  });
+
+  return (
+    <div className="space-y-3">
+      <p className="max-w-3xl text-sm text-slate-600">
+        Le profil de serveur décide <em>comment</em> un client s'authentifie. La ligne qui compte
+        est <code>login-by</code> : tant qu'elle contient <code>cookie</code>, un client déjà venu
+        se reconnecte sans repasser par RADIUS — donc sans que sa validité soit vérifiée.
+      </p>
+      <Liste
+        requête={requête}
+        colonnes={['Profil', "Méthodes d'entrée", 'Durée des cookies', 'RADIUS', 'Adresse']}
+        vide={{ titre: 'Aucun profil de serveur' }}
+        ligne={(p) => (
+          <tr key={p.id}>
+            <td className="px-3 py-2 font-medium">{p.name}</td>
+            <td className="px-3 py-2">
+              <span className="flex flex-wrap gap-1">
+                {p.loginBy.map((m) => (
+                  // Le cookie est signalé : c'est lui qui rouvre un accès coupé.
+                  <Badge key={m} tone={m.includes('cookie') ? 'amber' : 'slate'}>
+                    {m}
+                  </Badge>
+                ))}
+              </span>
+            </td>
+            <td className="px-3 py-2 tabular-nums text-slate-500">
+              {formatDuree(p.httpCookieLifetimeSeconds)}
+            </td>
+            <td className="px-3 py-2">
+              <Badge tone={p.useRadius ? 'green' : 'red'}>{p.useRadius ? 'oui' : 'non'}</Badge>
+            </td>
+            <td className="px-3 py-2 font-mono text-xs text-slate-500">
+              {p.hotspotAddress ?? p.dnsName ?? '—'}
+            </td>
+          </tr>
+        )}
+      />
+    </div>
+  );
+}
+
+export function HotspotServicePortsTab() {
+  const { currentId } = useRouterSelection();
+  const requête = useQuery({
+    queryKey: ['hotspot-service-ports', currentId],
+    queryFn: () => hotspotTabsApi.servicePorts(currentId),
+  });
+
+  return (
+    <div className="space-y-3">
+      <p className="max-w-3xl text-sm text-slate-600">
+        Les protocoles dont le HotSpot suit les connexions pour les faire passer correctement au
+        travers du portail. Rarement touché : on y vient quand un usage précis ne passe pas.
+      </p>
+      <Liste
+        requête={requête}
+        colonnes={['Protocole', 'Ports', 'État']}
+        vide={{ titre: 'Aucun port de service' }}
+        ligne={(p) => (
+          <tr key={p.id}>
+            <td className="px-3 py-2 font-medium">{p.name}</td>
+            <td className="px-3 py-2 font-mono text-xs">{p.ports || '—'}</td>
+            <td className="px-3 py-2">
+              <Badge tone={p.disabled ? 'slate' : 'green'}>
+                {p.disabled ? 'désactivé' : 'actif'}
+              </Badge>
+            </td>
+          </tr>
+        )}
+      />
+    </div>
+  );
+}
+
+export function UmRoutersTab() {
+  const { currentId } = useRouterSelection();
+  const requête = useQuery({
+    queryKey: ['um-routers', currentId],
+    queryFn: () => umTabsApi.routers(currentId),
+  });
+
+  return (
+    <div className="space-y-3">
+      <p className="max-w-3xl text-sm text-slate-600">
+        Les équipements autorisés à interroger ce serveur RADIUS. Sur un parc mono-routeur, le
+        routeur s'y déclare lui-même en boucle locale.
+      </p>
+      <Liste
+        requête={requête}
+        colonnes={['Nom', 'Adresse', 'Protocole', 'Port de changement', 'Secret', 'État']}
+        vide={{ titre: 'Aucun client RADIUS déclaré' }}
+        ligne={(r) => (
+          <tr key={r.id}>
+            <td className="px-3 py-2 font-medium">{r.name}</td>
+            <td className="px-3 py-2 font-mono text-xs">{r.address}</td>
+            <td className="px-3 py-2 text-slate-500">{r.protocol}</td>
+            <td className="px-3 py-2 tabular-nums text-slate-500">{r.coaPort ?? '—'}</td>
+            <td className="px-3 py-2">
+              {/* La valeur du secret ne quitte jamais le serveur : seule sa
+                  présence est rendue. */}
+              <Badge tone={r.hasSharedSecret ? 'green' : 'red'}>
+                {r.hasSharedSecret ? 'posé' : 'absent'}
+              </Badge>
+            </td>
+            <td className="px-3 py-2">
+              <Badge tone={r.disabled ? 'slate' : 'green'}>
+                {r.disabled ? 'désactivé' : 'actif'}
+              </Badge>
+            </td>
+          </tr>
+        )}
+      />
+    </div>
+  );
+}
+
+export function UmUserGroupsTab() {
+  const { currentId } = useRouterSelection();
+  const requête = useQuery({
+    queryKey: ['um-user-groups', currentId],
+    queryFn: () => umTabsApi.userGroups(currentId),
+  });
+
+  return (
+    <div className="space-y-3">
+      <p className="max-w-3xl text-sm text-slate-600">
+        Les méthodes d'authentification acceptées. « Extérieur » vaut pour l'échange direct,
+        « intérieur » pour ce qui passe dans un tunnel chiffré.
+      </p>
+      <Liste
+        requête={requête}
+        colonnes={['Groupe', 'Extérieur', 'Intérieur', 'Origine']}
+        vide={{ titre: "Aucun groupe d'authentification" }}
+        ligne={(g) => (
+          <tr key={g.id}>
+            <td className="px-3 py-2 font-medium">{g.name}</td>
+            <td className="max-w-xs px-3 py-2 text-xs text-slate-600">
+              {g.outerAuths.join(', ') || '—'}
+            </td>
+            <td className="max-w-xs px-3 py-2 text-xs text-slate-600">
+              {g.innerAuths.join(', ') || '—'}
+            </td>
+            <td className="px-3 py-2">
+              {/* Un groupe livré avec RouterOS ne se supprime pas : le dire
+                  évite de proposer une action qui échouera. */}
+              <Badge tone={g.isDefault ? 'slate' : 'green'}>
+                {g.isDefault ? 'fourni' : 'créé ici'}
+              </Badge>
+            </td>
+          </tr>
+        )}
+      />
+    </div>
+  );
+}
+
+export function UmAttributesTab() {
+  const { currentId } = useRouterSelection();
+  const requête = useQuery({
+    queryKey: ['um-attributes', currentId],
+    queryFn: () => umTabsApi.attributes(currentId),
+  });
+  const { terme, setTerme, filtrés } = useFiltre(requête.data, (a) => [a.name, a.standardName]);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-3xl text-sm text-slate-600">
+          Le vocabulaire que RADIUS sait échanger. On le consulte pour savoir ce qu'un profil
+          peut imposer à une session — rarement pour le modifier.
+        </p>
+        <span className="shrink-0 text-sm text-slate-500">{filtrés.length} attribut(s)</span>
+      </div>
+      <Input
+        value={terme}
+        onChange={(e) => setTerme(e.target.value)}
+        placeholder="Filtrer par nom"
+        className="max-w-sm"
+      />
+      <Liste
+        requête={{ ...requête, data: filtrés }}
+        colonnes={['Attribut', 'Numéro', 'Genre', 'Paquets', 'Origine']}
+        vide={{ titre: 'Aucun attribut' }}
+        ligne={(a) => (
+          <tr key={a.id}>
+            <td className="px-3 py-2 font-medium">{a.name}</td>
+            <td className="px-3 py-2 tabular-nums text-slate-500">{a.typeId ?? '—'}</td>
+            <td className="px-3 py-2 text-slate-500">{a.valueType ?? '—'}</td>
+            <td className="max-w-xs truncate px-3 py-2 text-xs text-slate-500">
+              {a.packetTypes.join(', ') || '—'}
+            </td>
+            <td className="px-3 py-2">
+              <Badge tone={a.vendorId ? 'amber' : 'slate'}>
+                {a.vendorId ? `constructeur ${a.vendorId}` : 'standard'}
+              </Badge>
+            </td>
+          </tr>
+        )}
+      />
+    </div>
+  );
+}

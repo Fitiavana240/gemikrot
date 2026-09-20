@@ -16,18 +16,30 @@ import { useRouterSelection } from '../routers/RouterContext';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, FormField, Input, PageHeader, Select, Table } from '../components/ui';
-import { UmAssignmentsTab, UmSessionsTab } from './RouterTabs';
+import {
+  UmAssignmentsTab,
+  UmAttributesTab,
+  UmRoutersTab,
+  UmSessionsTab,
+  UmUserGroupsTab,
+} from './RouterTabs';
+import { TabBar, type TabDef } from '../components/TabBar';
 
-/** Un onglet par table de User Manager. */
+/** Un onglet par table de User Manager, dans l'ordre de WinBox. */
 const ONGLETS = {
+  routeurs: { titre: 'Routeurs RADIUS', rendu: () => <UmRoutersTab /> },
   comptes: { titre: 'Comptes', rendu: () => <AccountsTab /> },
-  profils: { titre: 'Profils', rendu: () => <ProfilesTab /> },
-  limitations: { titre: 'Limitations', rendu: () => <LimitationsTab /> },
-  attributions: { titre: 'Attributions', rendu: () => <UmAssignmentsTab /> },
+  groupes: { titre: "Groupes d'authentification", rendu: () => <UmUserGroupsTab /> },
   sessions: { titre: 'Sessions', rendu: () => <UmSessionsTab /> },
+  profils: { titre: 'Profils', rendu: () => <ProfilesTab /> },
+  attributions: { titre: 'Attributions', rendu: () => <UmAssignmentsTab /> },
+  limitations: { titre: 'Limitations', rendu: () => <LimitationsTab /> },
+  attributs: { titre: 'Attributs RADIUS', rendu: () => <UmAttributesTab /> },
 } as const;
 
 type Tab = keyof typeof ONGLETS;
+
+const BARRE: TabDef[] = Object.entries(ONGLETS).map(([to, { titre }]) => ({ to, label: titre }));
 
 const SOURCE_LABEL: Record<AccountSource, { label: string; tone: 'green' | 'amber' | 'slate' }> = {
   ABONNEMENT: { label: 'Abonnement', tone: 'green' },
@@ -36,19 +48,20 @@ const SOURCE_LABEL: Record<AccountSource, { label: string; tone: 'green' | 'ambe
 };
 
 /**
- * L'onglet vient de l'adresse : chaque table est atteignable par le menu,
- * partageable par son lien, et le retour arrière fait ce qu'on attend.
+ * L'onglet vient de l'adresse : chaque table est atteignable par son lien,
+ * et le retour arrière du navigateur fait ce qu'on attend.
  */
 export function UserManagerPage() {
   const { tab } = useParams();
   const courant: Tab = tab && tab in ONGLETS ? (tab as Tab) : 'comptes';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
-        title={`User Manager — ${ONGLETS[courant].titre}`}
+        title="User Manager"
         description="Ce que porte réellement le routeur. La validité y est calendaire : elle continue de s'appliquer, même cette console fermée."
       />
+      <TabBar base="/user-manager" tabs={BARRE} />
       {ONGLETS[courant].rendu()}
     </div>
   );

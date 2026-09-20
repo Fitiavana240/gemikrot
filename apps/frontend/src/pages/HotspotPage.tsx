@@ -10,39 +10,46 @@ import { Badge, Button, Card, FormField, Input, PageHeader, Table } from '../com
 import {
   HotspotHostsTab,
   HotspotProfilesTab,
+  HotspotServerProfilesTab,
+  HotspotServicePortsTab,
   HotspotUsersTab,
   IpBindingsTab,
 } from './RouterTabs';
+import { TabBar, type TabDef } from '../components/TabBar';
 
-/** Un onglet par table de `IP / Hotspot` dans WinBox. */
+/** Un onglet par table de `IP / Hotspot` dans WinBox, dans le même ordre. */
 const ONGLETS = {
   serveurs: { titre: 'Serveurs', rendu: () => <ServersTab /> },
-  comptes: { titre: 'Comptes HotSpot', rendu: () => <HotspotUsersTab /> },
-  profils: { titre: 'Profils HotSpot', rendu: () => <HotspotProfilesTab /> },
+  'profils-serveur': { titre: 'Profils de serveur', rendu: () => <HotspotServerProfilesTab /> },
+  comptes: { titre: 'Comptes', rendu: () => <HotspotUsersTab /> },
+  profils: { titre: 'Profils de compte', rendu: () => <HotspotProfilesTab /> },
+  sessions: { titre: 'Sessions actives', rendu: () => <SessionsTab /> },
   hotes: { titre: 'Hôtes', rendu: () => <HotspotHostsTab /> },
   liaisons: { titre: 'Liaisons IP', rendu: () => <IpBindingsTab /> },
+  'ports-service': { titre: 'Ports de service', rendu: () => <HotspotServicePortsTab /> },
   'walled-garden': { titre: 'Walled Garden', rendu: () => <WalledGardenTab /> },
   cookies: { titre: 'Cookies', rendu: () => <CookiesTab /> },
-  sessions: { titre: 'Sessions', rendu: () => <SessionsTab /> },
 } as const;
 
 type Tab = keyof typeof ONGLETS;
 
+const BARRE: TabDef[] = Object.entries(ONGLETS).map(([to, { titre }]) => ({ to, label: titre }));
+
 /**
  * L'onglet vient de l'adresse et non d'un état local : chaque table est
- * atteignable par le menu, partageable par son lien, et le retour arrière du
- * navigateur fait ce qu'on attend.
+ * partageable par son lien, et le retour arrière fait ce qu'on attend.
  */
 export function HotspotPage() {
   const { tab } = useParams();
   const courant: Tab = tab && tab in ONGLETS ? (tab as Tab) : 'serveurs';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
-        title={`HotSpot — ${ONGLETS[courant].titre}`}
+        title="HotSpot"
         description="La configuration telle qu'elle vit sur le routeur. Rien n'en est recopié ici : ces réglages lui appartiennent, pas au suivi commercial."
       />
+      <TabBar base="/hotspot" tabs={BARRE} />
       {ONGLETS[courant].rendu()}
     </div>
   );

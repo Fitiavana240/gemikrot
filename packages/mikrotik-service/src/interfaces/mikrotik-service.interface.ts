@@ -55,6 +55,12 @@ import {
   PppSecretDto,
   PppoeServerDto,
 } from '../dto/ppp.dto';
+import {
+  HotspotServicePortDto,
+  UmAttributeDto,
+  UmRouterDto,
+  UmUserGroupDto,
+} from '../dto/router-config.dto';
 
 /**
  * Contrat UNIQUE par lequel le reste du backend (services métier,
@@ -213,5 +219,20 @@ export interface IMikrotikService {
   setPppSecretDisabled(username: string, disabled: boolean): Promise<PppSecretDto>;
   deletePppSecret(username: string): Promise<void>;
   disconnectPppActive(id: string): Promise<void>;
+
+  // ---------- Tables de configuration ----------
+  //
+  // Ce que WinBox montre et que la console ignorait. Lecture seule pour
+  // l'instant : les modifier suppose de comprendre ce qu'on casse, et le
+  // relevé des charges utiles ne dit pas encore quelles ecritures sont sures.
+
+  /** Clients RADIUS declares dans User Manager. Le secret ne sort jamais. */
+  getUmRouters(): Promise<UmRouterDto[]>;
+  /** Groupes d'authentification : methodes acceptees dedans et dehors. */
+  getUmUserGroups(): Promise<UmUserGroupDto[]>;
+  /** Attributs RADIUS connus, standards et constructeurs. */
+  getUmAttributes(): Promise<UmAttributeDto[]>;
+  /** Protocoles dont le HotSpot suit les connexions (`ftp`, `sip`...). */
+  getHotspotServicePorts(): Promise<HotspotServicePortDto[]>;
 }
 

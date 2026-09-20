@@ -56,6 +56,12 @@ import {
   PppoeServerDto,
 } from '../../src/dto/ppp.dto';
 import { CreatePppSecretDto } from '../../src/dto/commands.dto';
+import {
+  HotspotServicePortDto,
+  UmAttributeDto,
+  UmRouterDto,
+  UmUserGroupDto,
+} from '../../src/dto/router-config.dto';
 import { MikrotikConflictError, MikrotikNotFoundError } from '../../src/errors/mikrotik.errors';
 
 /**
@@ -724,6 +730,27 @@ export class MockMikrotikService implements IMikrotikService {
 
   async disconnectPppActive(id: string): Promise<void> {
     this.pppActive = this.pppActive.filter((s) => s.id !== id);
+  }
+
+  // ---------- Tables de configuration ----------
+  //
+  // Vides par defaut : aucun test existant n'en depend, et un simulacre qui
+  // invente des lignes ferait passer pour verifie ce qui ne l'est pas.
+
+  async getUmRouters(): Promise<UmRouterDto[]> {
+    return [];
+  }
+
+  async getUmUserGroups(): Promise<UmUserGroupDto[]> {
+    return [];
+  }
+
+  async getUmAttributes(): Promise<UmAttributeDto[]> {
+    return [];
+  }
+
+  async getHotspotServicePorts(): Promise<HotspotServicePortDto[]> {
+    return [];
   }
 
   // ---------- Aides de test ----------

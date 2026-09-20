@@ -61,31 +61,19 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    // Les onglets de `IP / Hotspot` dans WinBox, un par un. Les regrouper
-    // sous un seul écran obligeait à deviner ce qu'il contenait ; les nommer
-    // ici rend la table cherchée atteignable en un clic.
-    id: 'hotspot',
-    label: 'HotSpot',
+    id: 'mikrotik',
+    label: 'Configuration MikroTik',
     items: [
-      { to: '/hotspot/serveurs', label: 'Serveurs', hint: 'Serveurs et profils de serveur' },
-      { to: '/hotspot/comptes', label: 'Comptes', hint: 'La table du HotSpot lui-même' },
-      { to: '/hotspot/profils', label: 'Profils', hint: 'Débit et durée de session' },
-      { to: '/hotspot/hotes', label: 'Hôtes', hint: 'Tout ce que le routeur voit sur le réseau' },
-      { to: '/hotspot/liaisons', label: 'Liaisons IP', hint: 'Contournements et blocages par MAC' },
-      { to: '/hotspot/walled-garden', label: 'Walled Garden', hint: 'Ce qu\'on joint sans payer' },
-      { to: '/hotspot/cookies', label: 'Cookies', hint: 'Le trou par lequel un accès coupé revit' },
-      { to: '/hotspot/sessions', label: 'Sessions', hint: 'Sessions HotSpot en cours' },
-    ],
-  },
-  {
-    id: 'user-manager',
-    label: 'User Manager',
-    items: [
-      { to: '/user-manager/comptes', label: 'Comptes', hint: 'Les comptes vendus' },
-      { to: '/user-manager/profils', label: 'Profils', hint: 'Validité calendaire et prix' },
-      { to: '/user-manager/limitations', label: 'Limitations', hint: 'Débit, volume, durée' },
-      { to: '/user-manager/attributions', label: 'Attributions', hint: 'Où vit l\'échéance réelle' },
-      { to: '/user-manager/sessions', label: 'Sessions', hint: 'Ce que RADIUS a vu' },
+      {
+        to: '/hotspot',
+        label: 'HotSpot',
+        hint: 'Serveurs, comptes, hôtes, walled garden, cookies',
+      },
+      {
+        to: '/user-manager',
+        label: 'User Manager',
+        hint: 'Comptes, profils, limitations, sessions, RADIUS',
+      },
     ],
   },
   {
