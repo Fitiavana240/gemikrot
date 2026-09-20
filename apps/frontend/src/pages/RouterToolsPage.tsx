@@ -1,7 +1,13 @@
+import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { formatBits, routerToolsApi } from '../api/router-tools';
-import { formatOctets } from '../api/mikrotik-tabs';
+import {
+  formatBits,
+  routerToolsApi,
+  type FirewallRule,
+  type NiveauConstat,
+} from '../api/router-tools';
+import { formatDuree, formatOctets } from '../api/mikrotik-tabs';
 import { useRouterSelection } from '../routers/RouterContext';
 import { TabBar, type TabDef } from '../components/TabBar';
 import {
@@ -339,12 +345,534 @@ function AppareilsTab() {
   );
 }
 
+function TableFirewall({
+  requête,
+  intro,
+}: {
+  requête: ReturnType<typeof useQuery<FirewallRule[]>>;
+  intro: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="max-w-3xl text-sm text-slate-600">{intro}</p>
+      <Liste
+        requête={requête}
+        colonnes={['#', 'Chaîne', 'Action', 'Condition', 'Trafic', 'Origine']}
+        vide={{
+          titre: 'Aucune règle',
+          aide: "La chaîne est vide : tout passe, rien n'est filtré.",
+        }}
+        ligne={(r) => {
+          const condition = [
+            r.protocol,
+            r.srcAddress && `de ${r.srcAddress}`,
+            r.dstAddress && `vers ${r.dstAddress}`,
+            r.dstPort && `port ${r.dstPort}`,
+            r.inInterface && `entrant ${r.inInterface}`,
+            r.outInterface && `sortant ${r.outInterface}`,
+          ]
+            .filter(Boolean)
+            .join(' · ');
+
+          return (
+            <tr key={r.id} className={r.disabled ? 'opacity-50' : undefined}>
+              {/* La position est l'information la plus importante d'une règle :
+                  la première qui correspond décide. */}
+              <td className="px-3 py-2 tabular-nums text-slate-400">{r.position}</td>
+              <td className="px-3 py-2 font-mono text-xs">{r.chain}</td>
+              <td className="px-3 py-2">
+                <span className="font-medium">{r.action}</span>
+                {r.jumpTarget && (
+                  <span className="ml-1 font-mono text-xs text-slate-500">→ {r.jumpTarget}</span>
+                )}
+              </td>
+              <td className="max-w-[20rem] truncate px-3 py-2 text-xs text-slate-500">
+                {condition || <span className="text-slate-300">tout</span>}
+                {r.comment && <span className="ml-1 italic text-slate-400">— {r.comment}</span>}
+              </td>
+              <td className="px-3 py-2 tabular-nums text-slate-500">{formatOctets(r.bytes)}</td>
+              <td className="px-3 py-2">
+                {r.hotspot ? (
+                  <Badge tone="slate">HotSpot</Badge>
+                ) : r.dynamic ? (
+                  <Badge tone="slate">automatique</Badge>
+                ) : (
+                  <Badge tone="green">posée à la main</Badge>
+                )}
+              </td>
+            </tr>
+          );
+        }}
+      />
+    </div>
+  );
+}
+
+function PareFeuTab() {
+  const { currentId } = useRouterSelection();
+  const [chaîne, setChaîne] = useState<'filter' | 'nat'>('filter');
+
+  const filtre = useQuery({
+    queryKey: ['tools-fw-filter', currentId],
+    queryFn: () => routerToolsApi.firewallFilter(currentId!),
+    enabled: Boolean(currentId) && chaîne === 'filter',
+  });
+  const nat = useQuery({
+    queryKey: ['tools-fw-nat', currentId],
+    queryFn: () => routerToolsApi.firewallNat(currentId!),
+    enabled: Boolean(currentId) && chaîne === 'nat',
+  });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-1 rounded-lg bg-slate-100 p-1 text-sm">
+        {(
+          [
+            ['filter', 'Filtrage'],
+            ['nat', 'Traduction (NAT)'],
+          ] as const
+        ).map(([clé, libellé]) => (
+          <button
+            key={clé}
+            type="button"
+            onClick={() => setChaîne(clé)}
+            className={`rounded-md px-3 py-1.5 font-medium transition ${
+              chaîne === clé ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            {libellé}
+          </button>
+        ))}
+      </div>
+
+      {chaîne === 'filter' ? (
+        <TableFirewall
+          requête={filtre}
+          intro={
+            <>
+              Ce que le routeur laisse passer, et dans quel ordre. La colonne <strong>#</strong> est
+              la plus importante : la <em>première</em> règle qui correspond décide, les suivantes
+              ne sont jamais lues. Les règles marquées <em>HotSpot</em> sont refaites par le portail
+              à chaque démarrage — les modifier à la main ne tient pas.
+            </>
+          }
+        />
+      ) : (
+        <TableFirewall
+          requête={nat}
+          intro={
+            <>
+              La traduction d'adresses. C'est ici que vit la redirection vers le portail captif —
+              la règle <code className="rounded bg-slate-100 px-1">dstnat</code> qui détourne le
+              trafic des clients non authentifiés — et le{' '}
+              <code className="rounded bg-slate-100 px-1">masquerade</code> qui fait sortir tout le
+              monde derrière l'adresse du fournisseur.
+            </>
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function DnsTab() {
+  const { currentId } = useRouterSelection();
+  const réglages = useQuery({
+    queryKey: ['tools-dns', currentId],
+    queryFn: () => routerToolsApi.dns(currentId!),
+    enabled: Boolean(currentId),
+  });
+  const statiques = useQuery({
+    queryKey: ['tools-dns-static', currentId],
+    queryFn: () => routerToolsApi.dnsStatic(currentId!),
+    enabled: Boolean(currentId),
+  });
+
+  const d = réglages.data;
+
+  return (
+    <div className="space-y-4">
+      <Card title="Résolution">
+        {réglages.isPending ? (
+          <p className="text-sm text-slate-400">Lecture…</p>
+        ) : réglages.isError ? (
+          <p className="text-sm text-slate-500">Le routeur n'a pas répondu.</p>
+        ) : (
+          <>
+            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="Serveurs déclarés">
+                {d!.servers.length ? (
+                  <span className="font-mono text-xs">{d!.servers.join(', ')}</span>
+                ) : (
+                  <span className="text-slate-400">aucun</span>
+                )}
+              </Field>
+              <Field label="Reçus du fournisseur">
+                {d!.dynamicServers.length ? (
+                  <span className="font-mono text-xs">{d!.dynamicServers.join(', ')}</span>
+                ) : (
+                  <span className="text-slate-400">aucun</span>
+                )}
+              </Field>
+              <Field label="Cache">
+                {d!.cacheSize != null ? (
+                  <span className="tabular-nums">
+                    {d!.cacheUsed ?? 0} / {d!.cacheSize} Kio
+                  </span>
+                ) : (
+                  '—'
+                )}
+              </Field>
+              <Field label="Répond aux autres">
+                <Badge tone={d!.allowRemoteRequests ? 'green' : 'slate'}>
+                  {d!.allowRemoteRequests ? 'oui' : 'non'}
+                </Badge>
+              </Field>
+            </dl>
+            {d!.useDohServer && (
+              <p className="mt-3 text-xs text-slate-500">
+                Les requêtes passent par DNS sur HTTPS ({d!.useDohServer}), vérification du
+                certificat {d!.verifyDohCert ? 'activée' : 'désactivée'}.
+              </p>
+            )}
+            {/* Ne pas affirmer qu'un « non » casse le portail : sur le hAP du
+                parc ce réglage est à non, et le HotSpot sert des centaines de
+                comptes — il intercepte le DNS lui-même. */}
+            {!d!.allowRemoteRequests && (
+              <p className="mt-3 text-xs text-slate-500">
+                Le routeur ne résout que pour lui-même. Ce n'est pas une anomalie : le portail
+                captif intercepte le DNS de ses clients sans passer par ce réglage.
+              </p>
+            )}
+          </>
+        )}
+      </Card>
+
+      <div className="space-y-2">
+        <p className="max-w-3xl text-sm text-slate-600">
+          Les noms que le routeur résout lui-même, avant d'interroger qui que ce soit. Les entrées{' '}
+          <em>automatiques</em> sont posées par le portail pour son propre nom.
+        </p>
+        <Liste
+          requête={statiques}
+          colonnes={['Nom', 'Type', 'Adresse', 'Durée de vie', 'Origine']}
+          vide={{
+            titre: 'Aucune entrée statique',
+            aide: 'Tous les noms sont résolus par les serveurs déclarés plus haut.',
+          }}
+          ligne={(e) => (
+            <tr key={e.id} className={e.disabled ? 'opacity-50' : undefined}>
+              <td className="px-3 py-2 font-mono text-xs">{e.name ?? '—'}</td>
+              <td className="px-3 py-2 text-slate-500">{e.type ?? '—'}</td>
+              <td className="px-3 py-2 font-mono text-xs">{e.address ?? '—'}</td>
+              <td className="px-3 py-2 tabular-nums text-slate-500">{formatDuree(e.ttlSeconds)}</td>
+              <td className="px-3 py-2">
+                <Badge tone={e.dynamic ? 'slate' : 'green'}>
+                  {e.dynamic ? 'automatique' : 'posée à la main'}
+                </Badge>
+              </td>
+            </tr>
+          )}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RoutesTab() {
+  const { currentId } = useRouterSelection();
+  const requête = useQuery({
+    queryKey: ['tools-routes', currentId],
+    queryFn: () => routerToolsApi.routes(currentId!),
+    enabled: Boolean(currentId),
+  });
+
+  return (
+    <div className="space-y-3">
+      <p className="max-w-3xl text-sm text-slate-600">
+        Par où sort le trafic. La ligne <code className="rounded bg-slate-100 px-1">0.0.0.0/0</code>{' '}
+        est la sortie vers Internet : sa passerelle est celle du fournisseur. Une route{' '}
+        <em>inactive</em> existe mais ne sert pas — c'est souvent le signe d'un lien tombé.
+      </p>
+      <Liste
+        requête={requête}
+        colonnes={['Destination', 'Par', 'Distance', 'Table', 'Origine', 'État']}
+        vide={{ titre: 'Aucune route', aide: 'Le routeur ne sait joindre aucun réseau.' }}
+        ligne={(r) => (
+          <tr key={r.id} className={r.active ? undefined : 'opacity-50'}>
+            <td className="px-3 py-2 font-mono text-xs">
+              {r.dstAddress}
+              {r.dstAddress === '0.0.0.0/0' && (
+                <span className="ml-2 text-[11px] font-sans text-slate-400">(Internet)</span>
+              )}
+            </td>
+            <td className="px-3 py-2 font-mono text-xs text-slate-500">{r.immediateGw ?? '—'}</td>
+            <td className="px-3 py-2 tabular-nums text-slate-500">{r.distance ?? '—'}</td>
+            <td className="px-3 py-2 text-slate-500">{r.routingTable ?? '—'}</td>
+            <td className="px-3 py-2">
+              <Badge tone={r.isStatic ? 'green' : 'slate'}>
+                {r.connect
+                  ? 'connectée'
+                  : r.dhcp
+                    ? 'du fournisseur'
+                    : r.isStatic
+                      ? 'posée à la main'
+                      : 'automatique'}
+              </Badge>
+            </td>
+            <td className="px-3 py-2">
+              <Badge tone={r.active ? 'green' : 'amber'}>{r.active ? 'active' : 'inactive'}</Badge>
+            </td>
+          </tr>
+        )}
+      />
+    </div>
+  );
+}
+
+/** Une jauge simple. Le rouge commence là où il ne reste plus de marge utile. */
+function Jauge({ libellé, utilisé, total }: { libellé: string; utilisé: number; total: number }) {
+  const part = total > 0 ? Math.min(utilisé / total, 1) : 0;
+  const ton = part > 0.95 ? 'bg-red-500' : part > 0.8 ? 'bg-amber-500' : 'bg-emerald-500';
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between text-sm">
+        <span className="text-slate-600">{libellé}</span>
+        <span className="tabular-nums text-slate-500">
+          {formatOctets(total - utilisé)} libres sur {formatOctets(total)}
+        </span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-200">
+        <div className={`h-full ${ton}`} style={{ width: `${Math.round(part * 100)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+const TON_CONSTAT: Record<NiveauConstat, 'red' | 'amber' | 'green'> = {
+  bloquant: 'red',
+  avertissement: 'amber',
+  ok: 'green',
+};
+
+const BORDURE_CONSTAT: Record<NiveauConstat, string> = {
+  bloquant: 'border-red-200 bg-red-50',
+  avertissement: 'border-amber-200 bg-amber-50',
+  ok: 'border-emerald-200 bg-emerald-50',
+};
+
+/**
+ * Stockage et état de User Manager.
+ *
+ * Cet écran existe pour une raison précise du parc : la mémoire interne d'un
+ * hAP ac² fait 16 Mio et se remplit, si bien que la base User Manager finit
+ * sur une clé USB. Cela marche — et cela crée une dépendance matérielle que
+ * personne ne voit tant qu'elle tient.
+ */
+function StockageTab() {
+  const { currentId } = useRouterSelection();
+  const état = useQuery({
+    queryKey: ['tools-um-readiness', currentId],
+    queryFn: () => routerToolsApi.userManagerReadiness(currentId!),
+    enabled: Boolean(currentId),
+  });
+  const stockage = useQuery({
+    queryKey: ['tools-storage', currentId],
+    queryFn: () => routerToolsApi.storage(currentId!),
+    enabled: Boolean(currentId),
+  });
+
+  if (état.isPending || stockage.isPending) return <TableSkeleton columns={4} rows={4} />;
+  if (état.isError || stockage.isError) {
+    return (
+      <ErrorNote onRetry={() => void (état.refetch(), stockage.refetch())}>
+        Le routeur n'a pas répondu — ces chiffres sont lus en direct.
+      </ErrorNote>
+    );
+  }
+
+  const e = état.data!;
+  const s = stockage.data!;
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        {e.constats.length === 0 ? (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-slate-700">
+            Rien à signaler : User Manager est installé, allumé, et son support a de la place.
+          </div>
+        ) : (
+          e.constats.map((c) => (
+            <div key={c.code} className={`rounded-lg border p-3 ${BORDURE_CONSTAT[c.niveau]}`}>
+              <div className="flex items-center gap-2">
+                <Badge tone={TON_CONSTAT[c.niveau]}>
+                  {c.niveau === 'ok' ? 'à savoir' : c.niveau}
+                </Badge>
+                <span className="text-sm font-semibold text-slate-900">{c.titre}</span>
+              </div>
+              <p className="mt-1.5 max-w-3xl text-sm text-slate-700">{c.detail}</p>
+              {c.commande && (
+                <div className="mt-2">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500">
+                    À coller dans le terminal du routeur
+                  </p>
+                  <code className="mt-1 block overflow-x-auto rounded bg-slate-900 px-3 py-2 font-mono text-xs text-slate-100">
+                    {c.commande}
+                  </code>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      <Card title="User Manager">
+        <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Field label="Paquet">
+            <Badge tone={e.packageInstalled ? (e.packageEnabled ? 'green' : 'amber') : 'red'}>
+              {!e.packageInstalled ? 'absent' : e.packageEnabled ? 'actif' : 'désactivé'}
+            </Badge>
+            {e.packageVersion && (
+              <span className="ml-2 font-mono text-xs text-slate-500">{e.packageVersion}</span>
+            )}
+          </Field>
+          <Field label="Service RADIUS">
+            <Badge tone={e.serviceEnabled ? 'green' : 'red'}>
+              {e.serviceEnabled ? 'allumé' : 'éteint'}
+            </Badge>
+          </Field>
+          <Field label="Profils">
+            <Badge tone={e.useProfiles ? 'green' : 'amber'}>
+              {e.useProfiles ? 'activés' : 'désactivés'}
+            </Badge>
+          </Field>
+          <Field label="Base de données">
+            {e.database ? (
+              <span className="font-mono text-xs">{e.database.path}</span>
+            ) : (
+              <span className="text-slate-400">introuvable</span>
+            )}
+          </Field>
+        </dl>
+        {e.database && (
+          <p className="mt-3 max-w-3xl text-xs text-slate-500">
+            La base occupe {formatOctets(e.database.sizeBytes)} et dispose de{' '}
+            {formatOctets(e.database.freeBytes)}. C'est elle qui tient le calendrier des forfaits :
+            la validité d'un ticket continue de s'écouler même quand le client est déconnecté — ce
+            que le HotSpot seul ne sait pas faire.
+          </p>
+        )}
+      </Card>
+
+      <Card title="Mémoire">
+        <div className="space-y-3">
+          <Jauge
+            libellé="Mémoire interne (flash)"
+            utilisé={s.internalTotalBytes - s.internalFreeBytes}
+            total={s.internalTotalBytes}
+          />
+          <Jauge
+            libellé="Mémoire vive"
+            utilisé={s.memoryTotalBytes - s.memoryFreeBytes}
+            total={s.memoryTotalBytes}
+          />
+        </div>
+        {s.parRacine.length > 0 && (
+          <div className="mt-4">
+            <p className="text-[11px] uppercase tracking-wide text-slate-500">Occupation par support</p>
+            <ul className="mt-1 space-y-1 text-sm">
+              {s.parRacine.map((r) => (
+                <li key={r.root} className="flex justify-between text-slate-600">
+                  <span className="font-mono text-xs">{r.root}</span>
+                  <span className="tabular-nums text-slate-500">
+                    {formatOctets(r.bytes)} · {r.fileCount} fichier{r.fileCount > 1 ? 's' : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Card>
+
+      <div className="space-y-2">
+        <p className="max-w-3xl text-sm text-slate-600">
+          Les supports branchés. Seule une partition <strong>montée</strong> est utilisable : une
+          clé présente mais non montée est aussi absente qu'une clé retirée.
+        </p>
+        {s.disks.length === 0 ? (
+          <EmptyState
+            title="Aucun support externe"
+            hint="Rien n'est branché : tout repose sur la mémoire interne."
+          />
+        ) : (
+          <Table head={['Emplacement', 'Nature', 'Système de fichiers', 'Taille', 'Modèle', 'État']}>
+            {s.disks.map((d) => (
+              <tr key={d.id}>
+                <td className="px-3 py-2 font-mono text-xs">{d.slot}</td>
+                <td className="px-3 py-2 text-slate-500">
+                  {d.isPartition ? 'partition' : 'support'}
+                </td>
+                <td className="px-3 py-2 text-slate-500">
+                  {d.fs ?? <span className="text-slate-300">aucun</span>}
+                </td>
+                <td className="px-3 py-2 tabular-nums text-slate-500">
+                  {d.sizeBytes != null ? formatOctets(d.sizeBytes) : '—'}
+                </td>
+                <td className="px-3 py-2 text-xs text-slate-500">{d.model ?? '—'}</td>
+                <td className="px-3 py-2">
+                  {/* Le support brut n'est jamais « monté » — c'est sa
+                      partition qui l'est. Le marquer en rouge ferait croire
+                      à une panne sur un montage parfaitement normal. */}
+                  {d.isPartition ? (
+                    <Badge tone={d.mounted ? 'green' : 'red'}>
+                      {d.mounted ? 'montée' : 'non montée'}
+                    </Badge>
+                  ) : (
+                    <Badge tone="slate">porte une partition</Badge>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </div>
+
+      <Card title="Paquets installés">
+        <ul className="space-y-1 text-sm">
+          {s.packages.map((p) => (
+            <li key={p.id} className="flex items-center justify-between">
+              <span className="font-mono text-xs">{p.name}</span>
+              <span className="flex items-center gap-2 text-xs text-slate-500">
+                <span className="tabular-nums">
+                  {p.sizeBytes != null ? formatOctets(p.sizeBytes) : '—'}
+                </span>
+                <span className="font-mono">{p.version ?? '—'}</span>
+                {p.disabled && <Badge tone="amber">désactivé</Badge>}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 max-w-3xl text-xs text-slate-500">
+          <strong>User Manager ne fait pas partie de l'image de base de RouterOS.</strong> C'est un
+          paquet supplémentaire : tant qu'il n'est pas installé, son menu n'apparaît ni dans WinBox
+          ni ici. Un changement de paquet ne prend effet qu'au redémarrage.
+        </p>
+      </Card>
+    </div>
+  );
+}
+
 const ONGLETS = {
   debit: { titre: 'Débit par client', rendu: () => <QueuesTab /> },
   liens: { titre: 'Interfaces', rendu: () => <InterfacesTab /> },
   journal: { titre: 'Journal du routeur', rendu: () => <LogTab /> },
   acces: { titre: 'Accès et DDNS', rendu: () => <AccesTab /> },
   appareils: { titre: 'DHCP et ARP', rendu: () => <AppareilsTab /> },
+  'pare-feu': { titre: 'Pare-feu', rendu: () => <PareFeuTab /> },
+  dns: { titre: 'DNS', rendu: () => <DnsTab /> },
+  routes: { titre: 'Routes', rendu: () => <RoutesTab /> },
+  stockage: { titre: 'Stockage et User Manager', rendu: () => <StockageTab /> },
 } as const;
 
 type Tab = keyof typeof ONGLETS;

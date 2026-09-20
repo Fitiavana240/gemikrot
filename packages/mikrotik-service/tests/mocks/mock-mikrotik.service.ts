@@ -63,7 +63,16 @@ import {
   UmUserGroupDto,
 } from '../../src/dto/router-config.dto';
 import {
+  RouterFileDto,
+  RouterStorageDto,
+  UserManagerReadinessDto,
+} from '../../src/dto/router-storage.dto';
+import {
   ArpEntryDto,
+  DnsSettingsDto,
+  DnsStaticEntryDto,
+  FirewallRuleDto,
+  RouteDto,
   DhcpServerDto,
   IpCloudDto,
   IpServiceDto,
@@ -799,6 +808,77 @@ export class MockMikrotikService implements IMikrotikService {
 
   async getDhcpServers(): Promise<DhcpServerDto[]> {
     return [];
+  }
+
+  async getFirewallFilterRules(): Promise<FirewallRuleDto[]> {
+    return [];
+  }
+
+  async getFirewallNatRules(): Promise<FirewallRuleDto[]> {
+    return [];
+  }
+
+  async getDnsSettings(): Promise<DnsSettingsDto> {
+    return {
+      servers: [],
+      dynamicServers: [],
+      allowRemoteRequests: false,
+      cacheSize: null,
+      cacheUsed: null,
+      maxConcurrentQueries: null,
+      useDohServer: null,
+      verifyDohCert: false,
+    };
+  }
+
+  async getDnsStaticEntries(): Promise<DnsStaticEntryDto[]> {
+    return [];
+  }
+
+  async getRoutes(): Promise<RouteDto[]> {
+    return [];
+  }
+
+  async getRouterFiles(): Promise<RouterFileDto[]> {
+    return [];
+  }
+
+  async getRouterStorage(): Promise<RouterStorageDto> {
+    return {
+      boardName: null,
+      version: null,
+      architecture: null,
+      internalTotalBytes: 0,
+      internalFreeBytes: 0,
+      memoryTotalBytes: 0,
+      memoryFreeBytes: 0,
+      disks: [],
+      packages: [],
+      parRacine: [],
+    };
+  }
+
+  /**
+   * Un simulacre neutre : ni sain, ni en panne.
+   *
+   * Inventer un diagnostic « tout va bien » ferait passer pour verifie ce
+   * qui ne l'est pas — le jugement se teste dans `evaluerUserManager`, sur
+   * des charges reelles, pas ici.
+   */
+  async getUserManagerReadiness(): Promise<UserManagerReadinessDto> {
+    return {
+      packageInstalled: false,
+      packageEnabled: false,
+      packageVersion: null,
+      packageSizeBytes: null,
+      serviceEnabled: false,
+      useProfiles: false,
+      database: null,
+      internalFreeBytes: 0,
+      internalTotalBytes: 0,
+      disks: [],
+      constats: [],
+    };
   }
 
   // ---------- Aides de test ----------

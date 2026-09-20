@@ -133,3 +133,101 @@ export interface DhcpServerDto {
   disabled: boolean;
   invalid: boolean;
 }
+
+/**
+ * Une règle de pare-feu — `/ip/firewall/filter` ou `/ip/firewall/nat`.
+ *
+ * L'ordre est la logique : une règle de pare-feu ne vaut que par sa place dans
+ * la chaîne, la première qui correspond décide. D'où `position`, que RouterOS
+ * ne renvoie pas — elle est déduite de l'ordre de lecture.
+ */
+export interface FirewallRuleDto {
+  id: string;
+  /** Position dans la liste, à partir de 0. C'est l'ordre d'évaluation. */
+  position: number;
+  chain: string;
+  action: string;
+  protocol: string | null;
+  srcAddress: string | null;
+  dstAddress: string | null;
+  srcPort: string | null;
+  dstPort: string | null;
+  inInterface: string | null;
+  outInterface: string | null;
+  jumpTarget: string | null;
+  toPorts: string | null;
+  rejectWith: string | null;
+  /**
+   * Non vide quand la règle est posée par le HotSpot lui-même
+   * (`from-client`, `!auth`…). Ces règles se refont toutes seules : les
+   * toucher à la main ne sert à rien, elles reviennent.
+   */
+  hotspot: string | null;
+  dynamic: boolean;
+  disabled: boolean;
+  invalid: boolean;
+  log: boolean;
+  logPrefix: string | null;
+  bytes: number;
+  packets: number;
+  comment: string | null;
+}
+
+/** Les réglages du résolveur — `/ip/dns`. Un seul jeu par routeur. */
+export interface DnsSettingsDto {
+  /** Serveurs saisis à la main. */
+  servers: string[];
+  /** Serveurs reçus du fournisseur par DHCP ou PPPoE. */
+  dynamicServers: string[];
+  /**
+   * Le routeur accepte-t-il de résoudre pour les autres ?
+   *
+   * Contrairement à ce qu'on lit souvent, le HotSpot n'en dépend pas : sur le
+   * hAP du parc ce réglage est à `false` et le portail sert 646 comptes sans
+   * broncher, parce que le HotSpot intercepte le DNS lui-même. À montrer,
+   * donc, mais sans en tirer de conclusion hâtive.
+   */
+  allowRemoteRequests: boolean;
+  /** Taille et occupation du cache, en Kio (RouterOS rend `2048`, pas `2048KiB`). */
+  cacheSize: number | null;
+  cacheUsed: number | null;
+  maxConcurrentQueries: number | null;
+  /** DNS sur HTTPS, vide quand il n'est pas utilisé. */
+  useDohServer: string | null;
+  verifyDohCert: boolean;
+}
+
+/** Une entrée DNS statique — `/ip/dns/static`. */
+export interface DnsStaticEntryDto {
+  id: string;
+  name: string | null;
+  address: string | null;
+  type: string | null;
+  ttlSeconds: number;
+  dynamic: boolean;
+  disabled: boolean;
+  comment: string | null;
+}
+
+/** Une route — `/ip/route`. */
+export interface RouteDto {
+  id: string;
+  dstAddress: string;
+  gateway: string | null;
+  /** La passerelle réellement retenue, interface comprise. */
+  immediateGw: string | null;
+  distance: number | null;
+  routingTable: string | null;
+  scope: number | null;
+  targetScope: number | null;
+  /** Fausse pour une route qui existe mais ne sert pas. */
+  active: boolean;
+  dynamic: boolean;
+  /** Posée à la main. */
+  isStatic: boolean;
+  /** Déduite d'une adresse du routeur. */
+  connect: boolean;
+  /** Reçue du fournisseur par bail DHCP. */
+  dhcp: boolean;
+  comment: string | null;
+}

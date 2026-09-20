@@ -7,6 +7,7 @@ import * as UmMapper from './mappers/user-manager.mapper';
 import * as PppMapper from './mappers/ppp.mapper';
 import * as ConfigMapper from './mappers/router-config.mapper';
 import * as ToolsMapper from './mappers/router-tools.mapper';
+import * as StorageMapper from './mappers/router-storage.mapper';
 import { validate } from './validation/validate';
 import {
   assignProfileSchema,
@@ -1005,6 +1006,92 @@ export class RouterOSMikrotikService implements IMikrotikService {
   async getDhcpServers() {
     const raw = await this.client.get<any[]>('/ip/dhcp-server');
     return raw.map(ToolsMapper.mapDhcpServer);
+  }
+
+
+  // ---------- Pare-feu, DNS, routes ----------
+
+  async getFirewallFilterRules() {
+    const raw = await this.client.get<any[]>('/ip/firewall/filter');
+    return raw.map((regle, index) => ToolsMapper.mapFirewallRule(regle, index));
+  }
+
+  async getFirewallNatRules() {
+    const raw = await this.client.get<any[]>('/ip/firewall/nat');
+    return raw.map((regle, index) => ToolsMapper.mapFirewallRule(regle, index));
+  }
+
+  async getDnsSettings() {
+    const raw = await this.client.get<any>('/ip/dns');
+    return ToolsMapper.mapDnsSettings(Array.isArray(raw) ? raw[0] : raw);
+  }
+
+  async getDnsStaticEntries() {
+    const raw = await this.client.get<any[]>('/ip/dns/static');
+    return raw.map(ToolsMapper.mapDnsStaticEntry);
+  }
+
+  async getRoutes() {
+    const raw = await this.client.get<any[]>('/ip/route');
+    return raw.map(ToolsMapper.mapRoute);
+  }
+
+  // ---------- Stockage ----------
+
+  async getRouterFiles() {
+    const raw = await this.client.get<any[]>('/file');
+    return raw.map(StorageMapper.mapRouterFile);
+  }
+
+  async getRouterStorage() {
+    const [resource, disks, packages, files] = await Promise.all([
+      this.client.get<any>('/system/resource'),
+      this.client.get<any[]>('/disk'),
+      this.client.get<any[]>('/system/package'),
+      this.client.get<any[]>('/file'),
+    ]);
+    return StorageMapper.mapRouterStorage(
+      Array.isArray(resource) ? resource[0] : resource,
+      disks,
+      packages,
+      files,
+    );
+  }
+
+  /**
+   * Le diagnostic de User Manager.
+   *
+   * `/user-manager` et `/user-manager/database` repondent 500 quand le paquet
+   * n'est pas installe : c'est justement le cas qu'on veut diagnostiquer, pas
+   * une panne. On absorbe donc l'echec de ces deux lectures-la — et d'elles
+   * seules. Un routeur injoignable doit continuer a lever.
+   */
+  async getUserManagerReadiness() {
+    const [resource, disks, packages] = await Promise.all([
+      this.client.get<any>('/system/resource'),
+      this.client.get<any[]>('/disk'),
+      this.client.get<any[]>('/system/package'),
+    ]);
+
+    const absorber = async <T>(chemin: string): Promise<T | null> => {
+      try {
+        return await this.client.get<T>(chemin);
+      } catch {
+        return null;
+      }
+    };
+    const [serviceRaw, databaseRaw] = await Promise.all([
+      absorber<any>('/user-manager'),
+      absorber<any>('/user-manager/database'),
+    ]);
+
+    return StorageMapper.evaluerUserManager({
+      packagesRaw: packages,
+      serviceRaw: Array.isArray(serviceRaw) ? serviceRaw[0] : serviceRaw,
+      databaseRaw: Array.isArray(databaseRaw) ? databaseRaw[0] : databaseRaw,
+      resource: Array.isArray(resource) ? resource[0] : resource,
+      disksRaw: disks,
+    });
   }
 
 }

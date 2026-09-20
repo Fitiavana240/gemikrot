@@ -58,9 +58,68 @@ export class RouterToolsController {
     return (await this.clients.forRouter(routerId)).getArpEntries();
   }
 
-  /** Serveurs DHCP déclarés. */
+  /** Serveurs DHCP declares. */
   @Get('dhcp-servers')
   async dhcpServers(@Param('routerId') routerId: string) {
     return (await this.clients.forRouter(routerId)).getDhcpServers();
+  }
+
+  /**
+   * Regles de filtrage, dans leur ordre d'evaluation.
+   *
+   * L'ordre EST la logique : la premiere regle qui correspond decide. Le
+   * mapper en fait un champ `position`, que RouterOS ne renvoie pas.
+   */
+  @Get('firewall/filter')
+  async firewallFilter(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getFirewallFilterRules();
+  }
+
+  /** Regles de traduction d'adresses. C'est la que vit la redirection du portail. */
+  @Get('firewall/nat')
+  async firewallNat(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getFirewallNatRules();
+  }
+
+  @Get('dns')
+  async dns(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getDnsSettings();
+  }
+
+  @Get('dns/static')
+  async dnsStatic(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getDnsStaticEntries();
+  }
+
+  @Get('routes')
+  async routes(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getRoutes();
+  }
+
+  // ---------- Stockage ----------
+
+  /** Fichiers et dossiers, toutes racines confondues. */
+  @Get('files')
+  async files(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getRouterFiles();
+  }
+
+  /** Memoire interne, disques, paquets, et occupation par racine. */
+  @Get('storage')
+  async storage(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getRouterStorage();
+  }
+
+  /**
+   * Le diagnostic de User Manager : installe, allume, et ou vivent ses
+   * donnees.
+   *
+   * C'est la reponse a « pourquoi l'onglet User Manager n'apparait pas dans
+   * WinBox » — et l'endroit ou l'on decouvre qu'une base posee sur une cle
+   * USB depend d'une cle qui peut etre retiree.
+   */
+  @Get('user-manager-readiness')
+  async userManagerReadiness(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getUserManagerReadiness();
   }
 }

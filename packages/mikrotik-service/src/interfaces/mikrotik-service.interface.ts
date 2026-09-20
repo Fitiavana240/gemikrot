@@ -62,7 +62,16 @@ import {
   UmUserGroupDto,
 } from '../dto/router-config.dto';
 import {
+  RouterFileDto,
+  RouterStorageDto,
+  UserManagerReadinessDto,
+} from '../dto/router-storage.dto';
+import {
   ArpEntryDto,
+  DnsSettingsDto,
+  DnsStaticEntryDto,
+  FirewallRuleDto,
+  RouteDto,
   DhcpServerDto,
   IpCloudDto,
   IpServiceDto,
@@ -263,5 +272,24 @@ export interface IMikrotikService {
   /** Table ARP : correspondance adresse / materiel. */
   getArpEntries(): Promise<ArpEntryDto[]>;
   getDhcpServers(): Promise<DhcpServerDto[]>;
+
+  /** Regles de filtrage, dans leur ordre d'evaluation. */
+  getFirewallFilterRules(): Promise<FirewallRuleDto[]>;
+  /** Regles de traduction d'adresses, dans leur ordre d'evaluation. */
+  getFirewallNatRules(): Promise<FirewallRuleDto[]>;
+  getDnsSettings(): Promise<DnsSettingsDto>;
+  getDnsStaticEntries(): Promise<DnsStaticEntryDto[]>;
+  getRoutes(): Promise<RouteDto[]>;
+
+  // ---------- Stockage ----------
+  //
+  // Sur un hAP ac2 la memoire interne fait 16 Mio et se remplit ; User
+  // Manager finit sur une cle USB. La console doit savoir dire ou vivent
+  // les donnees avant qu'on l'apprenne autrement.
+
+  getRouterFiles(): Promise<RouterFileDto[]>;
+  getRouterStorage(): Promise<RouterStorageDto>;
+  /** Le diagnostic complet de User Manager : present, allume, et ou. */
+  getUserManagerReadiness(): Promise<UserManagerReadinessDto>;
 }
 

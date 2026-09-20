@@ -178,8 +178,10 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | RTR-10 | **Serveurs et profils de serveur** en lecture, avec mise en évidence de `login-by` et de la durée de vie des cookies | ⭐⭐ | 🟢 | ✅ |
 | RTR-11 | **Reconnexion et tolérance aux pannes** : disjoncteur par routeur. Trois échecs réseau d'affilée suspendent les appels trente secondes, puis un appel sonde le retour. Mesuré : 16 153 ms → 2 ms pour un routeur mort. Seules les erreurs de réseau l'ouvrent — un mot de passe refusé n'a rien à voir avec la joignabilité | ⭐⭐⭐ | 🟡 | ✅ |
 | RTR-12 | **File d'opérations différées** : ce qui n'a pas pu partir est mis en file et rejoué dès que le disjoncteur constate le retour du routeur. N'accepte que des opérations rejouables sans dommage ; abandonne au bout de dix tentatives, mais en le disant. La console affiche ce qui attend | ⭐⭐⭐ | 🔴 | ✅ |
-| RTR-13 | **Accès distant** : le routeur ouvre un tunnel WireGuard vers le serveur. Jeton d'enrôlement à usage unique, script à coller dans Winbox, clé privée jamais transmise, compte d'API dédié, `www-ssl` restreint au tunnel. Côté application terminé ; **le script reste à éprouver sur un routeur réel** | ⭐⭐⭐ | 🔴 | 🟡 |
-| RTR-14 | **PPPoE** en plus du HotSpot : comptes, profils, sessions. Domaine entier non couvert — le concurrent local le couvre. **Bloqué par la règle du projet** : sonder avant d'écrire. Le script de relevé est prêt (`npm run probe:ppp`), il manque un routeur joignable | ⭐⭐ | 🔴 | ⬜ |
+| RTR-13 | **Accès distant** : le routeur ouvre un tunnel WireGuard vers le serveur. Jeton d'enrôlement à usage unique, script à coller dans Winbox, clé privée jamais transmise, compte d'API dédié, `www-ssl` restreint au tunnel. Éprouvé de bout en bout sur le hAP : script collé dans Winbox, rappel du routeur, tunnel monté, application passant dedans | ⭐⭐⭐ | 🔴 | ✅ |
+| RTR-14 | **PPPoE** en plus du HotSpot : comptes, profils, serveurs et bassins livrés, correspondances écrites contre un relevé réel (`scripts/probe-ppp-sonde.ts`). **Les sessions actives restent non vérifiées** : le parc n'a aucun PPPoE en service, les noms de champs de `/ppp/active` sont donc pris de la documentation seule — et le test le dit | ⭐⭐ | 🔴 | 🟡 |
+| RTR-15 | **Menus IP en lecture** : files simples (le débit réellement alloué, client par client), journal du routeur, interfaces avec leurs coupures de lien, services d'administration, DDNS, ARP, serveurs DHCP, **pare-feu filtrage et NAT dans leur ordre d'évaluation**, DNS et entrées statiques, table de routage. **Lecture seule, par décision** : la console montre, WinBox modifie | ⭐⭐ | 🟡 | ✅ |
+| RTR-16 | **Stockage et préparation de User Manager** : mémoire interne, clés USB et leur état de montage, paquets installés, occupation par support, et où vit la base User Manager. Rend un diagnostic ordonné par gravité, avec la commande exacte quand il en existe une — dont la réponse à « pourquoi l'onglet User Manager n'apparaît-il pas dans WinBox » | ⭐⭐⭐ | 🟡 | ✅ |
 
 ---
 
@@ -532,6 +534,53 @@ Les deux tests de non-régression ont été **vérifiés rouges contre l'ancien 
 - **SOC-4 ✅** : identifiant public (slug) dérivé du nom, unique.
 - **Défaut corrigé** : supprimer un compte User Manager **laissait ses attributions** derrière lui — RouterOS y remplace le nom par un identifiant interne, et le profil se croit alors utilisé pour toujours par un compte disparu. Quatre orphelines bloquaient déjà une suppression de profil.
 - **Walled Garden posé** : `192.168.88.250:3000` et `:5173`, un port par entrée — RouterOS refuse une liste séparée par des virgules sur cette liste.
+
+---
+
+### 2026-09-20 — Menus IP, stockage, et la clé USB dont tout dépend
+
+**Vérification** : 126 tests paquet, 111 backend, frontend compilé ; les dix lectures éprouvées
+contre le hAP réel avant d'être écrites, et les charges relevées figées dans
+`tests/mappers/router-ip-menus.spec.ts` et `tests/mappers/router-storage.spec.ts`.
+
+- **RTR-15 ✅** — pare-feu (filtrage et NAT), DNS et entrées statiques, table de routage,
+  ajoutés aux cinq écrans de diagnostic existants. Le pare-feu porte une colonne **#** que
+  RouterOS ne renvoie pas : elle est déduite de l'ordre de lecture, parce que l'ordre *est* la
+  logique — la première règle qui correspond décide, et deux règles identiques placées
+  différemment font l'inverse l'une de l'autre. Sur le hAP : 16 règles de filtrage dont 5
+  posées par le HotSpot, 19 de NAT, 5 routes dont le tunnel `gemikrot`.
+
+- **RTR-16 ✅** — stockage. Le relevé confirme, chiffres à l'appui, ce que l'exploitant
+  décrivait : **280 Kio libres sur 16 Mio** de mémoire interne, soit 1,7 %. Le paquet
+  `user-manager` pèse 336 Kio — **il ne tiendrait plus sur le flash interne aujourd'hui**.
+  D'où la base sur clé USB : `/usb1-part1/user-manager`, ext4, 930 Mio libres.
+
+- **Ce que cet écran existe pour dire.** La base sur clé est le bon montage — c'est lui qui
+  permet à User Manager de tenir le calendrier, une validité continuant de s'écouler quand le
+  client se déconnecte, ce que le HotSpot seul ne sait pas faire. Mais il crée une dépendance
+  matérielle que rien ne signalait : **clé retirée, base perdue, tous les tickets vendus avec**.
+  Le diagnostic place ce cas en tête, avant tout le reste, et distingue « absente » de
+  « branchée mais non montée » — pour User Manager les deux se valent, pour le dépannage non.
+
+- **Et la réponse à l'onglet manquant** : User Manager ne fait pas partie de l'image de base de
+  RouterOS. Tant que le paquet n'est pas installé, son menu n'apparaît ni dans WinBox ni ici.
+  Le constat rend la version et l'architecture exactes — un `.npk` qui ne correspond pas ne
+  s'installe pas, et échoue sans le dire — et prévient qu'avec 280 Kio libres il faut faire de
+  la place *avant* de téléverser, pas après.
+
+- **Une affirmation fausse retirée avant livraison.** Le commentaire que j'avais écrit disait
+  qu'`allow-remote-requests` à `false` empêche le portail de fonctionner. Le hAP est à `false`
+  et sert 646 comptes : le HotSpot intercepte le DNS lui-même. L'écran le dit désormais
+  explicitement, pour qu'on ne parte pas chercher une panne à cet endroit.
+
+- **Relevé de terrain figé** : `/disk` ne rend **aucun** espace libre sur RouterOS 7.24, même
+  pour une partition ext4 montée. Le seul chiffre fiable pour le volume de User Manager vient
+  de `/user-manager/database`. Un test le fige pour qu'on ne se remette pas à l'attendre de `/disk`.
+
+- **Tableau RTR remis d'équerre** : RTR-13 y était encore à « reste à éprouver » alors que le
+  tunnel a été monté de bout en bout, et RTR-14 à « non livré » alors que comptes, profils,
+  serveurs et bassins le sont. La colonne étant le seul suivi qui fait foi, la laisser fausse
+  coûte plus cher que de ne rien y écrire.
 
 ---
 

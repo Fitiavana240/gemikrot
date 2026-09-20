@@ -94,6 +94,144 @@ export interface DhcpServer {
   invalid: boolean;
 }
 
+
+export interface FirewallRule {
+  id: string;
+  /** Position dans la chaine, a partir de 0 : c'est l'ordre d'evaluation. */
+  position: number;
+  chain: string;
+  action: string;
+  protocol: string | null;
+  srcAddress: string | null;
+  dstAddress: string | null;
+  srcPort: string | null;
+  dstPort: string | null;
+  inInterface: string | null;
+  outInterface: string | null;
+  jumpTarget: string | null;
+  toPorts: string | null;
+  rejectWith: string | null;
+  /** Non vide quand le HotSpot l'a posee : elle se refait toute seule. */
+  hotspot: string | null;
+  dynamic: boolean;
+  disabled: boolean;
+  invalid: boolean;
+  log: boolean;
+  logPrefix: string | null;
+  bytes: number;
+  packets: number;
+  comment: string | null;
+}
+
+export interface DnsSettings {
+  servers: string[];
+  dynamicServers: string[];
+  allowRemoteRequests: boolean;
+  /** En Kio. */
+  cacheSize: number | null;
+  cacheUsed: number | null;
+  maxConcurrentQueries: number | null;
+  useDohServer: string | null;
+  verifyDohCert: boolean;
+}
+
+export interface DnsStaticEntry {
+  id: string;
+  name: string | null;
+  address: string | null;
+  type: string | null;
+  ttlSeconds: number;
+  dynamic: boolean;
+  disabled: boolean;
+  comment: string | null;
+}
+
+export interface Route {
+  id: string;
+  dstAddress: string;
+  gateway: string | null;
+  immediateGw: string | null;
+  distance: number | null;
+  routingTable: string | null;
+  scope: number | null;
+  targetScope: number | null;
+  active: boolean;
+  dynamic: boolean;
+  isStatic: boolean;
+  connect: boolean;
+  dhcp: boolean;
+  comment: string | null;
+}
+
+export interface RouterDisk {
+  id: string;
+  slot: string;
+  type: string;
+  fs: string | null;
+  model: string | null;
+  serial: string | null;
+  sizeBytes: number | null;
+  /** RouterOS 7.24 ne le donne pas : presque toujours `null`. */
+  freeBytes: number | null;
+  mounted: boolean;
+  mountPoint: string | null;
+  isPartition: boolean;
+  interfaceName: string | null;
+  disabled: boolean;
+}
+
+export interface RouterPackage {
+  id: string;
+  name: string;
+  version: string | null;
+  sizeBytes: number | null;
+  disabled: boolean;
+  buildTime: string | null;
+}
+
+export interface RouterStorage {
+  boardName: string | null;
+  version: string | null;
+  architecture: string | null;
+  internalTotalBytes: number;
+  internalFreeBytes: number;
+  memoryTotalBytes: number;
+  memoryFreeBytes: number;
+  disks: RouterDisk[];
+  packages: RouterPackage[];
+  parRacine: { root: string; bytes: number; fileCount: number }[];
+}
+
+export type NiveauConstat = 'bloquant' | 'avertissement' | 'ok';
+
+export interface Constat {
+  code: string;
+  niveau: NiveauConstat;
+  titre: string;
+  detail: string;
+  /** La commande a coller dans le terminal, ou `null` si le geste est physique. */
+  commande: string | null;
+}
+
+export interface UserManagerReadiness {
+  packageInstalled: boolean;
+  packageEnabled: boolean;
+  packageVersion: string | null;
+  packageSizeBytes: number | null;
+  serviceEnabled: boolean;
+  useProfiles: boolean;
+  database: {
+    path: string;
+    sizeBytes: number;
+    freeBytes: number;
+    surSupportAmovible: boolean;
+  } | null;
+  internalFreeBytes: number;
+  internalTotalBytes: number;
+  disks: RouterDisk[];
+  constats: Constat[];
+}
+
 const base = (routerId: string) => `/routers/${routerId}/tools`;
 
 export const routerToolsApi = {
@@ -105,6 +243,15 @@ export const routerToolsApi = {
   cloud: (routerId: string) => api.get<IpCloud>(`${base(routerId)}/cloud`),
   arp: (routerId: string) => api.get<ArpEntry[]>(`${base(routerId)}/arp`),
   dhcpServers: (routerId: string) => api.get<DhcpServer[]>(`${base(routerId)}/dhcp-servers`),
+  firewallFilter: (routerId: string) =>
+    api.get<FirewallRule[]>(`${base(routerId)}/firewall/filter`),
+  firewallNat: (routerId: string) => api.get<FirewallRule[]>(`${base(routerId)}/firewall/nat`),
+  dns: (routerId: string) => api.get<DnsSettings>(`${base(routerId)}/dns`),
+  dnsStatic: (routerId: string) => api.get<DnsStaticEntry[]>(`${base(routerId)}/dns/static`),
+  routes: (routerId: string) => api.get<Route[]>(`${base(routerId)}/routes`),
+  storage: (routerId: string) => api.get<RouterStorage>(`${base(routerId)}/storage`),
+  userManagerReadiness: (routerId: string) =>
+    api.get<UserManagerReadiness>(`${base(routerId)}/user-manager-readiness`),
 };
 
 /** bits/s → « 6 Mb/s ». Zéro veut dire « aucun plafond », pas « zéro débit ». */

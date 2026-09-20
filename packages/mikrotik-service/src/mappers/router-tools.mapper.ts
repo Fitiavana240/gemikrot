@@ -1,10 +1,15 @@
+import { parseRouterOsDuration } from './hotspot.mapper';
 import {
   ArpEntryDto,
   DhcpServerDto,
+  DnsSettingsDto,
+  DnsStaticEntryDto,
+  FirewallRuleDto,
   IpCloudDto,
   IpServiceDto,
   NetworkInterfaceStatsDto,
   PaireDto,
+  RouteDto,
   RouterLogEntryDto,
   SimpleQueueDto,
 } from '../dto/router-tools.dto';
@@ -156,5 +161,94 @@ export function mapDhcpServer(raw: any): DhcpServerDto {
     useRadius: flag(raw?.['use-radius']),
     disabled: flag(raw?.disabled),
     invalid: flag(raw?.invalid),
+  };
+}
+
+/** Une liste RouterOS : `"8.8.8.8,1.1.1.1"`, ou vide. */
+function listeSeparee(value: unknown): string[] {
+  return String(value ?? '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part !== '');
+}
+
+/**
+ * `position` n'est pas renvoyée par RouterOS : elle vient de l'ordre de
+ * lecture. C'est pourtant l'information la plus importante d'une règle —
+ * la première qui correspond décide, une même règle placée avant ou après
+ * fait l'inverse.
+ */
+export function mapFirewallRule(raw: any, position: number): FirewallRuleDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    position,
+    chain: raw?.chain ?? '',
+    action: raw?.action ?? '',
+    protocol: orNull(raw?.protocol),
+    srcAddress: orNull(raw?.['src-address']),
+    dstAddress: orNull(raw?.['dst-address']),
+    srcPort: orNull(raw?.['src-port']),
+    dstPort: orNull(raw?.['dst-port']),
+    inInterface: orNull(raw?.['in-interface']),
+    outInterface: orNull(raw?.['out-interface']),
+    jumpTarget: orNull(raw?.['jump-target']),
+    toPorts: orNull(raw?.['to-ports']),
+    rejectWith: orNull(raw?.['reject-with']),
+    hotspot: orNull(raw?.hotspot),
+    dynamic: flag(raw?.dynamic),
+    disabled: flag(raw?.disabled),
+    invalid: flag(raw?.invalid),
+    log: flag(raw?.log),
+    logPrefix: orNull(raw?.['log-prefix']),
+    bytes: Number(raw?.bytes) || 0,
+    packets: Number(raw?.packets) || 0,
+    comment: orNull(raw?.comment),
+  };
+}
+
+export function mapDnsSettings(raw: any): DnsSettingsDto {
+  return {
+    servers: listeSeparee(raw?.servers),
+    dynamicServers: listeSeparee(raw?.['dynamic-servers']),
+    allowRemoteRequests: flag(raw?.['allow-remote-requests']),
+    cacheSize: nombreOuNull(raw?.['cache-size']),
+    cacheUsed: nombreOuNull(raw?.['cache-used']),
+    maxConcurrentQueries: nombreOuNull(raw?.['max-concurrent-queries']),
+    useDohServer: orNull(raw?.['use-doh-server']),
+    verifyDohCert: flag(raw?.['verify-doh-cert']),
+  };
+}
+
+export function mapDnsStaticEntry(raw: any): DnsStaticEntryDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    name: orNull(raw?.name),
+    address: orNull(raw?.address),
+    type: orNull(raw?.type),
+    // `"1d"`, `"5m"` : une durée, pas un nombre de secondes.
+    ttlSeconds: parseRouterOsDuration(raw?.ttl),
+    dynamic: flag(raw?.dynamic),
+    disabled: flag(raw?.disabled),
+    comment: orNull(raw?.comment),
+  };
+}
+
+export function mapRoute(raw: any): RouteDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    dstAddress: raw?.['dst-address'] ?? '',
+    gateway: orNull(raw?.gateway),
+    immediateGw: orNull(raw?.['immediate-gw']),
+    distance: nombreOuNull(raw?.distance),
+    routingTable: orNull(raw?.['routing-table']),
+    scope: nombreOuNull(raw?.scope),
+    targetScope: nombreOuNull(raw?.['target-scope']),
+    active: flag(raw?.active),
+    dynamic: flag(raw?.dynamic),
+    // `static` est un mot réservé en TypeScript : le DTO le renomme.
+    isStatic: flag(raw?.static),
+    connect: flag(raw?.connect),
+    dhcp: flag(raw?.dhcp),
+    comment: orNull(raw?.comment),
   };
 }
