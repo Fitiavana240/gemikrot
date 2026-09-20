@@ -389,6 +389,46 @@ Facturer les exploitants, piloter plusieurs routeurs pour de bon, atteindre un r
 
 ---
 
+
+### Ce que fait le concurrent local (relevé le 2026-09-20)
+
+Relevé sur `mikromilalalala.com` et sur leur série de tutoriels. Utile parce
+qu'il dit ce qu'un exploitant d'ici attend déjà, et ce qui se vend.
+
+**Leur série de tutoriels est la carte de leurs fonctions** :
+
+| | |
+|---|---|
+| VIDEO 2 | créer un abonnement, ajouter un routeur |
+| VIDEO 3 | créer un profil, générer un ticket |
+| VIDEO 4 | créer et régler le **paiement automatique** |
+| VIDEO 5 | installer l'**APK Android** et le relier au paiement automatique |
+| VIDEO 6 | créer un **compte PPPoE** |
+| — | côté client : souscrire et renouveler un abonnement |
+
+**Leur modèle économique**, lu sur leur page d'offres : abonnement mensuel de
+l'exploitant à la plateforme, avec un **quota de routeurs par offre**,
+payable en ariary **ou en USDT**. Les forfaits sont chargés depuis leur base,
+donc modifiables sans redéploiement. Ils vendent par ailleurs un « template
+pro » de page captive, séparément, 50 000 Ar.
+
+**Rien de tout cela n'est absent de ce document** — SAS-2 pour l'abonnement
+plateforme et son quota, COM-1 pour la passerelle SMS Android, PAY-3 pour le
+rapprochement automatique, PUB-7 pour la page captive, PUB-9 pour la vitrine.
+Le relevé ne change donc pas le périmètre : il confirme l'ordre de bataille et
+désigne où ils gagnent aujourd'hui.
+
+**Où ils nous devancent** : le paiement automatique de bout en bout, et la
+facturation des exploitants — c'est-à-dire ce qui fait vivre le produit.
+
+**Où nous les devançons**, d'après ce qui est visible : le cloisonnement
+appliqué par la base, l'enrôlement par tunnel WireGuard, le disjoncteur et la
+file d'opérations différées, le journal d'audit consultable. Ce sont des
+qualités d'exploitation, invisibles à la démonstration — elles se remarquent
+le jour où un routeur tombe, pas le jour de la vente.
+
+---
+
 ## 16. Journal de livraison
 
 ### 2026-09-20 (suite) — L'application travaille sans qu'on la regarde
