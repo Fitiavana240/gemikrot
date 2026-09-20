@@ -29,7 +29,17 @@ export interface Plan {
   rateLimitTxBps: number | null;
   transferLimitBytes: string | null;
   maxSharedUsers: number | null;
+  /** Profil de la table **HotSpot**. C'est celui d'où l'offre a été importée. */
   mikrotikProfileName: string;
+  /**
+   * Profil **User Manager** portant la validité calendaire de l'offre.
+   *
+   * `null` tant que l'offre n'a pas été synchronisée : le profil est alors
+   * créé à la génération, sous un nom dérivé de celui de l'offre. Les deux
+   * noms ne coïncident pas toujours — User Manager refuse des caractères que
+   * le HotSpot accepte, les espaces notamment.
+   */
+  umProfileName: string | null;
   status: PlanStatus;
   createdAt: string;
 }

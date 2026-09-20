@@ -209,9 +209,14 @@ function CibleGeneration({
     );
   }
 
-  const attendu = plan.mikrotikProfileName;
-  const trouvé = profils.data?.some((p) => p.name === attendu);
   const hotspot = cible === 'HOTSPOT';
+
+  // Les deux tables ont leurs propres profils, et ils ne portent pas le même
+  // nom : User Manager refuse des caractères que le HotSpot accepte. Afficher
+  // le profil HotSpot en cible User Manager envoyait chercher dans la
+  // mauvaise table — et faisait échouer le contrôle d'existence par-dessus.
+  const attendu = hotspot ? plan.mikrotikProfileName : plan.umProfileName;
+  const trouvé = attendu ? profils.data?.some((p) => p.name === attendu) : undefined;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm">
@@ -223,8 +228,14 @@ function CibleGeneration({
           </Badge>
         </span>
         <span>
-          <span className="text-slate-500">Profil </span>
-          <span className="font-mono text-xs">{attendu}</span>
+          <span className="text-slate-500">Profil {hotspot ? 'HotSpot' : 'User Manager'} </span>
+          {attendu ? (
+            <span className="font-mono text-xs">{attendu}</span>
+          ) : (
+            // Le nom exact est dérivé côté serveur, pas ici : le recopier
+            // ferait deux règles qui divergeraient au premier changement.
+            <span className="text-slate-400">pas encore lié</span>
+          )}
         </span>
         <span>
           {/* Le même chiffre ne veut pas dire la même chose des deux côtés :
@@ -255,18 +266,34 @@ function CibleGeneration({
           pas » — découragerait une génération parfaitement valide. Le
           résultat en cache d'une visite précédente suffirait à le faire
           apparaître : c'est la cible qui décide, pas la présence des données. */}
-      {!hotspot && profils.isPending && (
+      {/* Offre jamais synchronisée : il n'y a rien à vérifier, et faire
+          tourner un contrôle sur un nom absent afficherait « introuvable »
+          pour un cas parfaitement normal. */}
+      {/* « Sera créé » serait trop affirmatif : un profil du même nom peut
+          déjà exister dans User Manager sans que l'offre y soit rattachée, et
+          la génération le reprend — en l'alignant — au lieu d'en faire un second. */}
+      {!hotspot && !attendu && (
+        <p className="mt-1.5 text-xs text-slate-500">
+          Cette offre n'est pas encore liée à un profil User Manager. La génération l'y rattachera :
+          elle crée le profil s'il manque, et <strong>aligne sur l'offre</strong> un profil du même
+          nom qui existerait déjà — sa validité, son prix et son nombre d'appareils. Le nom peut
+          différer légèrement de celui de l'offre : User Manager refuse des caractères que le
+          HotSpot accepte.
+        </p>
+      )}
+      {!hotspot && attendu && profils.isPending && (
         <p className="mt-1.5 text-xs text-slate-400">Vérification du profil sur le routeur…</p>
       )}
-      {!hotspot && profils.isError && (
+      {!hotspot && attendu && profils.isError && (
         <p className="mt-1.5 text-xs text-amber-700">
           Le routeur n'a pas répondu : impossible de vérifier que le profil existe.
         </p>
       )}
       {!hotspot && trouvé === false && (
         <p className="mt-1.5 text-xs text-red-600">
-          Ce profil n'existe pas encore dans User Manager. Il sera créé à la génération, depuis
-          l'offre — vérifiez ensuite qu'il porte bien la validité attendue.
+          L'offre désigne le profil « {attendu} », introuvable dans User Manager. Il a sans doute
+          été renommé ou supprimé dans WinBox — resynchronisez l'offre depuis l'écran Offres
+          avant de générer.
         </p>
       )}
       {!hotspot && trouvé === true && (
