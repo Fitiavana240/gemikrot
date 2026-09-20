@@ -48,8 +48,29 @@ export interface UserManagerLimitationDto {
   id: string;
   name: string;
   rateLimit: RateLimitDto;
+  /** Volume total, descendant et montant confondus. */
   transferLimitBytes: number | null;
+  /**
+   * Quotas séparés par sens.
+   *
+   * Distincts du total : un forfait peut laisser télécharger largement et
+   * brider l'envoi, ce qui est le cas d'usage d'un réseau de quartier où la
+   * voie montante est la ressource rare. Les confondre avec `transfer-limit`
+   * ferait croire qu'une seule borne existe.
+   */
+  downloadLimitBytes: number | null;
+  uploadLimitBytes: number | null;
   uptimeLimitSeconds: number | null;
+  /**
+   * Période au bout de laquelle les compteurs repartent à zéro.
+   *
+   * `null` quand RouterOS rend `disabled` : le quota est alors **définitif**,
+   * consommé une fois pour toutes. C'est la différence entre « 10 Go » et
+   * « 10 Go par mois », et rien ne la disait dans la console.
+   */
+  resetCountersIntervalSeconds: number | null;
+  /** Date à partir de laquelle les périodes se comptent. */
+  resetCountersStartTime: string | null;
 }
 
 /** Jonction profil ↔ limitation. */

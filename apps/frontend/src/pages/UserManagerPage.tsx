@@ -520,14 +520,49 @@ function LimitationsTab() {
       ) : limitations.isError ? (
         <PanneDuRouteur requête={limitations} />
       ) : (
-        <Table head={['Limitation', 'Descendant', 'Montant', 'Volume', 'Durée', 'Profils', '']}>
+        <Table
+          head={[
+            'Limitation',
+            'Descendant',
+            'Montant',
+            'Volume total',
+            'Dont reçu / envoyé',
+            'Durée',
+            'Remise à zéro',
+            'Profils',
+            '',
+          ]}
+        >
           {limitations.data?.map((limitation) => (
             <tr key={limitation.id}>
               <td className="px-3 py-2 font-medium">{limitation.name}</td>
               <td className="px-3 py-2">{formatRate(limitation.rateLimit.rxBitsPerSecond)}</td>
               <td className="px-3 py-2">{formatRate(limitation.rateLimit.txBitsPerSecond)}</td>
               <td className="px-3 py-2">{formatBytes(limitation.transferLimitBytes)}</td>
+              {/* Distincts du total : un forfait peut laisser télécharger
+                  largement et brider l'envoi. */}
+              <td className="px-3 py-2 text-slate-500">
+                {limitation.downloadLimitBytes || limitation.uploadLimitBytes
+                  ? `${formatBytes(limitation.downloadLimitBytes)} / ${formatBytes(limitation.uploadLimitBytes)}`
+                  : '—'}
+              </td>
               <td className="px-3 py-2">{formatDuration(limitation.uptimeLimitSeconds)}</td>
+              {/* La différence entre « 10 Go » et « 10 Go par mois ». Sans
+                  période, le quota est consommé une fois pour toutes. */}
+              <td className="px-3 py-2 text-slate-500">
+                {limitation.resetCountersIntervalSeconds ? (
+                  <>
+                    {formatDuration(limitation.resetCountersIntervalSeconds)}
+                    {limitation.resetCountersStartTime && (
+                      <div className="text-xs text-slate-400">
+                        depuis le {limitation.resetCountersStartTime.slice(0, 10)}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <span title="Le quota est consommé une fois pour toutes">définitif</span>
+                )}
+              </td>
               <td className="px-3 py-2 text-slate-500">
                 {limitation.profileNames.length ? limitation.profileNames.join(', ') : '—'}
               </td>

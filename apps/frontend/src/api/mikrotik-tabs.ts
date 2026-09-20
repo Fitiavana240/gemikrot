@@ -69,6 +69,19 @@ export interface HotspotProfile {
   rateLimitTxBitsPerSecond: number | null;
   sessionTimeoutSeconds: number | null;
   sharedUsers: number;
+  idleTimeoutSeconds: number | null;
+  /** Délai sans réponse avant fermeture — distinct de l'inactivité. */
+  keepaliveTimeoutSeconds: number | null;
+  /**
+   * Le profil pose-t-il un cookie à la connexion ?
+   *
+   * Le réglage le plus lourd de conséquences du menu : tant qu'il est actif,
+   * un client déjà venu revient sans repasser par RADIUS, donc sans que sa
+   * validité soit vérifiée, et bloquer son compte ne le coupe pas tout de
+   * suite. Neuf sessions sur dix de ce parc sont entrées ainsi.
+   */
+  addMacCookie: boolean;
+  macCookieTimeoutSeconds: number | null;
 }
 
 /** Un appareil vu par le HotSpot, authentifié ou non. */

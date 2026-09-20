@@ -82,6 +82,26 @@ export interface HotspotProfileDto {
   /** `shared-users` RouterOS : nombre d'appareils simultanés autorisés. */
   sharedUsers: number;
   idleTimeoutSeconds: number | null;
+  /**
+   * Délai sans réponse avant que le routeur ferme la session.
+   *
+   * Distinct de l'inactivité : un client peut ne rien télécharger et répondre
+   * quand même. C'est ce délai-là qui coupe un appareil parti sans se
+   * déconnecter, et donc qui libère sa place quand `shared-users` vaut 1.
+   */
+  keepaliveTimeoutSeconds: number | null;
+  /**
+   * Le routeur pose-t-il un cookie à la connexion ?
+   *
+   * **Le réglage le plus lourd de conséquences de tout ce menu.** Tant qu'il
+   * est actif, un client déjà venu se reconnecte sans repasser par RADIUS :
+   * sa validité n'est pas vérifiée, et bloquer son compte ne suffit pas à le
+   * couper. Relevé sur ce parc : neuf sessions en cours sur dix sont entrées
+   * par cookie.
+   */
+  addMacCookie: boolean;
+  /** Durée de vie du cookie posé par ce profil. */
+  macCookieTimeoutSeconds: number | null;
 }
 
 /**

@@ -53,7 +53,13 @@ export interface CreateLimitationDto {
   rateLimitRxBitsPerSecond?: number | null;
   rateLimitTxBitsPerSecond?: number | null;
   transferLimitBytes?: number | null;
+  downloadLimitBytes?: number | null;
+  uploadLimitBytes?: number | null;
   uptimeLimitSeconds?: number | null;
+  /** `null` rend le quota définitif ; une durée le fait repartir à zéro. */
+  resetCountersIntervalSeconds?: number | null;
+  /** `AAAA-MM-JJ HH:MM:SS`, la forme que RouterOS écrit lui-même. */
+  resetCountersStartTime?: string | null;
 }
 
 export interface UpdateLimitationDto extends Partial<CreateLimitationDto> {
@@ -119,6 +125,18 @@ export interface CreateHotspotProfileDto {
   rateLimitTxBitsPerSecond?: number;
   sessionTimeoutSeconds?: number;
   sharedUsers?: number;
+  idleTimeoutSeconds?: number | null;
+  keepaliveTimeoutSeconds?: number | null;
+  /**
+   * Poser un cookie à la connexion, ou non.
+   *
+   * Le couper rend le blocage d'un compte immédiat — plus personne ne
+   * rentre sans repasser par RADIUS — au prix d'une saisie du code à chaque
+   * reconnexion. C'est un arbitrage commercial, pas un réglage technique :
+   * l'écrire dans l'interface plutôt que de le laisser à WinBox.
+   */
+  addMacCookie?: boolean;
+  macCookieTimeoutSeconds?: number | null;
 }
 
 export interface UpdateHotspotProfileDto {
@@ -128,6 +146,18 @@ export interface UpdateHotspotProfileDto {
   rateLimitTxBitsPerSecond?: number;
   sessionTimeoutSeconds?: number;
   sharedUsers?: number;
+  idleTimeoutSeconds?: number | null;
+  keepaliveTimeoutSeconds?: number | null;
+  /**
+   * Poser un cookie à la connexion, ou non.
+   *
+   * Le couper rend le blocage d'un compte immédiat — plus personne ne
+   * rentre sans repasser par RADIUS — au prix d'une saisie du code à chaque
+   * reconnexion. C'est un arbitrage commercial, pas un réglage technique :
+   * l'écrire dans l'interface plutôt que de le laisser à WinBox.
+   */
+  addMacCookie?: boolean;
+  macCookieTimeoutSeconds?: number | null;
 }
 
 export interface CreateIpBindingDto {

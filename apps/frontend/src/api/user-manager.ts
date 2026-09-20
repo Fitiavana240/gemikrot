@@ -33,8 +33,27 @@ export interface UserManagerLimitation {
   id: string;
   name: string;
   rateLimit: { rxBitsPerSecond: number | null; txBitsPerSecond: number | null };
+  /** Volume total, descendant et montant confondus. */
   transferLimitBytes: number | null;
+  /**
+   * Quotas séparés par sens, distincts du total.
+   *
+   * Un forfait peut laisser télécharger largement et brider l'envoi — la voie
+   * montante est la ressource rare d'un réseau de quartier. Ne montrer que le
+   * total ferait croire qu'une seule borne existe.
+   */
+  downloadLimitBytes: number | null;
+  uploadLimitBytes: number | null;
   uptimeLimitSeconds: number | null;
+  /**
+   * Période au bout de laquelle les compteurs repartent à zéro.
+   *
+   * `null` veut dire que le quota est **définitif** : c'est la différence
+   * entre « 10 Go » et « 10 Go par mois », et rien ne la disait.
+   */
+  resetCountersIntervalSeconds: number | null;
+  /** Date à partir de laquelle les périodes se comptent. */
+  resetCountersStartTime: string | null;
   profileNames: string[];
 }
 
@@ -68,7 +87,11 @@ export interface CreateLimitationInput {
   rateLimitRxBitsPerSecond?: number | null;
   rateLimitTxBitsPerSecond?: number | null;
   transferLimitBytes?: number | null;
+  downloadLimitBytes?: number | null;
+  uploadLimitBytes?: number | null;
   uptimeLimitSeconds?: number | null;
+  resetCountersIntervalSeconds?: number | null;
+  resetCountersStartTime?: string | null;
 }
 
 export interface CreateAccountInput {

@@ -508,6 +508,14 @@ export function HotspotProfilesTab() {
         ticket : la durée repart à zéro à chaque reconnexion. C'est pourquoi les ventes passent
         par User Manager.
       </p>
+      <p className="max-w-3xl text-sm text-slate-600">
+        La colonne <strong>Cookie</strong> décide de bien plus que son nom ne le laisse croire :
+        tant qu'un cookie est posé, un client déjà venu se reconnecte <strong>sans repasser par
+        User Manager</strong> — sa validité n'est pas vérifiée, et bloquer son compte ne le coupe
+        pas immédiatement. <strong>Sans réponse</strong> est le délai au bout duquel un appareil
+        parti sans se déconnecter libère sa place, ce qui compte quand un profil n'autorise qu'un
+        appareil.
+      </p>
 
       {àGenerer && currentId && (
         <GenerationTickets
@@ -520,7 +528,17 @@ export function HotspotProfilesTab() {
 
       <ListeDuRouteur
         requête={requête}
-        colonnes={['Profil', 'Descendant', 'Montant', 'Durée de session', 'Appareils', '']}
+        colonnes={[
+          'Profil',
+          'Descendant',
+          'Montant',
+          'Durée de session',
+          'Appareils',
+          'Inactivité',
+          'Sans réponse',
+          'Cookie',
+          '',
+        ]}
         vide={{ titre: 'Aucun profil HotSpot' }}
         ligne={(p) => (
           <tr key={p.id}>
@@ -529,6 +547,41 @@ export function HotspotProfilesTab() {
             <td className="px-3 py-2 tabular-nums">{formatDebit(p.rateLimitTxBitsPerSecond)}</td>
             <td className="px-3 py-2 tabular-nums">{formatDuree(p.sessionTimeoutSeconds)}</td>
             <td className="px-3 py-2 tabular-nums">{p.sharedUsers}</td>
+            <td className="px-3 py-2 tabular-nums text-slate-500">
+              {formatDuree(p.idleTimeoutSeconds)}
+            </td>
+            <td className="px-3 py-2 tabular-nums text-slate-500">
+              {formatDuree(p.keepaliveTimeoutSeconds)}
+            </td>
+            {/* Un cookie qui survit à la session vendue est un trou : le
+                client revient sans repasser par User Manager, donc sans que
+                sa validité soit vérifiée. Relevé sur ce parc — un ticket de
+                deux heures portait un cookie de dix-huit. L'écart se voit
+                maintenant au lieu de se deviner en comparant deux colonnes. */}
+            <td className="px-3 py-2">
+              {!p.addMacCookie ? (
+                <Badge tone="slate">aucun</Badge>
+              ) : (
+                <>
+                  <Badge
+                    tone={
+                      p.sessionTimeoutSeconds != null &&
+                      p.macCookieTimeoutSeconds != null &&
+                      p.macCookieTimeoutSeconds > p.sessionTimeoutSeconds
+                        ? 'red'
+                        : 'amber'
+                    }
+                  >
+                    {formatDuree(p.macCookieTimeoutSeconds)}
+                  </Badge>
+                  {p.sessionTimeoutSeconds != null &&
+                    p.macCookieTimeoutSeconds != null &&
+                    p.macCookieTimeoutSeconds > p.sessionTimeoutSeconds && (
+                      <div className="text-xs text-red-700">plus long que la session</div>
+                    )}
+                </>
+              )}
+            </td>
             <td className="px-3 py-2 text-right">
               {canWrite && <Button onClick={() => setÀGenerer(p.name)}>Générer</Button>}
             </td>

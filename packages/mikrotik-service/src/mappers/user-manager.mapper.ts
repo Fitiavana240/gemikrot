@@ -62,7 +62,22 @@ export function mapUserManagerLimitation(raw: any): UserManagerLimitationDto {
       txBitsPerSecond: parsePositiveAmount(raw?.['rate-limit-tx']),
     },
     transferLimitBytes: parsePositiveAmount(raw?.['transfer-limit']),
+    downloadLimitBytes: parsePositiveAmount(raw?.['download-limit']),
+    uploadLimitBytes: parsePositiveAmount(raw?.['upload-limit']),
     uptimeLimitSeconds: parsePositiveDuration(raw?.['uptime-limit']),
+    // `disabled` est la valeur que RouterOS rend quand rien ne se remet à
+    // zéro : la traiter comme une durée donnerait un quota périodique là où
+    // il est définitif.
+    resetCountersIntervalSeconds:
+      raw?.['reset-counters-interval'] === 'disabled'
+        ? null
+        : parsePositiveDuration(raw?.['reset-counters-interval']),
+    // L'époque Unix est la valeur par défaut du champ, pas une date choisie :
+    // l'afficher ferait croire à un réglage.
+    resetCountersStartTime:
+      raw?.['reset-counters-start-time'] && !String(raw['reset-counters-start-time']).startsWith('1970-01-01')
+        ? String(raw['reset-counters-start-time'])
+        : null,
   };
 }
 

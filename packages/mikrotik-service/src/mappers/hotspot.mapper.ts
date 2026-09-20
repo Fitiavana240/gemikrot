@@ -150,6 +150,12 @@ export function mapHotspotProfile(raw: any): HotspotProfileDto {
     // "unlimited" sur les profils Admin : non numérique, ramené à 1 appareil.
     sharedUsers: Number(raw?.['shared-users']) || 1,
     idleTimeoutSeconds: raw?.['idle-timeout'] != null ? parseRouterOsDuration(raw['idle-timeout']) : null,
+    keepaliveTimeoutSeconds:
+      raw?.['keepalive-timeout'] != null ? parseRouterOsDuration(raw['keepalive-timeout']) : null,
+    // RouterOS rend la chaîne "true"/"false", pas un booléen.
+    addMacCookie: raw?.['add-mac-cookie'] === 'true' || raw?.['add-mac-cookie'] === true,
+    macCookieTimeoutSeconds:
+      raw?.['mac-cookie-timeout'] != null ? parseRouterOsDuration(raw['mac-cookie-timeout']) : null,
   };
 }
 

@@ -98,6 +98,27 @@ export class CreateLimitationDto {
   @IsInt()
   @IsPositive()
   uptimeLimitSeconds?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  downloadLimitBytes?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  uploadLimitBytes?: number | null;
+
+  /** `null` rend le quota définitif ; une durée le fait repartir à zéro. */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  resetCountersIntervalSeconds?: number | null;
+
+  /** `AAAA-MM-JJ HH:MM:SS`, la forme que RouterOS écrit lui-même. */
+  @IsOptional()
+  @IsString()
+  resetCountersStartTime?: string | null;
 }
 
 export class UpdateLimitationDto {
@@ -120,6 +141,27 @@ export class UpdateLimitationDto {
   @IsInt()
   @IsPositive()
   uptimeLimitSeconds?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  downloadLimitBytes?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  uploadLimitBytes?: number | null;
+
+  /** `null` rend le quota définitif ; une durée le fait repartir à zéro. */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  resetCountersIntervalSeconds?: number | null;
+
+  /** `AAAA-MM-JJ HH:MM:SS`, la forme que RouterOS écrit lui-même. */
+  @IsOptional()
+  @IsString()
+  resetCountersStartTime?: string | null;
 }
 
 export class AttachLimitationDto {

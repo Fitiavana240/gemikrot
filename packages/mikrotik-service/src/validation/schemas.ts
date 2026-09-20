@@ -46,7 +46,17 @@ export const createLimitationSchema = z.object({
   rateLimitRxBitsPerSecond: z.number().int().positive().nullable().optional(),
   rateLimitTxBitsPerSecond: z.number().int().positive().nullable().optional(),
   transferLimitBytes: z.number().int().positive().nullable().optional(),
+  downloadLimitBytes: z.number().int().positive().nullable().optional(),
+  uploadLimitBytes: z.number().int().positive().nullable().optional(),
   uptimeLimitSeconds: z.number().int().positive().nullable().optional(),
+  resetCountersIntervalSeconds: z.number().int().positive().nullable().optional(),
+  // La forme exacte que RouterOS écrit. Refuser ici plutôt que de laisser le
+  // routeur rendre une erreur qu'on ne saurait pas traduire.
+  resetCountersStartTime: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/, 'Date attendue au format AAAA-MM-JJ HH:MM:SS')
+    .nullable()
+    .optional(),
 });
 
 export const updateLimitationSchema = createLimitationSchema.partial().extend({
@@ -148,6 +158,12 @@ export const createHotspotProfileSchema = z.object({
   rateLimitTxBitsPerSecond: z.number().int().positive().optional(),
   sessionTimeoutSeconds: z.number().int().positive().optional(),
   sharedUsers: z.number().int().positive().max(100).optional(),
+  // `nullable` et non `optional` seulement : `null` retire la limite, absent
+  // n'y touche pas. Les confondre effacerait un réglage non demandé.
+  idleTimeoutSeconds: z.number().int().nonnegative().nullable().optional(),
+  keepaliveTimeoutSeconds: z.number().int().nonnegative().nullable().optional(),
+  addMacCookie: z.boolean().optional(),
+  macCookieTimeoutSeconds: z.number().int().nonnegative().nullable().optional(),
 });
 
 export const updateHotspotProfileSchema = createHotspotProfileSchema.partial().extend({

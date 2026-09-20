@@ -867,6 +867,49 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — Les champs de limite, et les dates
+
+Demandé : les limites comptent, au niveau des profils comme des comptes, dans User Manager
+comme dans le HotSpot — et les dates aussi. Relevé champ par champ sur le routeur avant
+d'écrire quoi que ce soit.
+
+**Ce qui manquait sur le profil HotSpot** : `idle-timeout` (lu mais pas montré),
+`keepalive-timeout`, `mac-cookie-timeout` et surtout **`add-mac-cookie`**. Ce dernier est le
+réglage le plus lourd de tout le menu : tant qu'il est actif, un client déjà venu revient sans
+repasser par RADIUS, donc sans que sa validité soit vérifiée.
+
+**Ce qui manquait sur la limitation User Manager** : `download-limit` et `upload-limit` —
+distincts du total, un forfait pouvant brider l'envoi sans brider la réception — et les deux
+seuls champs de date de ces menus, **`reset-counters-interval`** et
+**`reset-counters-start-time`**. C'est la différence entre « 10 Go » et « 10 Go par mois », et
+rien ne la disait : la console affichait le même chiffre dans les deux cas.
+
+**Un piège attrapé par le sondage.** `add-mac-cookie` envoyé dans le `PUT` de création est
+**ignoré en silence** — le profil revient avec `true`, la valeur par défaut, sans la moindre
+erreur. Le même champ dans un `PATCH` est accepté et relu `false`. Un profil créé « sans
+cookie » en aurait donc posé quand même. La création fait désormais suivre un `PATCH`.
+
+**Et une correction de ce que j'affirmais depuis ce matin.** Je répétais « trois jours » pour
+la durée de vie des cookies, d'après un commentaire du code. La vraie valeur est **par profil**,
+et l'écran la montre maintenant :
+
+```
+2Heure-500Ar        session 2 h    cookie 18 h   ← plus long que la session
+4Heure-1000Ar       session 4 h    cookie  2 j   ←
+1Jour-2000Ar        session 1 j    cookie  3 j   ←
+1Mois-15000Ar       session 30 j   cookie 10 j
+1MoisPremium        session 30 j   cookie 30 j
+Admin2              —              aucun
+```
+
+**Un cookie qui survit à la session vendue est un trou**, et il est désormais signalé en rouge
+au lieu de se deviner en comparant deux colonnes.
+
+**Éprouvé sur le routeur** : limitation d'essai créée avec quotas séparés et remise à zéro
+mensuelle depuis le 1er septembre — tout relu correctement, RouterOS normalisant `30d` en
+`4w2d` ; profil d'essai avec `keepalive` et cookie. Les deux supprimés ensuite, 10 profils et
+646 comptes intacts.
+
 ### 2026-09-20 — L'autre chemin de génération, et la planche qui survit au lot
 
 « À chaque génération » veut dire les deux chemins. La génération brute depuis un profil

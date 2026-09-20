@@ -86,8 +86,23 @@ function buildLimitationPayload(data: Partial<CreateLimitationDto>): Record<stri
   if (data.transferLimitBytes !== undefined) {
     payload['transfer-limit'] = data.transferLimitBytes ?? 0;
   }
+  if (data.downloadLimitBytes !== undefined) {
+    payload['download-limit'] = data.downloadLimitBytes ?? 0;
+  }
+  if (data.uploadLimitBytes !== undefined) {
+    payload['upload-limit'] = data.uploadLimitBytes ?? 0;
+  }
   if (data.uptimeLimitSeconds !== undefined) {
     payload['uptime-limit'] = data.uptimeLimitSeconds != null ? `${data.uptimeLimitSeconds}s` : '0s';
+  }
+  if (data.resetCountersIntervalSeconds !== undefined) {
+    // `disabled` et non `0s` : c'est le mot que RouterOS rend quand rien ne se
+    // remet à zéro, et lui envoyer une durée nulle ne désactive pas le cycle.
+    payload['reset-counters-interval'] =
+      data.resetCountersIntervalSeconds != null ? `${data.resetCountersIntervalSeconds}s` : 'disabled';
+  }
+  if (data.resetCountersStartTime !== undefined) {
+    payload['reset-counters-start-time'] = data.resetCountersStartTime ?? '1970-01-01 00:00:00';
   }
   return payload;
 }
@@ -106,6 +121,18 @@ function buildLimitationPayload(data: Partial<CreateLimitationDto>): Record<stri
  * fichier implémentant la même interface, jamais une modification de
  * celle-ci en place.
  */
+/**
+ * Une durée RouterOS, ou `0s` pour la retirer.
+ *
+ * `null` veut dire « enlever la limite » et `undefined` « ne pas y toucher » :
+ * les confondre effacerait un réglage qu'on ne voulait pas modifier. RouterOS
+ * n'accepte pas une chaîne vide sur ces champs, il attend `0s`.
+ */
+function duréeOuRien(secondes: number | null | undefined): string | undefined {
+  if (secondes === undefined) return undefined;
+  return secondes === null ? '0s' : `${secondes}s`;
+}
+
 export class RouterOSMikrotikService implements IMikrotikService {
   constructor(private readonly client: RouterOSRestClient, private readonly logger: ILogger) {}
 
@@ -282,7 +309,27 @@ export class RouterOSMikrotikService implements IMikrotikService {
       ),
       'shared-users': data.sharedUsers,
       'session-timeout': data.sessionTimeoutSeconds ? `${data.sessionTimeoutSeconds}s` : undefined,
+      'idle-timeout': duréeOuRien(data.idleTimeoutSeconds),
+      'keepalive-timeout': duréeOuRien(data.keepaliveTimeoutSeconds),
+      'mac-cookie-timeout': duréeOuRien(data.macCookieTimeoutSeconds),
     });
+
+    /**
+     * `add-mac-cookie` ne se pose pas à la création.
+     *
+     * Éprouvé sur le hAP en 7.24.4 : envoyé dans le `PUT`, il est **ignoré en
+     * silence** — le profil revient avec `true`, la valeur par défaut, sans la
+     * moindre erreur. Le même champ dans un `PATCH` est accepté et relu
+     * `false`. Un profil créé « sans cookie » en aurait donc posé quand même,
+     * et le blocage d'un compte serait resté sans effet immédiat.
+     */
+    if (data.addMacCookie === false) {
+      const corrigé = await this.client.patch<any>(
+        `/ip/hotspot/user/profile/${raw['.id']}`,
+        { 'add-mac-cookie': 'false' },
+      );
+      return HotspotMapper.mapHotspotProfile(corrigé);
+    }
     return HotspotMapper.mapHotspotProfile(raw);
   }
 
@@ -304,6 +351,16 @@ export class RouterOSMikrotikService implements IMikrotikService {
     if (data.sharedUsers !== undefined) payload['shared-users'] = data.sharedUsers;
     if (data.sessionTimeoutSeconds !== undefined) {
       payload['session-timeout'] = `${data.sessionTimeoutSeconds}s`;
+    }
+    if (data.idleTimeoutSeconds !== undefined) {
+      payload['idle-timeout'] = duréeOuRien(data.idleTimeoutSeconds);
+    }
+    if (data.keepaliveTimeoutSeconds !== undefined) {
+      payload['keepalive-timeout'] = duréeOuRien(data.keepaliveTimeoutSeconds);
+    }
+    if (data.addMacCookie !== undefined) payload['add-mac-cookie'] = String(data.addMacCookie);
+    if (data.macCookieTimeoutSeconds !== undefined) {
+      payload['mac-cookie-timeout'] = duréeOuRien(data.macCookieTimeoutSeconds);
     }
 
     this.logger.info('Mise à jour profil HotSpot', { name: data.name });
