@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useRouterSelection } from '../routers/RouterContext';
 import { ApiError } from '../api/client';
 import { phrasePanne } from '../api/pannes';
+import { AccesPermanentsTab } from './AccesPermanentsTab';
 import {
   Badge,
   Button,
@@ -41,6 +42,10 @@ const ONGLETS = {
   'ports-service': { titre: 'Ports de service', rendu: () => <HotspotServicePortsTab /> },
   'walled-garden': { titre: 'Walled Garden', rendu: () => <WalledGardenTab /> },
   cookies: { titre: 'Cookies', rendu: () => <CookiesTab /> },
+  'acces-permanents': {
+    titre: 'Accès permanents',
+    rendu: () => <AccesPermanentsTab />,
+  },
 } as const;
 
 type Tab = keyof typeof ONGLETS;
