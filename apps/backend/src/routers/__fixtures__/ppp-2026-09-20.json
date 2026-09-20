@@ -1,0 +1,60 @@
+{
+  "relevéLe": "2026-09-20T05:57:33.152Z",
+  "routeur": "https://192.168.88.1",
+  "/ppp/secret": [],
+  "/ppp/profile": [
+    {
+      ".id": "*0",
+      "address-list": "",
+      "bridge-learning": "default",
+      "change-tcp-mss": "yes",
+      "default": "true",
+      "name": "default",
+      "on-down": "",
+      "on-up": "",
+      "only-one": "default",
+      "use-compression": "default",
+      "use-encryption": "default",
+      "use-ipv6": "yes",
+      "use-mpls": "default",
+      "use-upnp": "default"
+    },
+    {
+      ".id": "*FFFFFFFE",
+      "address-list": "",
+      "bridge-learning": "default",
+      "change-tcp-mss": "yes",
+      "default": "true",
+      "name": "default-encryption",
+      "on-down": "",
+      "on-up": "",
+      "only-one": "default",
+      "use-compression": "default",
+      "use-encryption": "yes",
+      "use-ipv6": "yes",
+      "use-mpls": "default",
+      "use-upnp": "default"
+    }
+  ],
+  "/ppp/active": [],
+  "/interface/pppoe-server/server": [],
+  "/ppp/aaa": [
+    {
+      "accounting": "true",
+      "enable-ipv6-accounting": "false",
+      "interim-update": "0s",
+      "use-circuit-id-in-nas-port-id": "false",
+      "use-radius": "false"
+    }
+  ],
+  "/ip/pool": [
+    {
+      ".id": "*2",
+      "available": "223",
+      "name": "pool-hotspot",
+      "ranges": "192.168.88.10-192.168.88.254",
+      "total": "245",
+      "used": "22"
+    }
+  ]
+}

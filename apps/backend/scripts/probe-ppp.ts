@@ -73,9 +73,16 @@ async function main(): Promise<void> {
         continue;
       }
 
-      const rows = (await response.json()) as Record<string, unknown>[];
+      // Toutes les collections ne rendent pas un tableau : les réglages
+      // uniques comme `/ppp/aaa` rendent un seul objet. Le supposer coûtait
+      // une collection entière au premier relevé.
+      const body = (await response.json()) as
+        | Record<string, unknown>[]
+        | Record<string, unknown>;
+      const rows = Array.isArray(body) ? body : [body];
+
       relevé[endpoint] = rows.map(censor);
-      console.log(`${endpoint} : ${rows.length} entrée(s)`);
+      console.log(`${endpoint} : ${Array.isArray(body) ? `${rows.length} entrée(s)` : 'réglage unique'}`);
       if (rows.length > 0) {
         console.log(`  champs : ${Object.keys(rows[0]).sort().join(', ')}`);
       }
