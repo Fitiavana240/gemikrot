@@ -165,6 +165,54 @@ describe('RouterOSMikrotikService', () => {
     });
   });
 
+  describe('updateHotspotProfile', () => {
+    /**
+     * Le piège le plus sournois relevé sur ce routeur.
+     *
+     * Éprouvé sur le hAP en 7.24.4, trois requêtes de suite :
+     *
+     * | Envoyé | Relu |
+     * |---|---|
+     * | `add-mac-cookie=false` seul | `false` |
+     * | avec `shared-users` et `idle-timeout` | `false` |
+     * | **avec `mac-cookie-timeout`** | **`true`** |
+     *
+     * Régler la durée de vie du cookie **réactive le cookie**, sans erreur.
+     * Un exploitant qui décocherait la case en ajustant la durée obtiendrait
+     * donc l'inverse de ce qu'il demande. Le drapeau part seul, et en dernier.
+     */
+    it('envoie add-mac-cookie seul, après les autres champs', async () => {
+      client.get.mockResolvedValueOnce([{ '.id': '*1', name: 'P' }]);
+      client.patch.mockResolvedValue({ '.id': '*1', name: 'P', 'add-mac-cookie': 'false' });
+
+      await service.updateHotspotProfile({
+        name: 'P',
+        sharedUsers: 2,
+        macCookieTimeoutSeconds: 1800,
+        addMacCookie: false,
+      });
+
+      expect(client.patch).toHaveBeenCalledTimes(2);
+      const [, premier] = client.patch.mock.calls[0];
+      const [, second] = client.patch.mock.calls[1];
+      // Le premier porte tout le reste, le second le seul drapeau.
+      expect(premier).toMatchObject({ 'shared-users': 2, 'mac-cookie-timeout': '1800s' });
+      expect(premier['add-mac-cookie']).toBeUndefined();
+      expect(second).toEqual({ 'add-mac-cookie': 'false' });
+    });
+
+    it("n'envoie pas de seconde requête quand le cookie n'est pas en cause", async () => {
+      // Une requête de plus à chaque modification de débit serait du temps perdu
+      // sur un routeur qui répond en centaines de millisecondes.
+      client.get.mockResolvedValueOnce([{ '.id': '*1', name: 'P' }]);
+      client.patch.mockResolvedValue({ '.id': '*1', name: 'P' });
+
+      await service.updateHotspotProfile({ name: 'P', sharedUsers: 3 });
+
+      expect(client.patch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('createProfile', () => {
     it('écrit la validité et starts-when sur le profil lui-même', async () => {
       client.get.mockResolvedValueOnce([]); // aucun profil existant

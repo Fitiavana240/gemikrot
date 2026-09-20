@@ -7,7 +7,9 @@ import {
   hotspotTabsApi,
   umTabsApi,
   type CreateHotspotUser,
+  type HotspotProfile,
   type HotspotUser,
+  type UpdateHotspotProfile,
   type UpdateHotspotUser,
 } from '../api/mikrotik-tabs';
 import { useAuth } from '../auth/AuthContext';
@@ -492,13 +494,145 @@ export function HotspotUsersTab() {
   );
 }
 
+/**
+ * Modifier un profil HotSpot.
+ *
+ * Les libellés disent l'effet et non le nom du champ RouterOS : « pose un
+ * cookie » ne parle à personne, « le client revient sans retaper son code »
+ * décrit ce qui arrivera vraiment au comptoir. Le nom du profil n'est pas
+ * modifiable — il identifie le profil côté routeur, et le changer
+ * abandonnerait les comptes qui le portent.
+ */
+function EditionProfilHotspot({
+  profil,
+  enCours,
+  onAnnuler,
+  onValider,
+}: {
+  profil: HotspotProfile;
+  enCours: boolean;
+  onAnnuler: () => void;
+  onValider: (dto: UpdateHotspotProfile) => void;
+}) {
+  const [form, setForm] = useState<UpdateHotspotProfile>({
+    sharedUsers: profil.sharedUsers,
+    sessionTimeoutSeconds: profil.sessionTimeoutSeconds ?? undefined,
+    idleTimeoutSeconds: profil.idleTimeoutSeconds,
+    keepaliveTimeoutSeconds: profil.keepaliveTimeoutSeconds,
+    addMacCookie: profil.addMacCookie,
+    macCookieTimeoutSeconds: profil.macCookieTimeoutSeconds,
+  });
+
+  const cookieTropLong =
+    form.addMacCookie === true &&
+    form.sessionTimeoutSeconds != null &&
+    form.macCookieTimeoutSeconds != null &&
+    form.macCookieTimeoutSeconds > form.sessionTimeoutSeconds;
+
+  return (
+    <Card title={`Modifier le profil « ${profil.name} »`}>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <FormField label="Appareils simultanés">
+          <Input
+            type="number"
+            min={1}
+            value={form.sharedUsers ?? 1}
+            onChange={(e) => setForm({ ...form, sharedUsers: Number(e.target.value) || 1 })}
+          />
+        </FormField>
+
+        <FormField label="Durée d'une session">
+          <ChampDuree
+            secondes={form.sessionTimeoutSeconds ?? null}
+            onChange={(v) => setForm({ ...form, sessionTimeoutSeconds: v ?? undefined })}
+          />
+        </FormField>
+
+        <FormField label="Inactivité tolérée">
+          <ChampDuree
+            secondes={form.idleTimeoutSeconds ?? null}
+            onChange={(v) => setForm({ ...form, idleTimeoutSeconds: v })}
+          />
+        </FormField>
+
+        <FormField label="Sans réponse avant fermeture">
+          <ChampDuree
+            secondes={form.keepaliveTimeoutSeconds ?? null}
+            onChange={(v) => setForm({ ...form, keepaliveTimeoutSeconds: v })}
+          />
+        </FormField>
+      </div>
+
+      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3">
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={form.addMacCookie ?? false}
+            onChange={(e) => setForm({ ...form, addMacCookie: e.target.checked })}
+          />
+          <span>
+            <strong>Le client revient sans retaper son code</strong>
+            <span className="block text-slate-600">
+              Pratique pour lui, mais sa validité n'est alors <strong>pas vérifiée</strong> : bloquer
+              son compte ne le coupe pas tant que ce raccourci dure. Décocher rend le blocage
+              immédiat, au prix d'une saisie à chaque reconnexion.
+            </span>
+          </span>
+        </label>
+
+        {form.addMacCookie && (
+          <div className="mt-3 max-w-xs">
+            <FormField label="Durée de ce raccourci">
+              <ChampDuree
+                secondes={form.macCookieTimeoutSeconds ?? null}
+                onChange={(v) => setForm({ ...form, macCookieTimeoutSeconds: v })}
+              />
+            </FormField>
+            {cookieTropLong && (
+              <p className="mt-1.5 text-xs text-red-600">
+                Plus long que la session vendue : le client pourra revenir après l'avoir
+                épuisée.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex gap-2">
+        <Button disabled={enCours} onClick={() => onValider(form)}>
+          {enCours ? 'Enregistrement…' : 'Enregistrer'}
+        </Button>
+        <Button variant="secondary" onClick={onAnnuler}>
+          Annuler
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 export function HotspotProfilesTab() {
   const { currentId } = useRouterSelection();
   const { canWrite } = useAuth();
+  const queryClient = useQueryClient();
   const [àGenerer, setÀGenerer] = useState<string | null>(null);
+  const [àModifier, setÀModifier] = useState<HotspotProfile | null>(null);
+  const [erreurProfil, setErreurProfil] = useState<string | null>(null);
   const requête = useQuery({
     queryKey: ['hotspot-profiles', currentId],
     queryFn: () => hotspotTabsApi.profiles(currentId),
+  });
+
+  const modifier = useMutation({
+    mutationFn: ({ name, dto }: { name: string; dto: UpdateHotspotProfile }) =>
+      hotspotTabsApi.updateProfile(name, dto, currentId),
+    onSuccess: () => {
+      setÀModifier(null);
+      setErreurProfil(null);
+      void queryClient.invalidateQueries({ queryKey: ['hotspot-profiles', currentId] });
+    },
+    onError: (e) =>
+      setErreurProfil(e instanceof ApiError ? e.message : 'Le routeur a refusé cette modification.'),
   });
 
   return (
@@ -523,6 +657,20 @@ export function HotspotProfilesTab() {
           cible="hotspot"
           profileName={àGenerer}
           onFermer={() => setÀGenerer(null)}
+        />
+      )}
+
+      {erreurProfil && <ErrorNote>{erreurProfil}</ErrorNote>}
+
+      {àModifier && (
+        <EditionProfilHotspot
+          profil={àModifier}
+          enCours={modifier.isPending}
+          onAnnuler={() => {
+            setÀModifier(null);
+            setErreurProfil(null);
+          }}
+          onValider={(dto) => modifier.mutate({ name: àModifier.name, dto })}
         />
       )}
 
@@ -582,8 +730,15 @@ export function HotspotProfilesTab() {
                 </>
               )}
             </td>
-            <td className="px-3 py-2 text-right">
-              {canWrite && <Button onClick={() => setÀGenerer(p.name)}>Générer</Button>}
+            <td className="space-x-2 whitespace-nowrap px-3 py-2 text-right">
+              {canWrite && (
+                <>
+                  <Button onClick={() => setÀGenerer(p.name)}>Générer</Button>
+                  <Button variant="secondary" onClick={() => setÀModifier(p)}>
+                    Modifier
+                  </Button>
+                </>
+              )}
             </td>
           </tr>
         )}

@@ -62,6 +62,18 @@ export interface CreateHotspotUser {
 /** Le nom identifie le compte : il n'est pas modifiable. */
 export type UpdateHotspotUser = Partial<Omit<CreateHotspotUser, 'username'>>;
 
+/** Ce qu'un profil HotSpot accepte de changer. `null` retire une durée. */
+export interface UpdateHotspotProfile {
+  rateLimitRxBitsPerSecond?: number;
+  rateLimitTxBitsPerSecond?: number;
+  sessionTimeoutSeconds?: number;
+  sharedUsers?: number;
+  idleTimeoutSeconds?: number | null;
+  keepaliveTimeoutSeconds?: number | null;
+  addMacCookie?: boolean;
+  macCookieTimeoutSeconds?: number | null;
+}
+
 export interface HotspotProfile {
   id: string;
   name: string;
@@ -212,6 +224,15 @@ export interface HotspotServicePort {
 export const hotspotTabsApi = {
   users: (routerId?: string) => api.get<HotspotUser[]>(`/hotspot/users${q(routerId)}`),
   profiles: (routerId?: string) => api.get<HotspotProfile[]>(`/hotspot/profiles${q(routerId)}`),
+  /**
+   * Modifie un profil. Le nom n'est pas modifiable : sur RouterOS il **est**
+   * l'identifiant, et le changer abandonnerait les comptes qui le portent.
+   */
+  updateProfile: (name: string, dto: UpdateHotspotProfile, routerId?: string) =>
+    api.patch<HotspotProfile>(
+      `/hotspot/profiles/${encodeURIComponent(name)}${q(routerId)}`,
+      dto,
+    ),
   hosts: (routerId?: string) => api.get<HotspotHost[]>(`/hotspot/hosts${q(routerId)}`),
   ipBindings: (routerId?: string) => api.get<IpBinding[]>(`/hotspot/ip-bindings${q(routerId)}`),
   serverProfiles: (routerId?: string) =>

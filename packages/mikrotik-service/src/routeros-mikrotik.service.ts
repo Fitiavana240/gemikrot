@@ -358,13 +358,34 @@ export class RouterOSMikrotikService implements IMikrotikService {
     if (data.keepaliveTimeoutSeconds !== undefined) {
       payload['keepalive-timeout'] = duréeOuRien(data.keepaliveTimeoutSeconds);
     }
-    if (data.addMacCookie !== undefined) payload['add-mac-cookie'] = String(data.addMacCookie);
     if (data.macCookieTimeoutSeconds !== undefined) {
       payload['mac-cookie-timeout'] = duréeOuRien(data.macCookieTimeoutSeconds);
     }
 
     this.logger.info('Mise à jour profil HotSpot', { name: data.name });
-    const raw = await this.client.patch<any>(`/ip/hotspot/user/profile/${target.id}`, payload);
+    let raw = await this.client.patch<any>(`/ip/hotspot/user/profile/${target.id}`, payload);
+
+    /**
+     * `add-mac-cookie` part **seul**, et en dernier.
+     *
+     * Éprouvé sur le hAP en 7.24.4, trois requêtes de suite :
+     *
+     * | Envoyé | Relu |
+     * |---|---|
+     * | `add-mac-cookie=false` seul | `false` |
+     * | avec `shared-users` et `idle-timeout` | `false` |
+     * | **avec `mac-cookie-timeout`** | **`true`** |
+     *
+     * Régler la durée de vie du cookie **réactive le cookie**, silencieusement,
+     * même quand la même requête demande de le couper. Un exploitant qui
+     * décocherait la case en ajustant la durée aurait donc obtenu l'inverse de
+     * ce qu'il a demandé — sans la moindre erreur pour l'avertir.
+     */
+    if (data.addMacCookie !== undefined) {
+      raw = await this.client.patch<any>(`/ip/hotspot/user/profile/${target.id}`, {
+        'add-mac-cookie': String(data.addMacCookie),
+      });
+    }
     return HotspotMapper.mapHotspotProfile(raw);
   }
 

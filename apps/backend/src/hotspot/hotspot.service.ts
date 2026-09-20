@@ -10,6 +10,7 @@ import type {
   CreateWalledGardenDto,
   CreateWalledGardenIpDto,
   UpdateHotspotUserDto,
+  UpdateHotspotProfileDto,
 } from './dto/hotspot.dto.js';
 
 export interface SessionView {
@@ -216,6 +217,34 @@ export class HotspotService {
   }
 
   /** Profils de serveur : c'est la que vit `login-by` et la duree des cookies. */
+  /**
+   * Modifie un profil HotSpot.
+   *
+   * Ces champs ne sont pas de la décoration : `add-mac-cookie` décide si un
+   * client déjà venu revient **sans repasser par RADIUS** — donc si bloquer
+   * son compte le coupe tout de suite — et `mac-cookie-timeout` décide
+   * combien de temps. Relevé sur ce parc : un ticket de deux heures portait un
+   * cookie de dix-huit.
+   */
+  async updateProfile(
+    name: string,
+    dto: UpdateHotspotProfileDto,
+    adminUserId?: string,
+    routerId?: string,
+  ) {
+    const mikrotik = await this.client(routerId);
+    const profil = await mikrotik.updateHotspotProfile({ name, ...dto });
+    await this.audit.log({
+      adminUserId,
+      routerId,
+      action: 'UPDATE_HOTSPOT_PROFILE',
+      targetType: 'HotspotProfile',
+      targetId: name,
+      payloadDiff: { champs: Object.keys(dto) },
+    });
+    return profil;
+  }
+
   async serverProfiles(routerId?: string) {
     const mikrotik = await this.client(routerId);
     return mikrotik.getHotspotServerProfiles();

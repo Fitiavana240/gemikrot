@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -6,6 +7,7 @@ import {
   IsString,
   Matches,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 
@@ -135,4 +137,60 @@ export class UpdateHotspotUserDto {
   @IsInt()
   @IsPositive()
   limitUptimeSeconds?: number | null;
+}
+
+/**
+ * Modification d'un profil HotSpot. Seul ce qui est fourni est écrit.
+ *
+ * Le nom n'y figure pas : sur RouterOS il **est** l'identifiant du profil, et
+ * le changer reviendrait à en créer un autre en abandonnant les comptes qui
+ * pointent vers le premier.
+ */
+export class UpdateHotspotProfileDto {
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitRxBitsPerSecond?: number;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitTxBitsPerSecond?: number;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  sessionTimeoutSeconds?: number;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  sharedUsers?: number;
+
+  /** `null` retire le délai ; absent n'y touche pas. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  idleTimeoutSeconds?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  keepaliveTimeoutSeconds?: number | null;
+
+  /**
+   * Poser un cookie à la connexion, ou non.
+   *
+   * Le couper rend le blocage d'un compte immédiat, au prix d'une saisie du
+   * code à chaque reconnexion : c'est un arbitrage commercial, et il se prend
+   * ici plutôt que dans WinBox.
+   */
+  @IsOptional()
+  @IsBoolean()
+  addMacCookie?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  macCookieTimeoutSeconds?: number | null;
 }

@@ -8,6 +8,7 @@ import {
   CreateHotspotUserDto,
   CreateWalledGardenDto,
   CreateWalledGardenIpDto,
+  UpdateHotspotProfileDto,
   UpdateHotspotUserDto,
 } from './dto/hotspot.dto.js';
 
@@ -29,6 +30,18 @@ export class HotspotController {
   @Get('users')
   users(@Query('routerId') routerId?: string) {
     return this.hotspot.users(routerId);
+  }
+
+  /** Modifie un profil HotSpot : débit, durées, appareils, cookie. */
+  @Patch('profiles/:name')
+  @Roles(AdminRole.SUPER_ADMIN, AdminRole.ADMIN)
+  updateProfile(
+    @Param('name') name: string,
+    @Body() dto: UpdateHotspotProfileDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('routerId') routerId?: string,
+  ) {
+    return this.hotspot.updateProfile(name, dto, user.id, routerId);
   }
 
   /** Combien de tickets dorment réellement sur le routeur, par profil. */

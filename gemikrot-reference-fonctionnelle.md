@@ -867,6 +867,39 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — Régler la durée du cookie le rallume
+
+Les champs relevés au tour précédent n'étaient que lisibles. Le profil HotSpot n'avait
+**aucune écriture** du tout côté console : ni route, ni service, ni formulaire. Ajoutés, avec
+des libellés qui disent l'effet et non le nom du champ RouterOS — « pose un cookie » ne parle
+à personne, « **le client revient sans retaper son code** » décrit ce qui arrivera au comptoir.
+
+**Et le sondage a trouvé le piège le plus sournois de la journée.** Trois requêtes de suite sur
+le même profil :
+
+| Envoyé | Relu |
+|---|---|
+| `add-mac-cookie=false` seul | `false` |
+| avec `shared-users` et `idle-timeout` | `false` |
+| **avec `mac-cookie-timeout`** | **`true`** |
+
+**Régler la durée de vie du cookie réactive le cookie**, sans la moindre erreur. Un exploitant
+qui décocherait la case *en ajustant la durée dans le même formulaire* — le geste le plus
+naturel du monde — aurait obtenu **l'inverse de ce qu'il demande**. Le drapeau part donc seul,
+et en dernier ; deux tests le fixent, dont un qui vérifie qu'aucune requête supplémentaire
+n'est faite quand le cookie n'est pas en cause.
+
+Ce défaut ne se voyait qu'en relisant le routeur après écriture. C'est la quatrième fois
+aujourd'hui que la relecture attrape ce qu'un code « correct » laissait passer.
+
+**Un rappel opératoire** : `nest start --watch` ne surveille pas `node_modules`. Reconstruire le
+paquet MikroTik ne suffit pas — le serveur garde l'ancien code en mémoire, et la correction
+semble ne rien faire. Il faut le relancer.
+
+**Éprouvé** sur un profil d'essai : coupure du cookie et réglage de sa durée dans la même
+demande → `addMacCookie: false` ; réactivation avec durée → `true` / 3600 s. Profil supprimé
+ensuite ; 10 profils et 646 comptes intacts.
+
 ### 2026-09-20 — Les champs de limite, et les dates
 
 Demandé : les limites comptent, au niveau des profils comme des comptes, dans User Manager
