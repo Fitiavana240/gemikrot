@@ -182,6 +182,7 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | RTR-14 | **PPPoE** en plus du HotSpot : comptes, profils, serveurs et bassins livrés, correspondances écrites contre un relevé réel (`scripts/probe-ppp-sonde.ts`). **Les sessions actives restent non vérifiées** : le parc n'a aucun PPPoE en service, les noms de champs de `/ppp/active` sont donc pris de la documentation seule — et le test le dit | ⭐⭐ | 🔴 | 🟡 |
 | RTR-15 | **Menus IP en lecture** : files simples (le débit réellement alloué, client par client), journal du routeur, interfaces avec leurs coupures de lien, services d'administration, DDNS, ARP, serveurs DHCP, **pare-feu filtrage et NAT dans leur ordre d'évaluation**, DNS et entrées statiques, table de routage. **Lecture seule, par décision** : la console montre, WinBox modifie | ⭐⭐ | 🟡 | ✅ |
 | RTR-16 | **Stockage et préparation de User Manager** : mémoire interne, clés USB et leur état de montage, paquets installés, occupation par support, et où vit la base User Manager. Rend un diagnostic ordonné par gravité, avec la commande exacte quand il en existe une — dont la réponse à « pourquoi l'onglet User Manager n'apparaît-il pas dans WinBox » | ⭐⭐⭐ | 🟡 | ✅ |
+| RTR-17 | **Réparations depuis la console**, sans WinBox : allumer le service, activer les profils, programmer l'activation du paquet, annuler une désactivation programmée. **Liste blanche nommée, pas un passe-plat de commandes** — une route exécutant une commande RouterOS arbitraire donnerait à tout ADMIN une exécution de code à distance sur chaque routeur du parc. Le serveur relit l'état après avoir écrit et ne déclare le succès que si le routeur a réellement changé. Redémarrage, déplacement de la base et effacement de fichiers restent affichés comme commandes à coller, jamais comme boutons. **Formes de requête non éprouvées sur le matériel** — voir le journal | ⭐⭐⭐ | 🟡 | 🟡 |
 
 ---
 
@@ -581,6 +582,48 @@ contre le hAP réel avant d'être écrites, et les charges relevées figées dan
   tunnel a été monté de bout en bout, et RTR-14 à « non livré » alors que comptes, profils,
   serveurs et bassins le sont. La colonne étant le seul suivi qui fait foi, la laisser fausse
   coûte plus cher que de ne rien y écrire.
+
+### 2026-09-20 — Réparer depuis la console, sans WinBox (RTR-17)
+
+**Vérification** : 129 tests paquet, 120 backend, frontend compilé. Routes exposées et
+répondant. **Le chemin d'écriture vers le routeur n'a pas pu être éprouvé** : l'outillage
+refuse l'écriture depuis ce poste, et il n'a pas été contourné.
+
+- **Liste blanche nommée, et non passe-plat.** Une route qui exécuterait une commande
+  RouterOS arbitraire donnerait à tout ADMIN une exécution de code à distance sur chaque
+  routeur du parc — le tunnel WireGuard, monté pour administrer, servirait alors à tout.
+  Quatre réparations fixes, chacune portant son geste, son critère de réussite et le
+  constat qu'elle est censée faire disparaître.
+
+- **Le serveur relit l'état après avoir écrit.** C'est le cœur du service, pas un détail :
+  les formes de requête n'ayant pas pu être confrontées au matériel, et RouterOS répondant
+  volontiers `200` à une écriture qu'il n'applique pas, déclarer le succès sur l'absence
+  d'erreur enverrait chercher la panne ailleurs pendant des heures. Quand le routeur
+  accepte sans changer d'état, la console le dit et rend la commande à passer à la main.
+
+- **L'activation d'un paquet se juge sur `scheduled`, pas sur `disabled`.** Un changement
+  de paquet ne prend effet qu'au démarrage : vérifier `disabled` déclarerait en échec une
+  réparation parfaitement réussie, et la reproposerait indéfiniment.
+
+- **Trou trouvé en préparant la vérification** : une *désactivation* programmée était
+  invisible. Le paquet tourne, `disabled` reste faux, et le service meurt au premier
+  redémarrage venu — souvent des semaines plus tard, quand plus personne ne fait le lien.
+  C'est exactement la classe de panne que cet écran existe pour attraper : ajoutée comme
+  constat bloquant, avec l'annulation en un bouton.
+
+- **Ce qui reste volontairement sans bouton** : redémarrer (coupe tous les clients),
+  déplacer la base (touche des tickets déjà vendus), effacer des fichiers (suppose de
+  savoir à quoi chacun sert), téléverser un `.npk` (ne passe pas par REST). Affichés comme
+  commandes à coller, avec leur explication.
+
+- **Un rejeu refusé** : une réparation dont le constat n'est plus présent est rejetée en
+  `409` sans toucher au routeur. Un onglet resté ouvert propose encore des réparations
+  déjà faites ; les rejouer réécrirait un réglage que quelqu'un a pu changer exprès.
+
+- **Ce qui manque pour clore RTR-17** : une exécution réelle. `PATCH /rest/user-manager`
+  et `POST /rest/system/package/{enable,unschedule}` sont écrits d'après la convention du
+  reste du code (sélection par `.id`) et non d'après un relevé. Le parcours de vérification
+  sans risque pour les clients est décrit dans la note de livraison.
 
 ---
 

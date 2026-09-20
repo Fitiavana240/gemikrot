@@ -859,26 +859,101 @@ export class MockMikrotikService implements IMikrotikService {
   }
 
   /**
-   * Un simulacre neutre : ni sain, ni en panne.
+   * Etat de User Manager, volontairement mutable.
    *
-   * Inventer un diagnostic « tout va bien » ferait passer pour verifie ce
-   * qui ne l'est pas — le jugement se teste dans `evaluerUserManager`, sur
-   * des charges reelles, pas ici.
+   * Le service de reparation ne croit pas l'absence d'erreur : il relit
+   * l'etat apres avoir ecrit. Eprouver cela suppose un simulacre qui puisse
+   * changer — et qui puisse aussi *refuser* de changer, ce que fait un vrai
+   * routeur quand la forme de la requete ne lui convient pas.
    */
+  umEtat = {
+    serviceEnabled: false,
+    useProfiles: false,
+    /** `enable`, `disable`, ou rien — comme le `scheduled` de RouterOS. */
+    paquetProgramme: '' as '' | 'enable' | 'disable',
+  };
+  /** Quand c'est vrai, les ecritures sont acceptees puis ignorees. */
+  umIgnoreLesEcritures = false;
+
   async getUserManagerReadiness(): Promise<UserManagerReadinessDto> {
     return {
-      packageInstalled: false,
+      packageInstalled: true,
       packageEnabled: false,
-      packageVersion: null,
-      packageSizeBytes: null,
-      serviceEnabled: false,
-      useProfiles: false,
+      packageVersion: '7.24.4',
+      packageSizeBytes: 344209,
+      packageScheduled: this.umEtat.paquetProgramme || null,
+      serviceEnabled: this.umEtat.serviceEnabled,
+      useProfiles: this.umEtat.useProfiles,
       database: null,
-      internalFreeBytes: 0,
-      internalTotalBytes: 0,
+      internalFreeBytes: 286720,
+      internalTotalBytes: 16777216,
       disks: [],
-      constats: [],
+      constats: [
+        ...(this.umEtat.serviceEnabled
+          ? []
+          : [
+              {
+                code: 'service-eteint',
+                niveau: 'bloquant' as const,
+                titre: 'Le service User Manager est eteint',
+                detail: '',
+                commande: '/user-manager/set enabled=yes',
+                reparation: 'allumer-service',
+              },
+            ]),
+        ...(this.umEtat.useProfiles
+          ? []
+          : [
+              {
+                code: 'profils-desactives',
+                niveau: 'avertissement' as const,
+                titre: 'Les profils sont desactives',
+                detail: '',
+                commande: '/user-manager/set use-profiles=yes',
+                reparation: 'activer-profils',
+              },
+            ]),
+        ...(this.umEtat.paquetProgramme === 'enable'
+          ? []
+          : this.umEtat.paquetProgramme === 'disable'
+            ? [
+                {
+                  code: 'paquet-desactivation-programmee',
+                  niveau: 'bloquant' as const,
+                  titre: 'Desactivation programmee au prochain demarrage',
+                  detail: '',
+                  commande: '/system/package/unschedule user-manager',
+                  reparation: 'annuler-desactivation',
+                },
+              ]
+            : [
+                {
+                  code: 'paquet-desactive',
+                  niveau: 'bloquant' as const,
+                  titre: 'Le paquet est installe mais desactive',
+                  detail: '',
+                  commande: '/system/package/enable user-manager',
+                  reparation: 'activer-paquet',
+                },
+              ]),
+      ],
     };
+  }
+
+  async setUserManagerSettings(payload: { enabled?: boolean; useProfiles?: boolean }) {
+    if (this.umIgnoreLesEcritures) return;
+    if (payload.enabled !== undefined) this.umEtat.serviceEnabled = payload.enabled;
+    if (payload.useProfiles !== undefined) this.umEtat.useProfiles = payload.useProfiles;
+  }
+
+  async enablePackage(_name: string) {
+    if (this.umIgnoreLesEcritures) return;
+    this.umEtat.paquetProgramme = 'enable';
+  }
+
+  async unschedulePackage(_name: string) {
+    if (this.umIgnoreLesEcritures) return;
+    this.umEtat.paquetProgramme = '';
   }
 
   // ---------- Aides de test ----------

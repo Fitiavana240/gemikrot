@@ -1,7 +1,10 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { AdminRole } from '@prisma/client';
+import { CurrentUser } from '../auth/current-user.decorator.js';
+import type { AuthenticatedUser } from '../auth/jwt.strategy.js';
 import { Roles } from '../auth/roles.decorator.js';
 import { MikrotikClientFactory } from './mikrotik-client.factory.js';
+import { RouterRepairService } from './router-repair.service.js';
 
 /**
  * Les tables de diagnostic et de débit du routeur.
@@ -13,13 +16,22 @@ import { MikrotikClientFactory } from './mikrotik-client.factory.js';
  * Réservé aux rôles d'administration : ce sont des réglages d'infrastructure,
  * pas des gestes de vente. Un vendeur n'a rien à y faire, et le journal du
  * routeur expose des adresses et des noms de comptes.
+ *
+ * **Une exception au « lecture seule »** : les réparations de la préparation
+ * de User Manager (`POST repairs/:code`). Elles ne sont pas des réglages
+ * d'infrastructure mais la mise en service du produit lui-même, et sans elles
+ * il faudrait WinBox pour démarrer. Elles passent par une liste blanche
+ * nommée — aucune commande RouterOS ne transite par cette route.
  */
 const CAN_READ = [AdminRole.SUPER_ADMIN, AdminRole.ADMIN];
 
 @Roles(...CAN_READ)
 @Controller('routers/:routerId/tools')
 export class RouterToolsController {
-  constructor(private readonly clients: MikrotikClientFactory) {}
+  constructor(
+    private readonly clients: MikrotikClientFactory,
+    private readonly repair: RouterRepairService,
+  ) {}
 
   /** Files simples : le débit réellement alloué, client par client. */
   @Get('queues')
@@ -121,5 +133,29 @@ export class RouterToolsController {
   @Get('user-manager-readiness')
   async userManagerReadiness(@Param('routerId') routerId: string) {
     return (await this.clients.forRouter(routerId)).getUserManagerReadiness();
+  }
+
+  /** Ce que la console sait reparer elle-meme. Liste fixe, cote serveur. */
+  @Get('repairs')
+  repairs() {
+    return this.repair.listerRéparations();
+  }
+
+  /**
+   * Applique une reparation nommee.
+   *
+   * **Liste blanche, et non passe-plat.** Le code recu selectionne une entree
+   * fixe ; aucune commande RouterOS ne transite par cette route. Reserve au
+   * SUPER_ADMIN et a l'ADMIN comme le reste du controleur, et journalise a
+   * l'audit avec son resultat reel — le service relit l'etat du routeur
+   * plutot que de croire l'absence d'erreur.
+   */
+  @Post('repairs/:code')
+  applyRepair(
+    @Param('routerId') routerId: string,
+    @Param('code') code: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.repair.appliquer(routerId, code, user.id);
   }
 }

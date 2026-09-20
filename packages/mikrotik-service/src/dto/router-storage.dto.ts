@@ -67,6 +67,14 @@ export interface RouterPackageDto {
    */
   disabled: boolean;
   buildTime: string | null;
+  /**
+   * Ce qui est prévu au prochain démarrage : `enable`, `disable`, ou vide.
+   *
+   * C'est le **seul** observable qui prouve qu'une activation a été prise en
+   * compte : `disabled` ne bouge qu'après le redémarrage, si bien que sans ce
+   * champ une activation réussie ressemble à une activation ignorée.
+   */
+  scheduled: string | null;
 }
 
 /** Ce que le routeur dit de lui-même — `/system/resource`. */
@@ -100,6 +108,16 @@ export interface ConstatDto {
    * n'est pas une commande (brancher une clé, téléverser un paquet).
    */
   commande: string | null;
+  /**
+   * Le nom de la réparation que la console sait appliquer elle-même, ou
+   * `null` quand le geste lui échappe.
+   *
+   * Sont volontairement sans réparation : tout ce qui est physique (brancher
+   * une clé, téléverser un paquet) et tout ce qui déplace des données déjà
+   * vendues. Un bouton qui déplace une base de tickets n'a pas sa place à
+   * côté d'un bouton qui rallume un service.
+   */
+  reparation: string | null;
 }
 
 /**
@@ -115,6 +133,13 @@ export interface UserManagerReadinessDto {
   packageEnabled: boolean;
   packageVersion: string | null;
   packageSizeBytes: number | null;
+  /**
+   * Ce qui attend le prochain démarrage (`enable`, `disable`, ou `null`).
+   *
+   * Sans ce champ, une activation réussie serait indiscernable d'une
+   * activation ignorée : `packageEnabled` ne bascule qu'après le redémarrage.
+   */
+  packageScheduled: string | null;
   /** Le service RADIUS de User Manager est-il allumé ? */
   serviceEnabled: boolean;
   /** Sans profils, User Manager n'est qu'un RADIUS : pas de forfaits. */

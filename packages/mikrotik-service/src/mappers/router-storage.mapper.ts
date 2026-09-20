@@ -70,6 +70,7 @@ export function mapRouterPackage(raw: any): RouterPackageDto {
     sizeBytes: nombreOuNull(raw?.size),
     disabled: flag(raw?.disabled),
     buildTime: orNull(raw?.['build-time']),
+    scheduled: orNull(raw?.scheduled),
   };
 }
 
@@ -187,6 +188,8 @@ export function evaluerUserManager(entree: {
         `retirée ou n'est plus reconnue : les tickets déjà vendus sont illisibles ` +
         `tant qu'elle n'est pas rebranchée. Ne recréez rien avant de l'avoir cherchée.`,
       commande: '/disk/print',
+      // Rebrancher une clé ne se fait pas depuis un navigateur.
+      reparation: null,
     });
   } else if (disqueBase && !disqueBase.mounted) {
     constats.push({
@@ -200,6 +203,7 @@ export function evaluerUserManager(entree: {
           ? ` Ce volume n'a pas de système de fichiers reconnu — il n'a peut-être jamais été formaté.`
           : ''),
       commande: '/disk/print detail',
+      reparation: null,
     });
   } else if (database?.surSupportAmovible) {
     constats.push({
@@ -214,6 +218,7 @@ export function evaluerUserManager(entree: {
         `allumé, et elle mérite une sauvegarde régulière — c'est elle qui porte ` +
         `tous les tickets.`,
       commande: null,
+      reparation: null,
     });
   }
 
@@ -235,6 +240,41 @@ export function evaluerUserManager(entree: {
             `interne. Faites de la place avant de téléverser, sinon l'envoi échouera.`
           : ''),
       commande: null,
+      // Téléverser un `.npk` puis redémarrer ne passe pas par l'API REST.
+      reparation: null,
+    });
+  } else if (!paquet.disabled && paquet.scheduled === 'disable') {
+    // Le cas sournois : rien ne change tant que le routeur tourne, puis le
+    // service disparaît au premier redémarrage — souvent des semaines plus
+    // tard, quand plus personne ne fera le lien.
+    constats.push({
+      code: 'paquet-desactivation-programmee',
+      niveau: 'bloquant',
+      titre: 'Désactivation programmée au prochain démarrage',
+      detail:
+        `User Manager tourne encore, mais sa désactivation est enregistrée : ` +
+        `au prochain redémarrage, le service s'éteindra et les tickets ne ` +
+        `pourront plus être authentifiés. Rien ne le laissera deviner d'ici là. ` +
+        `Annuler maintenant est sans effet sur les clients connectés.`,
+      commande: `/system/package/unschedule ${NOM_PAQUET}`,
+      reparation: 'annuler-desactivation',
+    });
+  } else if (paquet.disabled && paquet.scheduled === 'enable') {
+    // L'activation est déjà demandée : la reproposer ferait tourner en rond
+    // quelqu'un qui vient de l'appliquer et ne voit rien changer.
+    constats.push({
+      code: 'paquet-active-au-redemarrage',
+      niveau: 'avertissement',
+      titre: 'Activation programmée, redémarrage requis',
+      detail:
+        `L'activation du paquet est enregistrée, mais un changement de paquet ` +
+        `ne prend effet qu'au démarrage : le menu restera absent et le service ` +
+        `éteint jusque-là. Choisissez le moment — redémarrer coupe tous les ` +
+        `clients connectés le temps du redémarrage.`,
+      commande: '/system/reboot',
+      // Redémarrer un routeur qui sert des centaines de clients est une
+      // décision d'exploitant, pas un bouton de diagnostic.
+      reparation: null,
     });
   } else if (paquet.disabled) {
     constats.push({
@@ -246,6 +286,7 @@ export function evaluerUserManager(entree: {
         `s'affiche pas et le service ne tourne pas. Le réactiver demande un ` +
         `redémarrage — un changement de paquet ne prend effet qu'au démarrage.`,
       commande: `/system/package/enable ${NOM_PAQUET}`,
+      reparation: 'activer-paquet',
     });
   }
 
@@ -260,6 +301,7 @@ export function evaluerUserManager(entree: {
         `ne peut être authentifié. Les comptes existants ne sont pas perdus, ` +
         `ils ne répondent simplement plus.`,
       commande: '/user-manager/set enabled=yes',
+      reparation: 'allumer-service',
     });
   }
 
@@ -273,6 +315,7 @@ export function evaluerUserManager(entree: {
         `pas de durée de validité, pas de limite de débit par offre. C'est le ` +
         `réglage qui rend les tickets vendables.`,
       commande: '/user-manager/set use-profiles=yes',
+      reparation: 'activer-profils',
     });
   }
 
@@ -289,6 +332,8 @@ export function evaluerUserManager(entree: {
         `support plus grand. Faites d'abord une sauvegarde : le déplacement ` +
         `touche des données déjà vendues.`,
       commande: null,
+      // Déplacer une base de tickets déjà vendus ne se fait pas d'un bouton.
+      reparation: null,
     });
   }
 
@@ -302,6 +347,7 @@ export function evaluerUserManager(entree: {
         `${mio(database.sizeBytes)}). Un support plein empêche User Manager ` +
         `d'écrire : les sessions ne sont plus comptées.`,
       commande: null,
+      reparation: null,
     });
   }
 
@@ -316,6 +362,8 @@ export function evaluerUserManager(entree: {
         `sauvegarde de configuration ou une mise à jour de RouterOS — les deux ` +
         `échoueront sans explication claire le jour où vous en aurez besoin.`,
       commande: '/file/print where size>100000',
+      // Choisir quels fichiers effacer demande de savoir à quoi ils servent.
+      reparation: null,
     });
   }
 
@@ -326,6 +374,7 @@ export function evaluerUserManager(entree: {
     packageEnabled: paquet != null && !paquet.disabled,
     packageVersion: paquet?.version ?? null,
     packageSizeBytes: paquet?.sizeBytes ?? null,
+    packageScheduled: paquet?.scheduled ?? null,
     serviceEnabled,
     useProfiles,
     database,

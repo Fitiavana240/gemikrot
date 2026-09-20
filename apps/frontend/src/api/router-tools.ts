@@ -211,6 +211,20 @@ export interface Constat {
   detail: string;
   /** La commande a coller dans le terminal, ou `null` si le geste est physique. */
   commande: string | null;
+  /**
+   * Le nom de la réparation que la console sait appliquer, ou `null` quand le
+   * geste lui échappe : brancher une clé, téléverser un paquet, redémarrer,
+   * déplacer une base de tickets déjà vendus.
+   */
+  reparation: string | null;
+}
+
+export interface ResultatReparation {
+  /** Faux quand le routeur a accepté la demande sans rien changer. */
+  appliquee: boolean;
+  message: string;
+  /** L'état relu après coup : l'écran se rafraîchit sans second appel. */
+  etat: UserManagerReadiness;
 }
 
 export interface UserManagerReadiness {
@@ -218,6 +232,8 @@ export interface UserManagerReadiness {
   packageEnabled: boolean;
   packageVersion: string | null;
   packageSizeBytes: number | null;
+  /** `enable` quand l'activation attend un redémarrage. */
+  packageScheduled: string | null;
   serviceEnabled: boolean;
   useProfiles: boolean;
   database: {
@@ -252,6 +268,12 @@ export const routerToolsApi = {
   storage: (routerId: string) => api.get<RouterStorage>(`${base(routerId)}/storage`),
   userManagerReadiness: (routerId: string) =>
     api.get<UserManagerReadiness>(`${base(routerId)}/user-manager-readiness`),
+  /**
+   * Applique une réparation nommée. Le code désigne une entrée d'une liste
+   * blanche tenue côté serveur : aucune commande RouterOS ne transite ici.
+   */
+  appliquerReparation: (routerId: string, code: string) =>
+    api.post<ResultatReparation>(`${base(routerId)}/repairs/${code}`, {}),
 };
 
 /** bits/s → « 6 Mb/s ». Zéro veut dire « aucun plafond », pas « zéro débit ». */

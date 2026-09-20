@@ -291,5 +291,12 @@ export interface IMikrotikService {
   getRouterStorage(): Promise<RouterStorageDto>;
   /** Le diagnostic complet de User Manager : present, allume, et ou. */
   getUserManagerReadiness(): Promise<UserManagerReadinessDto>;
+
+  /** Allume ou eteint le service User Manager, et ses profils. */
+  setUserManagerSettings(payload: { enabled?: boolean; useProfiles?: boolean }): Promise<void>;
+  /** Programme l'activation d'un paquet. Ne prend effet qu'au redemarrage. */
+  enablePackage(name: string): Promise<void>;
+  /** Annule ce qui etait programme sur un paquet pour le prochain demarrage. */
+  unschedulePackage(name: string): Promise<void>;
 }
 

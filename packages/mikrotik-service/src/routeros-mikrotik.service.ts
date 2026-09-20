@@ -1059,6 +1059,63 @@ export class RouterOSMikrotikService implements IMikrotikService {
   }
 
   /**
+   * Allume ou éteint le service User Manager, et ses profils.
+   *
+   * `/user-manager` est un menu singleton : on écrit sur le chemin lui-même,
+   * sans identifiant — contrairement à `/user-manager/user/<id>`.
+   *
+   * **Forme non éprouvée contre le matériel.** L'écriture depuis ce poste est
+   * refusée par l'outillage, et cinq correspondances de ce projet écrites sur
+   * la seule documentation se sont révélées fausses. L'appelant ne doit donc
+   * pas croire l'absence d'erreur : `RouterRepairService` relit l'état après
+   * coup et ne déclare le succès que si le routeur a réellement changé.
+   */
+  async setUserManagerSettings(payload: { enabled?: boolean; useProfiles?: boolean }) {
+    const corps: Record<string, string> = {};
+    if (payload.enabled !== undefined) corps.enabled = payload.enabled ? 'yes' : 'no';
+    if (payload.useProfiles !== undefined) {
+      corps['use-profiles'] = payload.useProfiles ? 'yes' : 'no';
+    }
+    this.logger.info('Écriture des réglages User Manager', { corps });
+    await this.client.patch<any>('/user-manager', corps);
+  }
+
+  /**
+   * Programme l'activation d'un paquet.
+   *
+   * Rien ne se produit avant le redémarrage : `disabled` reste vrai, et c'est
+   * `scheduled` qui porte la trace de la demande. Le redémarrage n'est **pas**
+   * déclenché ici — couper un routeur qui sert des centaines de clients est
+   * une décision d'exploitant, pas un effet de bord.
+   *
+   * Même réserve que ci-dessus : forme non éprouvée sur le matériel.
+   */
+  async enablePackage(name: string) {
+    const paquets = await this.client.get<any[]>('/system/package');
+    const cible = paquets.find((p) => p?.name === name);
+    if (!cible) throw new MikrotikNotFoundError('Paquet', name);
+
+    this.logger.info('Programmation activation de paquet', { name });
+    await this.client.post<any>('/system/package/enable', { '.id': cible['.id'] });
+  }
+
+  /**
+   * Annule ce qui était programmé sur un paquet pour le prochain démarrage.
+   *
+   * Sert au cas le plus sournois : une désactivation programmée ne se voit
+   * nulle part tant que le routeur tourne — `disabled` reste faux — et
+   * emporte le service au premier redémarrage venu.
+   */
+  async unschedulePackage(name: string) {
+    const paquets = await this.client.get<any[]>('/system/package');
+    const cible = paquets.find((p) => p?.name === name);
+    if (!cible) throw new MikrotikNotFoundError('Paquet', name);
+
+    this.logger.info('Annulation de la programmation de paquet', { name });
+    await this.client.post<any>('/system/package/unschedule', { '.id': cible['.id'] });
+  }
+
+  /**
    * Le diagnostic de User Manager.
    *
    * `/user-manager` et `/user-manager/database` repondent 500 quand le paquet

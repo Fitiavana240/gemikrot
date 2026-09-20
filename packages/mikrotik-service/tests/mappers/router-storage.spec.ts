@@ -277,6 +277,68 @@ describe('evaluerUserManager', () => {
     expect(constat?.detail).toContain('redémarrage');
   });
 
+  it("cesse de proposer l'activation une fois qu'elle est programmée", () => {
+    // Le piège : `disabled` reste vrai jusqu'au redémarrage. Sans regarder
+    // `scheduled`, on reproposerait indéfiniment une réparation déjà faite à
+    // quelqu'un qui vient de l'appliquer et ne voit rien changer.
+    const etat = evaluerUserManager({
+      ...PARC,
+      packagesRaw: PAQUETS.map((p) =>
+        p.name === 'user-manager' ? { ...p, disabled: 'true', scheduled: 'enable' } : p,
+      ),
+    });
+
+    expect(etat.packageScheduled).toBe('enable');
+    expect(codes(etat)).not.toContain('paquet-desactive');
+    const constat = etat.constats.find((c) => c.code === 'paquet-active-au-redemarrage');
+    expect(constat?.commande).toBe('/system/reboot');
+    // Et surtout : pas de bouton. Redémarrer coupe tous les clients.
+    expect(constat?.reparation).toBeNull();
+  });
+
+  it('attrape une désactivation programmée, que rien ne trahit autrement', () => {
+    // Le paquet tourne (`disabled` faux) et mourra au prochain redémarrage.
+    // Sans ce constat, personne ne fait le lien des semaines plus tard.
+    const etat = evaluerUserManager({
+      ...PARC,
+      packagesRaw: PAQUETS.map((p) =>
+        p.name === 'user-manager' ? { ...p, scheduled: 'disable' } : p,
+      ),
+    });
+
+    const constat = etat.constats.find((c) => c.code === 'paquet-desactivation-programmee');
+    expect(constat?.niveau).toBe('bloquant');
+    expect(constat?.reparation).toBe('annuler-desactivation');
+    // Le paquet est toujours actif : le diagnostic ne doit pas le nier.
+    expect(etat.packageEnabled).toBe(true);
+  });
+
+  it('ne propose de bouton que pour les gestes sans conséquence sur les clients', () => {
+    const réparables = (r: ReturnType<typeof evaluerUserManager>) =>
+      r.constats.filter((c) => c.reparation !== null).map((c) => c.reparation);
+
+    expect(réparables(evaluerUserManager({ ...PARC, serviceRaw: { ...SERVICE, enabled: 'false' } })))
+      .toEqual(['allumer-service']);
+    expect(
+      réparables(
+        evaluerUserManager({ ...PARC, serviceRaw: { ...SERVICE, 'use-profiles': 'false' } }),
+      ),
+    ).toEqual(['activer-profils']);
+
+    // Les constats physiques ou destructeurs n'en ont aucun : on ne rebranche
+    // pas une clé depuis un navigateur, et on ne déplace pas d'un bouton une
+    // base qui porte des tickets déjà vendus.
+    expect(réparables(evaluerUserManager({ ...PARC, disksRaw: [] }))).toEqual([]);
+    expect(
+      réparables(
+        evaluerUserManager({
+          ...PARC,
+          databaseRaw: { ...BASE, 'db-path': 'flash/user-manager' },
+        }),
+      ),
+    ).toEqual([]);
+  });
+
   it('propose de déplacer une base restée sur le flash, si une clé est là', () => {
     const etat = evaluerUserManager({
       ...PARC,

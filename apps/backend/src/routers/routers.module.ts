@@ -4,6 +4,7 @@ import { AuditModule } from '../audit/audit.module.js';
 import { DevicesModule } from '../devices/devices.module.js';
 import { RouterAccessService } from './router-access.service.js';
 import { RouterCredentialsService } from './router-credentials.service.js';
+import { RouterRepairService } from './router-repair.service.js';
 import { RouterToolsController } from './router-tools.controller.js';
 import { RouterEnrollmentController } from './router-enrollment.controller.js';
 import { RouterEnrollmentService } from './router-enrollment.service.js';
@@ -35,6 +36,7 @@ import { RouterMonitoringController } from './router-monitoring.controller.js';
     WireguardService,
     RouterEnrollmentService,
     RouterCredentialsService,
+    RouterRepairService,
     RouterHealthService,
     RouterOperationQueue,
     MikrotikClientFactory,

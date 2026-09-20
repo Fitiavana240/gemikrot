@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   formatBits,
   routerToolsApi,
   type FirewallRule,
   type NiveauConstat,
+  type ResultatReparation,
 } from '../api/router-tools';
 import { formatDuree, formatOctets } from '../api/mikrotik-tabs';
 import { useRouterSelection } from '../routers/RouterContext';
@@ -662,6 +663,21 @@ const BORDURE_CONSTAT: Record<NiveauConstat, string> = {
   ok: 'border-emerald-200 bg-emerald-50',
 };
 
+// Du gris sur un fond coloré paraît délavé. Le texte prend une teinte
+// sombre de sa propre couleur, ce qui reste lisible et garde le code
+// couleur du niveau.
+const TITRE_CONSTAT: Record<NiveauConstat, string> = {
+  bloquant: 'text-red-950',
+  avertissement: 'text-amber-950',
+  ok: 'text-emerald-950',
+};
+
+const TEXTE_CONSTAT: Record<NiveauConstat, string> = {
+  bloquant: 'text-red-900',
+  avertissement: 'text-amber-900',
+  ok: 'text-emerald-900',
+};
+
 /**
  * Stockage et état de User Manager.
  *
@@ -672,10 +688,33 @@ const BORDURE_CONSTAT: Record<NiveauConstat, string> = {
  */
 function StockageTab() {
   const { currentId } = useRouterSelection();
+  const client = useQueryClient();
   const état = useQuery({
     queryKey: ['tools-um-readiness', currentId],
     queryFn: () => routerToolsApi.userManagerReadiness(currentId!),
     enabled: Boolean(currentId),
+  });
+
+  /**
+   * Le résultat de la dernière réparation, gardé à l'écran.
+   *
+   * Il compte autant que le succès : le serveur relit l'état du routeur après
+   * avoir écrit, et peut répondre « accepté, mais rien n'a changé ». Faire
+   * disparaître ce cas derrière un rafraîchissement silencieux renverrait
+   * chercher la panne ailleurs.
+   */
+  const [dernier, setDernier] = useState<ResultatReparation | { erreur: string } | null>(null);
+
+  const réparer = useMutation({
+    mutationFn: (code: string) => routerToolsApi.appliquerReparation(currentId!, code),
+    onSuccess: (résultat) => {
+      setDernier(résultat);
+      client.setQueryData(['tools-um-readiness', currentId], résultat.etat);
+      void client.invalidateQueries({ queryKey: ['tools-storage', currentId] });
+    },
+    onError: (erreur: unknown) => {
+      setDernier({ erreur: erreur instanceof Error ? erreur.message : String(erreur) });
+    },
   });
   const stockage = useQuery({
     queryKey: ['tools-storage', currentId],
@@ -697,9 +736,21 @@ function StockageTab() {
 
   return (
     <div className="space-y-4">
+      {dernier && (
+        <div
+          className={`rounded-lg border p-3 text-sm ${
+            'erreur' in dernier || !dernier.appliquee
+              ? 'border-red-300 bg-red-50 text-red-900'
+              : 'border-emerald-300 bg-emerald-50 text-emerald-900'
+          }`}
+        >
+          {'erreur' in dernier ? dernier.erreur : dernier.message}
+        </div>
+      )}
+
       <div className="space-y-2">
         {e.constats.length === 0 ? (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-slate-700">
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
             Rien à signaler : User Manager est installé, allumé, et son support a de la place.
           </div>
         ) : (
@@ -709,18 +760,42 @@ function StockageTab() {
                 <Badge tone={TON_CONSTAT[c.niveau]}>
                   {c.niveau === 'ok' ? 'à savoir' : c.niveau}
                 </Badge>
-                <span className="text-sm font-semibold text-slate-900">{c.titre}</span>
+                <span className={`text-sm font-semibold ${TITRE_CONSTAT[c.niveau]}`}>
+                  {c.titre}
+                </span>
               </div>
-              <p className="mt-1.5 max-w-3xl text-sm text-slate-700">{c.detail}</p>
-              {c.commande && (
-                <div className="mt-2">
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                    À coller dans le terminal du routeur
-                  </p>
-                  <code className="mt-1 block overflow-x-auto rounded bg-slate-900 px-3 py-2 font-mono text-xs text-slate-100">
+              <p className={`mt-1.5 max-w-3xl text-sm ${TEXTE_CONSTAT[c.niveau]}`}>{c.detail}</p>
+
+              {c.reparation ? (
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => réparer.mutate(c.reparation!)}
+                    disabled={réparer.isPending}
+                    className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-700 disabled:opacity-50"
+                  >
+                    {réparer.isPending && réparer.variables === c.reparation
+                      ? 'Application…'
+                      : 'Corriger depuis la console'}
+                  </button>
+                  {/* La commande reste montrée à côté du bouton : l'exploitant
+                      doit pouvoir voir ce qui va être écrit avant de cliquer,
+                      et la repasser à la main si la console échoue. */}
+                  <code className="overflow-x-auto rounded bg-slate-900 px-2 py-1 font-mono text-[11px] text-slate-100">
                     {c.commande}
                   </code>
                 </div>
+              ) : (
+                c.commande && (
+                  <div className="mt-2">
+                    <p className={`text-[11px] uppercase tracking-wide ${TEXTE_CONSTAT[c.niveau]}`}>
+                      À passer dans le terminal du routeur
+                    </p>
+                    <code className="mt-1 block overflow-x-auto rounded bg-slate-900 px-3 py-2 font-mono text-xs text-slate-100">
+                      {c.commande}
+                    </code>
+                  </div>
+                )
               )}
             </div>
           ))
