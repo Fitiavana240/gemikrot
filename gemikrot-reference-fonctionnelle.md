@@ -867,6 +867,43 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — L'écran Appareils disait « bloqué » de ce qui marchait
+
+**Rouge sur un téléphone qui va bien.** La colonne lisait `bypassEnabled` et n'en tirait que
+deux issues : vrai → « Actif », faux → « Bloqué » en rouge. Or faux recouvre deux situations
+**opposées**. Un appareil jamais contourné — l'immense majorité — passe par le portail comme
+tout le monde et fonctionne parfaitement ; le dire bloqué envoie chercher une panne qui
+n'existe pas. Un appareil dont le contournement a été coupé garde un `ip-binding` de type
+`blocked` sur le routeur : là, son trafic est jeté et il n'atteint même pas la page de
+connexion. `mikrotikBindingId` les sépare exactement — il n'existe que si un contournement a
+été créé un jour. Trois états désormais : **passe sans portail**, **passe par le portail**,
+**bloqué au routeur**, et le bouton suit — « Rétablir » plutôt qu'« Activer » sur un appareil
+bloqué, parce qu'il remet un binding existant et n'en crée aucun.
+
+**La table qui se taisait.** Quand le routeur ne répondait pas, la découverte échouait, `data`
+restait vide — et la ligne « aucun bail DHCP visible » ne s'affichait pas davantage, sa garde
+comparant `undefined` à zéro. On lisait une table à en-têtes, sans une ligne ni un mot : ce
+qui se confond avec « aucun appareil sur le réseau », **la conclusion inverse de la vraie**.
+Même silence sans routeur choisi, la requête restant désactivée. Les deux cas sont dits, et
+l'erreur rappelle ce qui continue sans la console : les contournements en place tiennent,
+c'est le routeur qui les applique.
+
+**Ce que valait la proposition.** Le serveur calcule une fiabilité pour chaque type proposé ;
+l'écran la jetait. Un nom DHCP reconnu (« Galaxy-A11 ») et un préfixe de fabricant qui ne dit
+rien du type arrivaient sans nuance — et le second propose toujours « indéterminé ». C'est
+pourtant le seul renseignement qui compte au moment où l'on demande à l'admin de confirmer ;
+sans lui, confirmer devient un réflexe. Elle s'affiche : **nom reconnu** ou **simple
+supposition**.
+
+Restaient les types en anglais brut — `PHONE`, `TV`, `CAMERA` — jusque dans la liste
+déroulante, et une table d'appareils enregistrés identifiés par leur seule adresse MAC alors
+que le nom DHCP était en base. L'ambre sur télévision et caméra n'est pas décoratif : ce sont
+les deux types dépourvus de navigateur, ceux qui ne passeront jamais sans contournement.
+
+**Éprouvé à l'écran**, les trois états côte à côte sur des lignes d'essai, puis un routeur
+d'essai pointé sur une adresse injoignable pour voir la branche d'erreur ; lignes et routeur
+supprimés ensuite, et les comptes HotSpot toujours à 646.
+
 ### 2026-09-20 — L'écran Routeurs et le raccordement
 
 Trois défauts, trouvés en regardant ces écrans plutôt que leurs API.

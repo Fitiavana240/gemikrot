@@ -73,6 +73,25 @@ export const STATUT_SIMPLE: Record<string, Libellé> = {
 };
 
 /**
+ * Les types d'appareil, et ce qu'ils impliquent.
+ *
+ * Le ton n'est pas décoratif : **ambre pour la télévision et la caméra**, les
+ * deux seuls types dépourvus de navigateur. Ils ne peuvent pas afficher le
+ * portail captif et ne passeront jamais sans contournement ; c'est la raison
+ * d'être de cet écran, et elle doit se voir dans la liste.
+ */
+export const TYPE_APPAREIL: Record<string, Libellé> = {
+  PHONE: { label: 'téléphone', ton: 'slate' },
+  COMPUTER: { label: 'ordinateur', ton: 'slate' },
+  TV: { label: 'télévision', ton: 'amber' },
+  CAMERA: { label: 'caméra', ton: 'amber' },
+  ROUTER: { label: 'routeur', ton: 'slate' },
+  // « Autre » est ce que rend la détection quand elle ne conclut pas : c'est
+  // une absence de réponse, pas une catégorie.
+  OTHER: { label: 'indéterminé', ton: 'slate' },
+};
+
+/**
  * Traduit ce qui est connu, et **laisse passer le reste tel quel**.
  *
  * Un statut ajouté côté serveur sans l'être ici doit rester lisible, fût-ce
