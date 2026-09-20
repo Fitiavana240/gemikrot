@@ -839,6 +839,34 @@ plus », qui énonçait une règle là où il n'y a qu'un défaut. Le premier me
 que les comptes seraient créés « sans validité » — `PlanProvisioningService.reconcile` crée
 le profil manquant à la génération, ce que le code confirme.
 
+### 2026-09-20 — Ce que l'interface disait mal
+
+**Cinq boîtes du navigateur, toutes posées par moi.** `window.prompt` et `window.confirm`
+marchent, et c'est leur seul mérite : ils ignorent la charte, s'affichent en pleine largeur
+sur un téléphone, et surtout ils écrasent en texte minuscule ce qui compte le plus — **ce que
+le geste change**. Un vendeur lisait « Nouvelle validité en jours ? » sans voir que les
+tickets déjà attribués n'en profiteraient pas. Certains navigateurs proposent en prime de
+bloquer les dialogues d'une page après quelques-uns, et l'action disparaît alors sans rien
+dire.
+
+Remplacées par trois composants. Une confirmation qui **nomme ce qu'on perd** plutôt que de
+demander « êtes-vous sûr » — la question n'apprend rien, la conséquence si. Un éditeur à un
+champ avec la place d'expliquer sa portée. Et un champ de durée.
+
+**Le champ de durée vient d'un défaut que l'écran a révélé.** Imposer les jours affichait
+`0.0104` pour le profil `TEST-1H`, qui dure quinze minutes. Le parc va de 15 min à 30 j :
+une seule unité ne peut pas servir les deux bouts. L'unité est désormais choisie d'après la
+valeur — la plus grosse qui tombe juste — et en changer **convertit** au lieu de vider :
+30 jours deviennent 720 heures, pas un champ blanc.
+
+Le champ a été extrait plutôt que recopié, puis posé aussi sur les deux formulaires de
+création qui souffraient du même mal : « Validité (heures) » d'un profil User Manager et
+« Plafond de temps (heures) » d'un compte HotSpot. La conversion et le choix de l'unité
+étaient exactement la partie qu'on aurait fini par écrire deux fois différemment.
+
+**Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
+le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
+
 ### 2026-09-20 — TIC-9 : le QR code du ticket
 
 **Ce qu'il encode compte plus que sa présence.** Un QR portant les dix caractères du code

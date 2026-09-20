@@ -14,6 +14,7 @@ import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
 import { useRouterSelection } from '../routers/RouterContext';
 import { GenerationTickets } from '../components/GenerationTickets';
+import { ChampDuree } from '../components/Edition';
 import {
   Badge,
   Button,
@@ -80,8 +81,9 @@ function useFiltre<T>(items: T[] | undefined, champs: (item: T) => (string | nul
  * courriel, de route ni de secret OTP. Les proposer ferait six champs vides à
  * traverser pour en remplir trois.
  *
- * Le plafond est saisi en heures parce que c'est ainsi qu'un ticket se vend
- * — « 2h, 500 Ar ». RouterOS le stocke en durée, pas en nombre.
+ * Le plafond porte son unité : les tickets du parc vont de 2 h à un mois, et
+ * une unité fixe obligerait à saisir « 720 » pour l'un ou « 0.25 » pour
+ * l'autre. RouterOS le stocke en durée, pas en nombre.
  */
 function FormulaireCompteHotspot({
   compte,
@@ -107,9 +109,7 @@ function FormulaireCompteHotspot({
   const [password, setPassword] = useState('');
   const [profileName, setProfileName] = useState(compte?.profile ?? '');
   const [comment, setComment] = useState(compte?.comment ?? '');
-  const [heures, setHeures] = useState(
-    compte?.limitUptimeSeconds != null ? String(compte.limitUptimeSeconds / 3600) : '',
-  );
+  const [plafond, setPlafond] = useState<number | null>(compte?.limitUptimeSeconds ?? null);
 
   return (
     <Card title={modification ? `Modifier « ${compte.username} »` : 'Nouveau compte HotSpot'}>
@@ -117,15 +117,14 @@ function FormulaireCompteHotspot({
         className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
-          const h = heures.trim() === '' ? null : Number(heures.replace(',', '.'));
           onValider({
             username,
             password,
             profileName,
             comment,
-            // Vide veut dire « aucun plafond », pas « zéro heure » — un
-            // plafond nul créerait un compte inutilisable dès sa création.
-            limitUptimeSeconds: h != null && Number.isFinite(h) && h > 0 ? Math.round(h * 3600) : null,
+            // `null` veut dire « aucun plafond », pas « zéro » — un plafond
+            // nul créerait un compte inutilisable dès sa création.
+            limitUptimeSeconds: plafond,
           });
         }}
       >
@@ -171,14 +170,14 @@ function FormulaireCompteHotspot({
               placeholder="Ticket 500Ar"
             />
           </FormField>
-          <FormField label="Plafond de temps (heures)">
-            <Input
-              type="number"
-              min="0"
-              step="0.5"
-              value={heures}
-              onChange={(e) => setHeures(e.target.value)}
-              placeholder="vide = sans plafond"
+          <FormField label="Plafond de temps">
+            {/* Les tickets du parc vont de 2 h à un mois : une unité fixe
+                obligerait à saisir « 720 » pour l'un ou « 0.25 » pour
+                l'autre. Vide veut dire « aucun plafond », pas zéro. */}
+            <ChampDuree
+              secondes={plafond}
+              onChange={setPlafond}
+              placeholder="sans plafond"
             />
           </FormField>
         </div>

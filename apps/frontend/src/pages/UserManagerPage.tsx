@@ -18,7 +18,12 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { useRouterSelection } from '../routers/RouterContext';
 import { GenerationTickets } from '../components/GenerationTickets';
-import { ConfirmationInline, EditionDuree, EditionUnChamp } from '../components/Edition';
+import {
+  ChampDuree,
+  ConfirmationInline,
+  EditionDuree,
+  EditionUnChamp,
+} from '../components/Edition';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import {
@@ -217,16 +222,14 @@ function ProfilesTab() {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
             </FormField>
-            <FormField label="Validité (heures)">
-              <Input
-                type="number"
-                min={1}
-                value={form.validityDurationSeconds ? form.validityDurationSeconds / 3600 : ''}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    validityDurationSeconds: e.target.value ? Number(e.target.value) * 3600 : null,
-                  })
+            <FormField label="Validité">
+              {/* Le parc va de 15 min à 30 j : imposer les heures ferait
+                  saisir « 0.25 » pour un ticket court et « 720 » pour un
+                  forfait mensuel. */}
+              <ChampDuree
+                secondes={form.validityDurationSeconds}
+                onChange={(secondes) =>
+                  setForm({ ...form, validityDurationSeconds: secondes })
                 }
               />
             </FormField>

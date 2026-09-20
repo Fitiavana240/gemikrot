@@ -73,10 +73,78 @@ function unitéNaturelle(secondes: number): (typeof UNITÉS)[number] {
 }
 
 /**
- * Modification d'une durée : un nombre et son unité.
+ * Un champ de durée : un nombre et son unité, pour n'importe quel formulaire.
  *
- * Séparé de `EditionUnChamp` parce que le choix de l'unité fait partie de la
- * saisie, pas de sa décoration.
+ * Extrait plutôt que recopié — la conversion et le choix de l'unité sont la
+ * partie qu'on aurait fini par écrire deux fois différemment.
+ *
+ * `null` veut dire « rien de saisi ». Un plafond ou une validité absents ne
+ * sont pas la même chose que zéro, et l'appelant doit pouvoir les distinguer.
+ */
+export function ChampDuree({
+  secondes,
+  onChange,
+  autoFocus,
+  placeholder,
+}: {
+  secondes: number | null;
+  onChange: (secondes: number | null) => void;
+  autoFocus?: boolean;
+  placeholder?: string;
+}) {
+  const départ = unitéNaturelle(secondes ?? 86_400);
+  const [unité, setUnité] = useState<string>(départ.clé);
+  const [valeur, setValeur] = useState(secondes ? String(secondes / départ.secondes) : '');
+
+  const facteur = UNITÉS.find((u) => u.clé === unité)?.secondes ?? 86_400;
+
+  const poser = (texte: string, facteurUnité: number) => {
+    setValeur(texte);
+    const nombre = Number(texte.replace(',', '.'));
+    onChange(texte.trim() === '' || !Number.isFinite(nombre) || nombre <= 0
+      ? null
+      : Math.round(nombre * facteurUnité));
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        type="number"
+        step="any"
+        min="0"
+        value={valeur}
+        onChange={(e) => poser(e.target.value, facteur)}
+        placeholder={placeholder}
+        autoFocus={autoFocus}
+        className="w-32"
+      />
+      <select
+        value={unité}
+        onChange={(e) => {
+          // Convertir plutôt que réinitialiser : passer de jours à heures
+          // doit garder la même durée, pas vider le champ.
+          const nouveau = UNITÉS.find((u) => u.clé === e.target.value)?.secondes ?? 86_400;
+          const nombre = Number(valeur.replace(',', '.'));
+          setUnité(e.target.value);
+          if (Number.isFinite(nombre) && nombre > 0) {
+            poser(String((nombre * facteur) / nouveau), nouveau);
+          }
+        }}
+        className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-700 focus:border-sky-500 focus:outline-none"
+      >
+        {UNITÉS.map((u) => (
+          <option key={u.clé} value={u.clé}>
+            {u.libellé}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/**
+ * Modification d'une durée : le champ ci-dessus, dans un panneau qui a la
+ * place d'expliquer la portée du changement.
  */
 export function EditionDuree({
   titre,
@@ -96,14 +164,8 @@ export function EditionDuree({
   onAnnuler: () => void;
   enCours?: boolean;
 }) {
-  const départ = unitéNaturelle(secondesInitiales ?? 86_400);
-  const [unité, setUnité] = useState<string>(départ.clé);
-  const [valeur, setValeur] = useState(
-    secondesInitiales ? String(secondesInitiales / départ.secondes) : '',
-  );
+  const [secondes, setSecondes] = useState<number | null>(secondesInitiales);
   const [erreur, setErreur] = useState<string | null>(null);
-
-  const facteur = UNITÉS.find((u) => u.clé === unité)?.secondes ?? 86_400;
 
   return (
     <Card title={titre}>
@@ -111,12 +173,11 @@ export function EditionDuree({
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          const nombre = Number(valeur.replace(',', '.'));
-          if (!Number.isFinite(nombre) || nombre <= 0) {
+          if (secondes == null) {
             setErreur('Indiquez une durée supérieure à zéro.');
             return;
           }
-          const refus = onValider(Math.round(nombre * facteur));
+          const refus = onValider(secondes);
           setErreur(typeof refus === 'string' ? refus : null);
         }}
       >
@@ -124,39 +185,7 @@ export function EditionDuree({
 
         <div className="flex flex-wrap items-end gap-3">
           <FormField label={libellé}>
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                step="any"
-                min="0"
-                value={valeur}
-                onChange={(e) => setValeur(e.target.value)}
-                autoFocus
-                className="w-32"
-              />
-              <select
-                value={unité}
-                onChange={(e) => {
-                  // Convertir plutôt que réinitialiser : passer de jours à
-                  // heures doit garder la même durée, pas vider le champ.
-                  const ancien = facteur;
-                  const nouveau =
-                    UNITÉS.find((u) => u.clé === e.target.value)?.secondes ?? 86_400;
-                  const nombre = Number(valeur.replace(',', '.'));
-                  if (Number.isFinite(nombre) && nombre > 0) {
-                    setValeur(String((nombre * ancien) / nouveau));
-                  }
-                  setUnité(e.target.value);
-                }}
-                className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-700 focus:border-sky-500 focus:outline-none"
-              >
-                {UNITÉS.map((u) => (
-                  <option key={u.clé} value={u.clé}>
-                    {u.libellé}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <ChampDuree secondes={secondesInitiales} onChange={setSecondes} autoFocus />
           </FormField>
           <div className="flex gap-2 pb-0.5">
             <Button type="submit" disabled={enCours}>
