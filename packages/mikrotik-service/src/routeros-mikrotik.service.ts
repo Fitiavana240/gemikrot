@@ -1296,17 +1296,21 @@ export class RouterOSMikrotikService implements IMikrotikService {
   }
 
   async getRouterStorage() {
-    const [resource, disks, packages, files] = await Promise.all([
+    const [resource, disks, packages, files, routerboard] = await Promise.all([
       this.client.get<any>('/system/resource'),
       this.client.get<any[]>('/disk'),
       this.client.get<any[]>('/system/package'),
       this.client.get<any[]>('/file'),
+      // Le micrologiciel d'amorçage se met à jour séparément de RouterOS :
+      // l'écart entre les deux ne se voit nulle part sans aller le chercher.
+      this.client.get<any>('/system/routerboard').catch(() => null),
     ]);
     return StorageMapper.mapRouterStorage(
       Array.isArray(resource) ? resource[0] : resource,
       disks,
       packages,
       files,
+      Array.isArray(routerboard) ? routerboard[0] : routerboard,
     );
   }
 

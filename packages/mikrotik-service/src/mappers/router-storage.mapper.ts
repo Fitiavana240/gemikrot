@@ -4,6 +4,7 @@ import {
   RouterFileDto,
   RouterPackageDto,
   RouterStorageDto,
+  RouterboardDto,
   UserManagerReadinessDto,
 } from '../dto/router-storage.dto';
 
@@ -104,6 +105,7 @@ export function mapRouterStorage(
   disksRaw: any[],
   packagesRaw: any[],
   filesRaw: any[],
+  routerboardRaw?: any,
 ): RouterStorageDto {
   const fichiers = filesRaw.map(mapRouterFile);
 
@@ -130,6 +132,7 @@ export function mapRouterStorage(
     parRacine: [...cumul.entries()]
       .map(([root, v]) => ({ root, ...v }))
       .sort((a, b) => b.bytes - a.bytes),
+    routerboard: mapRouterboard(routerboardRaw),
   };
 }
 
@@ -499,5 +502,28 @@ export function evaluerUserManager(entree: {
     internalTotalBytes,
     disks,
     constats: constats.sort((a, b) => rang[a.niveau] - rang[b.niveau]),
+  };
+}
+
+/**
+ * Le micrologiciel d'amorçage.
+ *
+ * `upgrade-firmware` n'est pas une promesse de nouveauté : c'est la version
+ * que porte le paquet RouterOS installé. Quand elle diffère de
+ * `current-firmware`, la mise à niveau est **déjà disponible sur le routeur**
+ * et n'attend qu'une commande et un redémarrage.
+ */
+export function mapRouterboard(raw: any): RouterboardDto | null {
+  if (!raw || raw.routerboard === 'false') return null;
+
+  const actuel = raw['current-firmware'] ?? null;
+  const propose = raw['upgrade-firmware'] ?? null;
+
+  return {
+    model: raw.model ?? null,
+    serialNumber: raw['serial-number'] ?? null,
+    currentFirmware: actuel,
+    upgradeFirmware: propose,
+    miseANiveauDisponible: Boolean(actuel && propose && actuel !== propose),
   };
 }

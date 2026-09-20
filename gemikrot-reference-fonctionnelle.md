@@ -867,6 +867,32 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-21 — Le micrologiciel resté en arrière
+
+Suite du balayage des menus. `/system/routerboard` n'était pas lu, et il portait un écart réel :
+
+```
+RouterOS                7.24.4
+micrologiciel d'amorçage 6.42.3     ← resté en arrière
+```
+
+Les deux se mettent à jour **séparément** : une mise à niveau de RouterOS ne touche pas au
+RouterBOOT, qui garde sa version jusqu'à ce qu'on lance l'opération et qu'on redémarre. Rien ne
+le disait — pas même WinBox sans aller le chercher dans le bon menu. Ce n'est pas urgent et rien
+ne casse en l'état ; l'écart se creuse simplement à chaque mise à niveau. La console l'affiche
+avec la commande à passer, et s'abstient de la proposer en un clic : elle demande un
+redémarrage du routeur, qui coupe tout le monde.
+
+`upgrade-firmware` n'est pas une promesse de nouveauté : c'est la version que porte le paquet
+déjà installé. L'écart veut donc dire « la mise à niveau est sur le routeur et attend », et non
+« il faut télécharger quelque chose ». Trois tests fixent cela, dont celui d'une machine qui
+n'est pas un RouterBOARD — y afficher « à jour » serait une affirmation sans objet.
+
+**Deux autres relevés, sans action pour l'instant.** `/system/scheduler` est **vide** : rien ne
+tourne tout seul sur ce routeur. Et `/system/script` porte un script `gen-4heure` de l'admin,
+jamais exécuté (`run-count: 0`), qui fabrique trente comptes HotSpot par calcul
+pseudo-aléatoire — l'ancêtre de ce que fait aujourd'hui l'écran Tickets.
+
 ### 2026-09-20 — Le tunnel existait, personne ne l'empruntait
 
 Signalé : le VPN relie routeur et application, mais l'application se relie au réseau local, pas

@@ -781,6 +781,49 @@ function StockageTab() {
         )}
       </div>
 
+      {/* Le micrologiciel d'amorçage vit à côté de RouterOS et se met à jour
+          séparément : l'écart ne se voit nulle part sans aller le chercher, pas
+          même dans WinBox. Relevé ici — RouterOS 7.24.4, RouterBOOT 6.42.3. */}
+      {stockage.data?.routerboard && (
+        <Card title="Matériel et micrologiciel">
+          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Modèle">{stockage.data.routerboard.model ?? '—'}</Field>
+            <Field label="Numéro de série">
+              <span className="font-mono text-xs">
+                {stockage.data.routerboard.serialNumber ?? '—'}
+              </span>
+            </Field>
+            <Field label="RouterOS">{stockage.data.version ?? '—'}</Field>
+            <Field label="Micrologiciel d'amorçage">
+              {stockage.data.routerboard.currentFirmware ?? '—'}{' '}
+              {stockage.data.routerboard.miseANiveauDisponible && (
+                <Badge tone="amber">
+                  {stockage.data.routerboard.upgradeFirmware} disponible
+                </Badge>
+              )}
+            </Field>
+          </dl>
+
+          {stockage.data.routerboard.miseANiveauDisponible && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+              <p>
+                Le micrologiciel d'amorçage est resté en{' '}
+                <strong>{stockage.data.routerboard.currentFirmware}</strong> alors que le paquet
+                installé porte la version <strong>{stockage.data.routerboard.upgradeFirmware}</strong>.
+                Ce n'est pas urgent et rien ne casse en l'état — mais l'écart se creuse à chaque
+                mise à niveau de RouterOS.
+              </p>
+              <p className="mt-1.5 text-[11px] uppercase tracking-wide">
+                À passer dans le terminal du routeur, suivi d'un redémarrage
+              </p>
+              <code className="mt-1 block overflow-x-auto rounded bg-slate-900 px-3 py-2 font-mono text-xs text-slate-100">
+                /system routerboard upgrade
+              </code>
+            </div>
+          )}
+        </Card>
+      )}
+
       <Card title="User Manager">
         <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Paquet">

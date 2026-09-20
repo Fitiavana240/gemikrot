@@ -221,6 +221,23 @@ export interface RouterStorage {
   disks: RouterDisk[];
   packages: RouterPackage[];
   parRacine: { root: string; bytes: number; fileCount: number }[];
+  /**
+   * Le micrologiciel d'amorçage, distinct de RouterOS.
+   *
+   * Les deux se mettent à jour séparément : une mise à niveau du système ne
+   * touche pas au RouterBOOT, qui reste à sa version jusqu'à ce qu'on lance
+   * l'opération et qu'on redémarre. `null` sur une machine qui n'est pas un
+   * RouterBOARD, où la question ne se pose pas.
+   */
+  routerboard: Routerboard | null;
+}
+
+export interface Routerboard {
+  model: string | null;
+  serialNumber: string | null;
+  currentFirmware: string | null;
+  upgradeFirmware: string | null;
+  miseANiveauDisponible: boolean;
 }
 
 export type NiveauConstat = 'bloquant' | 'avertissement' | 'ok';

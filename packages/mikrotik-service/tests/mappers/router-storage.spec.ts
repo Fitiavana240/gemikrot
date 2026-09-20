@@ -3,6 +3,7 @@ import {
   lireProgrammation,
   mapRouterDisk,
   mapRouterPackage,
+  mapRouterboard,
   mapRouterStorage,
   racineDuChemin,
 } from '../../src/mappers/router-storage.mapper';
@@ -505,5 +506,45 @@ describe('evaluerUserManager', () => {
       ({ bloquant: 0, avertissement: 1, ok: 2 })[a] - ({ bloquant: 0, avertissement: 1, ok: 2 })[b],
     ));
     expect(niveaux[0]).toBe('bloquant');
+  });
+
+  describe('micrologiciel d’amorçage', () => {
+    /**
+     * RouterOS et le RouterBOOT se mettent à jour séparément, et l'écart est
+     * courant : une mise à niveau du système ne touche pas au micrologiciel,
+     * qui reste à sa version jusqu'à ce qu'on lance l'opération et qu'on
+     * redémarre. Relevé sur le hAP — RouterOS en 7.24.4, RouterBOOT resté en
+     * 6.42.3 — et rien ne le disait.
+     */
+    it('signale une mise à niveau en attente', () => {
+      const rb = mapRouterboard({
+        routerboard: 'true',
+        model: 'RBD52G-5HacD2HnD',
+        'serial-number': 'A97409CB550D',
+        'current-firmware': '6.42.3',
+        'upgrade-firmware': '7.24.4',
+      });
+
+      expect(rb?.miseANiveauDisponible).toBe(true);
+      expect(rb?.currentFirmware).toBe('6.42.3');
+      expect(rb?.upgradeFirmware).toBe('7.24.4');
+    });
+
+    it('ne signale rien quand les deux versions concordent', () => {
+      const rb = mapRouterboard({
+        routerboard: 'true',
+        'current-firmware': '7.24.4',
+        'upgrade-firmware': '7.24.4',
+      });
+
+      expect(rb?.miseANiveauDisponible).toBe(false);
+    });
+
+    it("rend null sur une machine qui n'est pas un RouterBOARD", () => {
+      // Une CHR ou un x86 n'a pas de micrologiciel d'amorçage MikroTik :
+      // afficher « à jour » y serait une affirmation sans objet.
+      expect(mapRouterboard({ routerboard: 'false' })).toBeNull();
+      expect(mapRouterboard(null)).toBeNull();
+    });
   });
 });

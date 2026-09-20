@@ -116,6 +116,27 @@ export interface RouterStorageDto {
   packages: RouterPackageDto[];
   /** Occupation par racine, calculée en additionnant `/file`. */
   parRacine: { root: string; bytes: number; fileCount: number }[];
+  /**
+   * Le micrologiciel d'amorçage, distinct de RouterOS.
+   *
+   * Les deux se mettent à jour séparément, et l'écart est courant : une mise à
+   * niveau de RouterOS ne touche pas au RouterBOOT, qui reste à sa version
+   * jusqu'à ce qu'on lance l'opération et qu'on redémarre. Relevé sur ce
+   * routeur — RouterOS en 7.24.4, RouterBOOT resté en **6.42.3**. Rien ne le
+   * disait, et rien ne le dit dans WinBox non plus sans aller le chercher.
+   */
+  routerboard: RouterboardDto | null;
+}
+
+export interface RouterboardDto {
+  model: string | null;
+  serialNumber: string | null;
+  /** Version du micrologiciel actuellement installée. */
+  currentFirmware: string | null;
+  /** Ce que le paquet installé propose : un écart veut dire mise à niveau en attente. */
+  upgradeFirmware: string | null;
+  /** Vrai quand les deux diffèrent, donc qu'une mise à niveau est disponible. */
+  miseANiveauDisponible: boolean;
 }
 
 /** Gravité d'un constat, du plus urgent au plus bénin. */
