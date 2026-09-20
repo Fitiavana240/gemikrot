@@ -105,7 +105,7 @@ Conséquences observées sur le parc réel (hAP ac², 646 comptes HotSpot, Route
 | RTR-13 | Enrôlement par tunnel WireGuard | ✅ éprouvé de bout en bout : script, rappel réseau, tunnel monté, application passant dedans |
 | RTR-14 | PPPoE | 🟡 comptes, profils, serveurs et bassins livrés et éprouvés ; sessions actives non relevables |
 
-**Vérifié** : 91 tests backend (13 fichiers), `tsc` propre sur les deux espaces, migrations appliquées, application démarrée sans erreur d'injection et les routes d'enrôlement exposées.
+**Vérifié** : 66 tests dans le paquet MikroTik, 91 dans le backend, `tsc` propre sur les trois espaces, migrations appliquées, application démarrée sans erreur d'injection.
 
 **Vérifié contre le routeur réel (2026-09-20)** : appel de bout en bout en 599 ms par la fabrique de clients et le disjoncteur, identité `hAP`, état `JOIGNABLE` avant et après, épinglage TLS effectif. 646 comptes HotSpot, 48 cookies, 6 sessions — l'invariant des 646 comptes tient. RTR-11 n'est donc plus éprouvé seulement contre des simulacres.
 
@@ -115,7 +115,7 @@ Trois pièges que le relevé a révélés, et qu'une lecture de la documentation
 
 **RTR-13, côté serveur, éprouvé le 2026-09-20** : rappel simulé exactement comme le routeur l'enverrait, en HTTP sur l'adresse du réseau. Réponse `201`, routeur créé sur l'adresse de tunnel attribuée, hôte égal à cette adresse, identifiants chiffrés en base, bon exploitant. Le rejeu du même jeton répond `404` — usage unique confirmé. Le pair WireGuard n'étant pas piloté sur ce poste, le journal rend la commande `wg set` exacte au lieu de faire croire le tunnel monté. Les objets de simulation ont été supprimés.
 
-Ce qui reste à éprouver sur RTR-13 se réduit donc à **l'exécution du script dans le terminal Winbox** : que chaque commande RouterOS passe, et que `/tool/fetch` atteigne l'application.
+Restait alors l'exécution du script dans le terminal Winbox. Elle a suivi, et ce qui suit en rend compte.
 
 **Répétition WireGuard sur le hAP réel (2026-09-20)** : chaque commande du script passe. Interface `gemikrot` créée avec sa clé privée qui ne quitte pas le routeur, route `10.88.0.0/16` active, groupe et compte applicatif limités créés, `persistent-keepalive=25` accepté. L'enrôlement a été mené à son terme avec la **vraie** clé publique relevée sur le routeur : réponse `201`, invitation consommée et liée, identifiants chiffrés.
 
@@ -138,7 +138,11 @@ Cela tranche la dernière question que la documentation ne tranchait pas : **les
 
 **Ce qui reste** : les sessions actives (`/ppp/active`) ne se relèvent qu'avec un abonné PPPoE réellement connecté. La logique de leur correspondance est testée, leurs **noms de champs** ne le sont pas, et c'est écrit dans le test. À confirmer au premier abonné.
 
-*Livré par Claude Opus 5, le 2026-09-19. La colonne « Implémenté » de ce lot n'a été cochée que pour ce qui compile, passe les tests et démarre ; rien de ce lot n'a été éprouvé contre le routeur réel, et c'est dit à chaque ligne concernée.*
+**Éprouvé sur le hAP réel le 2026-09-20** : disjoncteur (RTR-11), correspondances PPPoE (RTR-14), et la chaîne complète de l'enrôlement WireGuard (RTR-13) — script collé dans Winbox, rappel du routeur vers le serveur, tunnel monté, application joignant le routeur par le tunnel avec le compte limité créé par le script. L'invariant du parc, 646 comptes HotSpot, tient à chaque mesure.
+
+Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupait l'accès au routeur** — ajoutée la veille pour empêcher exactement cela —, des variables `:local` qui **ne traversent pas deux lignes** et auraient envoyé une clé vide en silence, et le débit PPP lu en un seul jeton là où User Manager en utilise deux.
+
+*Livré par Claude Opus 5, les 19 et 20 septembre 2026. La colonne « Implémenté » n'est cochée que pour ce qui compile, passe les tests, démarre et — sauf mention contraire — a été constaté sur le routeur réel. Ce qui ne l'a pas été est nommé ligne par ligne, jamais arrondi.*
 
 ---
 
