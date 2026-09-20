@@ -4,7 +4,19 @@ import { ticketTemplatesApi, type TicketTemplate } from '../api/ticket-templates
 import { vouchersApi } from '../api/vouchers';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, FormField, Input, PageHeader, Select, TableSkeleton } from '../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  Compteur,
+  EmptyState,
+  FormField,
+  Input,
+  PageHeader,
+  PanneDeLecture,
+  Select,
+  TableSkeleton,
+} from '../components/ui';
 
 /**
  * L'aperçu et la feuille d'impression sont rendus dans une iframe
@@ -22,6 +34,19 @@ function SandboxedSheet({ html, className = '' }: { html: string; className?: st
     />
   );
 }
+
+/** Titre et explication de l'écran, rendus même quand la lecture échoue. */
+const EN_TETE = (
+  <div>
+    <PageHeader
+      title="Modèle de ticket"
+      description="La mise en page de ce que vous imprimez. Trente tickets par planche A4, prêts à découper."
+    />
+    <p className="mt-1 text-sm text-slate-500">
+      Le ticket imprimé que reçoit votre client. Modifiable en HTML, avec votre logo.
+    </p>
+  </div>
+);
 
 export function TicketTemplatesPage() {
   const { canWrite } = useAuth();
@@ -102,19 +127,47 @@ export function TicketTemplatesPage() {
     setError(null);
   }
 
-  if (templates.isLoading || !draft) return <TableSkeleton columns={4} />;
+  /**
+   * L'en-tête se rend dans tous les cas, y compris en panne.
+   *
+   * Les retours anticipés ci-dessous le sautaient : on tombait sur un bandeau
+   * rouge flottant, sans titre ni explication de l'écran où l'on se trouve.
+   */
+  const cadre = (contenu: React.ReactNode) => (
+    <div className="space-y-6">
+      {EN_TETE}
+      {contenu}
+    </div>
+  );
+
+  /**
+   * `!draft` dans la condition d'attente faisait un squelette **éternel**.
+   *
+   * Le brouillon est posé par un effet à partir du premier modèle lu ; si la
+   * lecture échoue, il n'y a pas de modèle, donc pas de brouillon, donc la
+   * condition reste vraie pour toujours. L'écran tournait sans fin, sans
+   * bouton, sans un mot — pire qu'une table vide, qui au moins s'arrête.
+   */
+  if (templates.isPending) return cadre(<TableSkeleton columns={4} />);
+  if (templates.isError) {
+    return cadre(<PanneDeLecture requête={templates} quoi="les modèles de ticket" />);
+  }
+  if (!selected) {
+    // Le serveur sème deux modèles au premier appel : cette liste ne devrait
+    // jamais être vide. « Ne devrait jamais » est justement ce qui mérite une
+    // issue, plutôt qu'un écran qui tourne.
+    return cadre(
+      <EmptyState
+        title="Aucun modèle de ticket"
+        hint="Le modèle livré devrait être créé tout seul — rechargez la page, et signalez-le s'il ne revient pas."
+      />,
+    );
+  }
+  if (!draft) return cadre(<TableSkeleton columns={4} />);
 
   return (
     <div className="space-y-6">
-      <div>
-        <PageHeader
-        title="Modèle de ticket"
-        description="La mise en page de ce que vous imprimez. Trente tickets par planche A4, prêts à découper."
-      />
-        <p className="mt-1 text-sm text-slate-500">
-          Le ticket imprimé que reçoit votre client. Modifiable en HTML, avec votre logo.
-        </p>
-      </div>
+      {EN_TETE}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
@@ -267,8 +320,13 @@ export function TicketPrintPage() {
     queryFn: () => vouchersApi.list({ status: 'CREATED' }),
   });
 
+  const modèles = templates.data ?? [];
+
   const render = useMutation({
-    mutationFn: () => ticketTemplatesApi.render({ templateId: templateId || templates.data![0].id }),
+    // `templates.data![0]` sur une liste vide rendait `undefined.id`, et
+    // l'échec s'affichait « Erreur inconnue » — pour une situation qui se
+    // nomme très bien. Le bouton est désormais fermé dans ce cas.
+    mutationFn: () => ticketTemplatesApi.render({ templateId: templateId || modèles[0].id }),
     onSuccess: (rendered) => {
       setError(null);
       setSheet(rendered.html);
@@ -292,6 +350,12 @@ export function TicketPrintPage() {
         </div>
       )}
 
+      {templates.isError && (
+        <div className="print:hidden">
+          <PanneDeLecture requête={templates} quoi="les modèles de ticket" />
+        </div>
+      )}
+
       <div className="flex flex-wrap items-end gap-3 print:hidden">
         <FormField label="Modèle">
           <Select
@@ -306,7 +370,7 @@ export function TicketPrintPage() {
             ))}
           </Select>
         </FormField>
-        <Button onClick={() => render.mutate()} disabled={render.isPending || !templates.data}>
+        <Button onClick={() => render.mutate()} disabled={render.isPending || modèles.length === 0}>
           {render.isPending ? 'Préparation…' : 'Préparer la feuille'}
         </Button>
         {sheet && (
@@ -314,9 +378,14 @@ export function TicketPrintPage() {
             Imprimer
           </Button>
         )}
-        <span className="text-sm text-slate-400">
-          {available.data?.length ?? 0} ticket(s) à vendre
-        </span>
+        {/* « 0 ticket à vendre » sans réponse du serveur, sur l'écran où l'on
+            vient justement imprimer : on repart en croyant n'avoir rien à
+            vendre. */}
+        <Compteur
+          requête={available}
+          nombre={available.data?.length ?? 0}
+          unité="ticket(s) à vendre"
+        />
       </div>
 
       {sheet && <SandboxedSheet html={sheet} className="h-[70vh] print:h-auto print:border-0" />}

@@ -867,6 +867,32 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — Le squelette qui tournait sans fin
+
+Fin de la traque. Sur les quatre écrans qu'il me restait à éprouver, **trois étaient déjà
+corrects** — Journal, Paramètres et Vue d'ensemble disent l'échec. Mon triage précédent, qui
+comptait les occurrences d'`isError` par fichier, les avait signalés à tort.
+
+Le quatrième avait la pire variante du défaut. « Modèle de ticket » attendait sur
+`templates.isLoading || !draft`. Le brouillon est posé par un effet à partir du premier modèle
+lu ; **si la lecture échoue, il n'y a pas de modèle, donc pas de brouillon, donc la condition
+reste vraie pour toujours**. L'écran tournait sans fin, sans bouton, sans un mot — pire qu'une
+table vide, qui au moins s'arrête.
+
+Sur la feuille d'impression, `templates.data![0].id` sur une liste vide rendait `undefined.id`,
+et l'échec s'affichait « Erreur inconnue » pour une situation qui se nomme très bien. Le
+bouton « Préparer la feuille » se gardait de `!templates.data` mais **pas d'un tableau vide**.
+Et le compteur annonçait « 0 ticket à vendre » sans réponse du serveur, sur l'écran où l'on
+vient justement imprimer : on repart en croyant n'avoir rien à vendre.
+
+Dernier point vu à l'écran et non dans le code : les retours anticipés sautaient l'en-tête. On
+tombait sur un bandeau rouge flottant, sans titre ni explication de l'écran où l'on se trouve.
+Il se rend maintenant dans tous les cas.
+
+**Éprouvé** serveur arrêté : l'écran s'arrête sur un message avec son titre, le bouton
+d'impression est fermé, le compteur dit « non lu ». Serveur relancé : l'éditeur revient
+entier, 646 comptes HotSpot.
+
 ### 2026-09-20 — Quand la console niait les registres de l'entreprise
 
 Le même défaut, mais sur les données de la console elle-même. Clients, paiements, offres,
