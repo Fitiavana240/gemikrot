@@ -56,6 +56,20 @@ export interface WalledGardenIpEntry {
   disabled: boolean;
 }
 
+/**
+ * Le stock de tickets posé sur le routeur.
+ *
+ * À ne **jamais additionner** avec le compte des tickets de la base : un
+ * ticket imprimé et perdu compte ici et pas là, un ticket créé dans
+ * l'application pour un autre routeur compte là et pas ici.
+ */
+export interface StockRouteur {
+  total: number;
+  /** Comptes actifs jamais connectés : des tickets qui n'ont pas servi. */
+  jamaisUtilises: number;
+  parProfil: { profil: string; nombre: number }[];
+}
+
 export interface HotspotCookie {
   id: string;
   username: string;
@@ -103,6 +117,9 @@ export const hotspotApi = {
     api.get<HotspotCookie[]>(`/hotspot/cookies${routerQuery(routerId)}`),
   deleteCookie: (id: string, routerId?: string) =>
     api.delete<void>(`/hotspot/cookies/${encodeURIComponent(id)}${routerQuery(routerId)}`),
+  /** Ce que le routeur porte réellement, par opposition à ce que la base suit. */
+  stock: (routerId?: string) =>
+    api.get<StockRouteur>(`/hotspot/stock${routerQuery(routerId)}`),
   cutAccess: (username: string, routerId?: string) =>
     api.post<Coupure>(
       `/hotspot/cut-access/${encodeURIComponent(username)}${routerQuery(routerId)}`,

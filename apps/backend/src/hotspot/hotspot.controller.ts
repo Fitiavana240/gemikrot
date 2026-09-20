@@ -31,6 +31,12 @@ export class HotspotController {
     return this.hotspot.users(routerId);
   }
 
+  /** Combien de tickets dorment réellement sur le routeur, par profil. */
+  @Get('stock')
+  stock(@Query('routerId') routerId?: string) {
+    return this.hotspot.stock(routerId);
+  }
+
   /** Profils HotSpot : debit et duree de session. */
   @Get('profiles')
   profiles(@Query('routerId') routerId?: string) {

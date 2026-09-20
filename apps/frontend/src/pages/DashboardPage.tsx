@@ -7,6 +7,7 @@ import { useCurrency } from '../api/money';
 import { REACHABILITY_LABEL, routersApi } from '../api/routers';
 import { useRouterSelection } from '../routers/RouterContext';
 import { mikrotikApi } from '../api/mikrotik';
+import { hotspotApi } from '../api/hotspot';
 import { Stat, Gauge } from '../components/Stat';
 import {
   Badge,
@@ -30,7 +31,7 @@ const VOUCHER_LABEL: Record<string, string> = {
 
 export function DashboardPage() {
   const { format } = useCurrency();
-  const { current } = useRouterSelection();
+  const { current, currentId } = useRouterSelection();
 
   const resume = useQuery({
     queryKey: ['dashboard-summary'],
@@ -39,6 +40,18 @@ export function DashboardPage() {
   });
 
   const routeurs = useQuery({ queryKey: ['routers'], queryFn: routersApi.list });
+  /**
+   * Lu séparément du résumé, exprès.
+   *
+   * Les deux nombres viennent de deux sources qui n'ont pas les mêmes pannes :
+   * le résumé vient de la base, le stock du routeur. Les mêler dans un appel
+   * ferait perdre tout le tableau de bord dès qu'un câble tombe.
+   */
+  const stock = useQuery({
+    queryKey: ['hotspot-stock', currentId],
+    queryFn: () => hotspotApi.stock(currentId),
+    retry: false,
+  });
 
   // L'état système vient du routeur, pas de la base : il n'a de sens qu'en
   // direct, et on ne le demande que si un routeur est sélectionné.
@@ -106,14 +119,40 @@ export function DashboardPage() {
         />
       </section>
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* Cinq tuiles depuis que le stock du routeur est dit à part : sur
+          quatre colonnes, la dernière tombait seule à la ligne. */}
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label="Connectés" value={d.connectedClients} hint="en ce moment" to="/sessions" />
+        {/* Deux nombres, et non un.
+            « Tickets disponibles » ne comptait que ce que l'application a
+            créé, sous un titre qui promet « ce qui reste à vendre ». Relevé sur
+            ce parc : 10 annoncés, **602 en stock sur le routeur**. L'exploitant
+            lisait le soixantième de son propre tiroir.
+            Ils restent côte à côte et jamais additionnés : un ticket imprimé et
+            perdu compte dans l'un et pas dans l'autre. */}
         <Stat
-          label="Tickets disponibles"
+          label="Tickets suivis ici"
           value={d.ticketsDisponibles}
           tone={d.ticketsDisponibles === 0 ? 'alerte' : 'neutre'}
-          hint={d.ticketsDisponibles === 0 ? 'plus rien à vendre' : 'prêts à vendre'}
+          hint={d.ticketsDisponibles === 0 ? "aucun créé dans l'application" : 'créés ici, prêts à vendre'}
           to="/vouchers"
+        />
+        <Stat
+          label="En stock sur le routeur"
+          value={
+            stock.isPending ? '…' : stock.isError ? 'non lu' : stock.data!.jamaisUtilises
+          }
+          hint={
+            // « Ne répond pas » serait faux quand le routeur répond et refuse :
+            // le bandeau du haut nomme déjà la cause exacte, cette tuile n'a qu'à
+            // dire que le chiffre n'a pas pu être lu.
+            stock.isError
+              ? 'lecture impossible'
+              : stock.data
+                ? `comptes jamais utilisés sur ${stock.data.total}`
+                : undefined
+          }
+          to="/hotspot/comptes"
         />
         <Stat label="Abonnés actifs" value={d.abonnesActifs} to="/subscriptions" />
         <Stat

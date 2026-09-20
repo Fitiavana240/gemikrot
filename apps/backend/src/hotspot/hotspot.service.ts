@@ -300,6 +300,43 @@ export class HotspotService {
    * un accès coupé fonctionner encore, parfois plusieurs jours.
    */
   /**
+   * Le stock de tickets réellement posé sur le routeur.
+   *
+   * La console ne suit que ce qu'elle a créé elle-même, et la Vue d'ensemble
+   * présentait ce compte-là sous le titre « ce qui reste à vendre ». Relevé sur
+   * ce parc : **10 annoncés, 602 en stock**. L'exploitant lisait le soixantième
+   * de son propre tiroir.
+   *
+   * Un compte jamais connecté — `uptime` à zéro — est un ticket qui n'a pas
+   * servi. Ce n'est pas la même chose qu'un ticket « à vendre » en base : un
+   * ticket imprimé et perdu compte ici et pas là. Les deux nombres sont donc
+   * rendus **séparément**, jamais additionnés.
+   */
+  async stock(routerId?: string): Promise<{
+    total: number;
+    jamaisUtilises: number;
+    parProfil: { profil: string; nombre: number }[];
+  }> {
+    const mikrotik = await this.client(routerId);
+    const comptes = await mikrotik.getHotspotUsers();
+    const neufs = comptes.filter((u) => !u.disabled && u.uptimeSeconds === 0);
+
+    const parProfil = new Map<string, number>();
+    for (const compte of neufs) {
+      const profil = compte.profile || '(sans profil)';
+      parProfil.set(profil, (parProfil.get(profil) ?? 0) + 1);
+    }
+
+    return {
+      total: comptes.length,
+      jamaisUtilises: neufs.length,
+      parProfil: [...parProfil]
+        .map(([profil, nombre]) => ({ profil, nombre }))
+        .sort((a, b) => b.nombre - a.nombre),
+    };
+  }
+
+  /**
    * Les cookies, avec l'état du compte derrière chacun.
    *
    * La liste brute est inexploitable : sur ce parc elle compte une

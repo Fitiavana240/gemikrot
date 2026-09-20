@@ -867,6 +867,40 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — « 10 tickets disponibles », pour 602 dans le tiroir
+
+La Vue d'ensemble annonce ce qu'elle est : « ce qu'il faut savoir en ouvrant la console : ce qui
+est encaissé, **ce qui reste à vendre**, et ce qui demande une décision ». Sa tuile « Tickets
+disponibles » affichait **10**.
+
+Compté sur le routeur :
+
+```
+comptes HotSpot            646
+  suivis par la console     14
+  hors application         632
+  jamais connectés         602   ← 302 × 2Heure-500Ar + 299 × 4Heure-1000Ar + 1
+```
+
+**L'exploitant lisait le soixantième de son propre stock.** La console ne suit que ce qu'elle a
+créé elle-même — c'est légitime — mais elle présentait ce compte partiel sous un titre qui
+promet le tout.
+
+Deux tuiles désormais, **côte à côte et jamais additionnées** : « Tickets suivis ici » (la base,
+avec son suivi vente-expiration) et « En stock sur le routeur » (les comptes jamais connectés).
+Les additionner serait faux dans les deux sens : un ticket imprimé et perdu compte dans l'un et
+pas dans l'autre, un ticket créé pour un autre routeur compte dans l'autre et pas dans l'un.
+
+Les deux nombres viennent de deux sources qui n'ont pas les mêmes pannes, et sont donc lus par
+**deux requêtes séparées** : mêlées dans un seul appel, un câble débranché emporterait tout le
+tableau de bord.
+
+**Éprouvé dans les deux états** : routeur joignable, « 602 — comptes jamais utilisés sur 646 » ;
+routeur refusant les identifiants, « non lu », le reste du tableau de bord intact. Une
+inexactitude de ma part corrigée au passage : l'indice disait « le routeur ne répond pas »
+alors qu'il répondait et refusait — il dit maintenant « lecture impossible », la cause exacte
+étant déjà nommée par le bandeau du haut.
+
 ### 2026-09-20 — Un ticket « vendu » que rien ne porte
 
 Confronté la base au routeur, ticket par ticket et abonnement par abonnement. **Aucun désaccord
