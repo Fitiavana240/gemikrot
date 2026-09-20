@@ -109,12 +109,27 @@ const macAddressSchema = z
   .string()
   .regex(/^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/, 'Adresse MAC invalide (format AA:BB:CC:DD:EE:FF)');
 
+/**
+ * Un an. Au-delà, c'est presque sûrement une saisie en secondes prise pour
+ * des heures : le refuser vaut mieux que de créer un ticket éternel.
+ */
+const UPTIME_MAX_SECONDES = 366 * 24 * 3600;
+
 export const createHotspotUserSchema = z.object({
   username: hotspotUsernameParamSchema,
   password: z.string().min(1).max(128),
   profileName: z.string().min(1).max(64),
   server: z.string().max(64).optional(),
   comment: z.string().max(255).optional(),
+  /**
+   * Plafond de temps cumulé du compte — `limit-uptime` côté RouterOS.
+   *
+   * C'est ainsi que le parc vend ses tickets courts : 400 de ses 646 comptes
+   * en portent un, `2h` pour un ticket à 500 Ar. À ne pas confondre avec la
+   * validité d'un profil User Manager, qui est calendaire ; celui-ci ne
+   * s'écoule que pendant les sessions.
+   */
+  limitUptimeSeconds: z.number().int().positive().max(UPTIME_MAX_SECONDES).nullish(),
 });
 
 export const updateHotspotUserSchema = z.object({
@@ -122,6 +137,9 @@ export const updateHotspotUserSchema = z.object({
   profileName: z.string().min(1).max(64).optional(),
   password: z.string().min(1).max(128).optional(),
   comment: z.string().max(255).optional(),
+  server: z.string().max(64).optional(),
+  /** `null` retire le plafond ; `undefined` ne touche à rien. */
+  limitUptimeSeconds: z.number().int().positive().max(UPTIME_MAX_SECONDES).nullish(),
 });
 
 export const createHotspotProfileSchema = z.object({

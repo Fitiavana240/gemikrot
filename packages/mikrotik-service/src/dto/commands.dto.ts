@@ -92,6 +92,15 @@ export interface CreateHotspotUserDto {
   profileName: string;
   server?: string;
   comment?: string;
+  /**
+   * Plafond de temps cumulé du compte — `limit-uptime` côté RouterOS.
+   *
+   * C'est ainsi que le parc vend ses tickets courts : 400 de ses 646 comptes
+   * en portent un, `2h` pour un ticket à 500 Ar. À ne pas confondre avec la
+   * validité d'un profil User Manager, qui est **calendaire** : celle-ci
+   * s'écoule même client déconnecté, celui-là ne compte que les sessions.
+   */
+  limitUptimeSeconds?: number | null;
 }
 
 export interface UpdateHotspotUserDto {
@@ -99,6 +108,9 @@ export interface UpdateHotspotUserDto {
   profileName?: string;
   password?: string;
   comment?: string;
+  server?: string;
+  /** `null` retire le plafond ; absent ne touche à rien. */
+  limitUptimeSeconds?: number | null;
 }
 
 export interface CreateHotspotProfileDto {

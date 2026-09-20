@@ -194,6 +194,13 @@ export class RouterOSMikrotikService implements IMikrotikService {
       profile: data.profileName,
       server: data.server,
       comment: data.comment,
+      // RouterOS attend une durée, pas un nombre : `7200s` est accepté et
+      // relu `2h`. Le parc n'en pose que sur 400 de ses 646 comptes, d'où
+      // l'omission pure et simple quand il n'y en a pas — un `0` créerait
+      // un plafond nul, donc un compte inutilisable.
+      ...(data.limitUptimeSeconds != null
+        ? { 'limit-uptime': `${data.limitUptimeSeconds}s` }
+        : {}),
     });
     return HotspotMapper.mapHotspotUser(raw);
   }
@@ -206,6 +213,14 @@ export class RouterOSMikrotikService implements IMikrotikService {
     if (data.profileName !== undefined) payload.profile = data.profileName;
     if (data.password !== undefined) payload.password = data.password;
     if (data.comment !== undefined) payload.comment = data.comment;
+    if (data.server !== undefined) payload.server = data.server;
+    if (data.limitUptimeSeconds !== undefined) {
+      // `null` veut dire « retirer le plafond », que RouterOS exprime par
+      // `0s`. Éprouvé sur le hAP : le champ disparaît ensuite de la lecture,
+      // exactement comme sur un compte qui n'en a jamais eu.
+      payload['limit-uptime'] =
+        data.limitUptimeSeconds != null ? `${data.limitUptimeSeconds}s` : '0s';
+    }
 
     this.logger.info('Mise à jour compte HotSpot', { username: data.username });
     const raw = await this.client.patch<any>(`/ip/hotspot/user/${target.id}`, payload);

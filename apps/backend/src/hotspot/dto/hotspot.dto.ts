@@ -1,4 +1,13 @@
-import { IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 /**
  * Un port ou une plage. RouterOS refuse une liste séparée par des virgules
@@ -54,4 +63,76 @@ export class CreateWalledGardenIpDto {
   @IsString()
   @MaxLength(255)
   comment?: string;
+}
+
+/**
+ * Création d'un compte HotSpot.
+ *
+ * À distinguer d'un ticket User Manager : ici la validité n'est pas
+ * calendaire. Le plafond porte sur le temps **passé connecté** et ne
+ * s'écoule pas pendant que le client est déconnecté.
+ */
+export class CreateHotspotUserDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  username!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  password!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  profileName!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  server?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  comment?: string;
+
+  /**
+   * `limit-uptime` côté RouterOS. 400 des 646 comptes du parc en portent un
+   * — `2h` pour un ticket à 500 Ar.
+   */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  limitUptimeSeconds?: number | null;
+}
+
+/** Ne modifie que ce qui est fourni. Le nom identifie le compte. */
+export class UpdateHotspotUserDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  profileName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  password?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  comment?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  server?: string;
+
+  /** `null` retire le plafond ; absent n'y touche pas. */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  limitUptimeSeconds?: number | null;
 }

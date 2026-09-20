@@ -37,6 +37,30 @@ export interface HotspotUser {
   limitBytesOut: number | null;
 }
 
+/**
+ * Création d'un compte HotSpot.
+ *
+ * Ce n'est pas un ticket User Manager. Ici le plafond porte sur le **temps
+ * passé connecté** : il ne s'écoule pas pendant que le client est
+ * déconnecté, là où la validité d'un forfait User Manager est calendaire.
+ * C'est ce que portent les tickets « 2h » du parc.
+ *
+ * Les champs que WinBox propose et que personne n'utilise ici — adresse MAC,
+ * adresse fixe, courriel, routes, secret OTP — ne sont volontairement pas
+ * exposés : sur les 646 comptes du parc, aucun n'en porte.
+ */
+export interface CreateHotspotUser {
+  username: string;
+  password: string;
+  profileName: string;
+  server?: string;
+  comment?: string;
+  limitUptimeSeconds?: number | null;
+}
+
+/** Le nom identifie le compte : il n'est pas modifiable. */
+export type UpdateHotspotUser = Partial<Omit<CreateHotspotUser, 'username'>>;
+
 export interface HotspotProfile {
   id: string;
   name: string;
@@ -179,6 +203,10 @@ export const hotspotTabsApi = {
     }),
   deleteUser: (username: string, routerId?: string) =>
     api.delete<void>(`/hotspot/users/${encodeURIComponent(username)}${q(routerId)}`),
+  createUser: (dto: CreateHotspotUser, routerId?: string) =>
+    api.post<HotspotUser>(`/hotspot/users${q(routerId)}`, dto),
+  updateUser: (username: string, dto: UpdateHotspotUser, routerId?: string) =>
+    api.patch<HotspotUser>(`/hotspot/users/${encodeURIComponent(username)}${q(routerId)}`, dto),
 };
 
 export const umTabsApi = {

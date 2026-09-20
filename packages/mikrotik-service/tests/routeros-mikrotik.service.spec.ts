@@ -391,6 +391,74 @@ describe('RouterOSMikrotikService', () => {
     });
   });
 
+  /**
+   * Le plafond de temps d'un compte HotSpot, éprouvé sur le hAP réel le
+   * 2026-09-20 : compte d'essai créé, plafond retiré, compte supprimé, parc
+   * ramené à ses 646 comptes.
+   */
+  describe('plafond de temps HotSpot', () => {
+    it('écrit une durée et non un nombre', async () => {
+      client.get.mockResolvedValueOnce([]);
+      client.put.mockResolvedValueOnce({ '.id': '*1', name: 'H1' });
+
+      await service.createHotspotUser({
+        username: 'H1',
+        password: 'x',
+        profileName: '2Heure-500Ar',
+        limitUptimeSeconds: 7200,
+      });
+
+      // Relevé : `7200s` est accepté et relu `2h` — le format même des 400
+      // comptes du parc qui portent déjà un plafond.
+      expect(client.put).toHaveBeenCalledWith(
+        '/ip/hotspot/user',
+        expect.objectContaining({ 'limit-uptime': '7200s' }),
+      );
+    });
+
+    it("n'envoie aucun plafond quand il n'y en a pas", async () => {
+      client.get.mockResolvedValueOnce([]);
+      client.put.mockResolvedValueOnce({ '.id': '*1', name: 'H2' });
+
+      await service.createHotspotUser({
+        username: 'H2',
+        password: 'x',
+        profileName: 'default',
+      });
+
+      // Un `0s` à la création donnerait un compte épuisé d'avance.
+      const corps = client.put.mock.calls[0][1] as Record<string, unknown>;
+      expect(corps).not.toHaveProperty('limit-uptime');
+    });
+
+    it('retire un plafond avec `0s`, ce qui fait disparaître le champ', async () => {
+      client.get.mockResolvedValueOnce([{ '.id': '*3E3', name: 'H3' }]);
+      client.patch.mockResolvedValueOnce({ '.id': '*3E3', name: 'H3' });
+
+      await service.updateHotspotUser({ username: 'H3', limitUptimeSeconds: null });
+
+      // Vérifié sur le routeur : après `0s`, `limit-uptime` n'est plus rendu
+      // du tout, exactement comme sur un compte qui n'en a jamais eu.
+      expect(client.patch).toHaveBeenCalledWith('/ip/hotspot/user/*3E3', {
+        'limit-uptime': '0s',
+      });
+    });
+
+    it('ne touche pas au plafond quand on ne le mentionne pas', async () => {
+      client.get.mockResolvedValueOnce([{ '.id': '*3E3', name: 'H4' }]);
+      client.patch.mockResolvedValueOnce({ '.id': '*3E3', name: 'H4' });
+
+      await service.updateHotspotUser({ username: 'H4', comment: 'Ticket 500Ar' });
+
+      // `undefined` et `null` ne veulent pas dire la même chose : l'un se
+      // tait, l'autre efface. Les confondre viderait le plafond d'un ticket
+      // qu'on voulait seulement renommer.
+      expect(client.patch).toHaveBeenCalledWith('/ip/hotspot/user/*3E3', {
+        comment: 'Ticket 500Ar',
+      });
+    });
+  });
+
   describe('updatePppSecret', () => {
     const COMPTE = {
       '.id': '*7',

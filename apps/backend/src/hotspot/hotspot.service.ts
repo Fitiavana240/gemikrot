@@ -6,8 +6,10 @@ import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 import { parseRouterTime } from '../routers/router-time.util.js';
 import { RouterAccessService } from '../routers/router-access.service.js';
 import type {
+  CreateHotspotUserDto,
   CreateWalledGardenDto,
   CreateWalledGardenIpDto,
+  UpdateHotspotUserDto,
 } from './dto/hotspot.dto.js';
 
 export interface SessionView {
@@ -100,6 +102,52 @@ export class HotspotService {
    * couper vraiment, passer par `cut-access`, qui purge aussi cookies et
    * session.
    */
+  /**
+   * Cree un compte HotSpot.
+   *
+   * A distinguer d'un ticket User Manager : ici la validite n'est pas
+   * calendaire. `limitUptimeSeconds` plafonne le temps **passe connecte** et
+   * ne s'ecoule pas quand le client se deconnecte — c'est ce que porte le
+   * ticket « 2h » du parc, et c'est l'inverse d'un forfait au mois.
+   */
+  async createUser(dto: CreateHotspotUserDto, adminUserId?: string, routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    const compte = await mikrotik.createHotspotUser(dto);
+    await this.audit.log({
+      adminUserId,
+      routerId,
+      action: 'CREATE_HOTSPOT_USER',
+      targetType: 'HotspotUser',
+      targetId: dto.username,
+      payloadDiff: {
+        profile: dto.profileName,
+        server: dto.server ?? null,
+        limitUptimeSeconds: dto.limitUptimeSeconds ?? null,
+      },
+    });
+    return compte;
+  }
+
+  /** N'ecrit que les champs fournis. Le mot de passe ne va pas au journal. */
+  async updateUser(
+    username: string,
+    dto: Omit<UpdateHotspotUserDto, 'username'>,
+    adminUserId?: string,
+    routerId?: string,
+  ) {
+    const mikrotik = await this.client(routerId);
+    const compte = await mikrotik.updateHotspotUser({ ...dto, username });
+    await this.audit.log({
+      adminUserId,
+      routerId,
+      action: 'UPDATE_HOTSPOT_USER',
+      targetType: 'HotspotUser',
+      targetId: username,
+      payloadDiff: { champs: Object.keys(dto) },
+    });
+    return compte;
+  }
+
   async setUserDisabled(
     username: string,
     disabled: boolean,

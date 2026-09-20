@@ -4,7 +4,12 @@ import { Roles } from '../auth/roles.decorator.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { AuthenticatedUser } from '../auth/jwt.strategy.js';
 import { HotspotService } from './hotspot.service.js';
-import { CreateWalledGardenDto, CreateWalledGardenIpDto } from './dto/hotspot.dto.js';
+import {
+  CreateHotspotUserDto,
+  CreateWalledGardenDto,
+  CreateWalledGardenIpDto,
+  UpdateHotspotUserDto,
+} from './dto/hotspot.dto.js';
 
 /** Le Walled Garden ouvre une brèche avant authentification : exploitant seul. */
 const CAN_CONFIGURE = [AdminRole.SUPER_ADMIN, AdminRole.ADMIN];
@@ -48,6 +53,36 @@ export class HotspotController {
   @Get('dhcp-leases')
   dhcpLeases(@Query('routerId') routerId?: string) {
     return this.hotspot.dhcpLeases(routerId);
+  }
+
+  /**
+   * Cree un compte HotSpot.
+   *
+   * La console vend d'abord des tickets User Manager, dont la validite est
+   * calendaire. Celle-ci sert l'autre cas : un acces plafonne en **temps de
+   * connexion**, qui ne s'ecoule pas pendant que le client est deconnecte —
+   * les tickets « 2h » que porte deja la majorite du parc.
+   */
+  @Roles(...CAN_CONFIGURE)
+  @Post('users')
+  createUser(
+    @Body() dto: CreateHotspotUserDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('routerId') routerId?: string,
+  ) {
+    return this.hotspot.createUser(dto, user.id, routerId);
+  }
+
+  /** N'ecrit que les champs fournis. Le nom identifie le compte. */
+  @Roles(...CAN_CONFIGURE)
+  @Patch('users/:username')
+  updateUser(
+    @Param('username') username: string,
+    @Body() dto: UpdateHotspotUserDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('routerId') routerId?: string,
+  ) {
+    return this.hotspot.updateUser(username, dto, user.id, routerId);
   }
 
   /** Bloquer ou reactiver, sans perdre le trafic ni le commentaire. */

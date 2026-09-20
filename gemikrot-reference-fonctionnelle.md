@@ -752,11 +752,35 @@ faut `POST <menu>/set`. Les deux formes sont maintenant confirmées sur matérie
 masque les mots de passe (`*****`) en lecture, ce qui interdit de relire la valeur : c'est
 le journal qui fait foi. 646 comptes HotSpot à la mesure suivante.
 
-**Non fait, et pourquoi** : la création et la modification de comptes HotSpot n'ont pas de
-route HTTP — seule la suspension et la suppression en ont. Le paquet sait les faire. Ce
-n'est pas un oubli à combler mécaniquement : le produit vend des tickets User Manager, et
-les 646 comptes HotSpot sont l'existant importé. Ouvrir une écriture qu'aucun parcours
-n'emprunte ajouterait une surface sans usage.
+### 2026-09-20 — Créer et modifier un compte HotSpot
+
+**Vérification** : 149 tests paquet, 120 backend, **et un cycle complet sur le hAP réel** —
+compte d'essai créé (647 comptes), plafond retiré, compte supprimé, parc ramené à ses 646.
+
+**Le périmètre vient des données, pas de la capture.** L'écran de WinBox propose onze champs.
+Un relevé des 646 comptes du parc montre lesquels servent : `mac-address`, `address`,
+`email`, `routes` et `otp-secret` sont renseignés sur **zéro** compte, tandis que
+`limit-uptime` l'est sur **400** — `2h` pour un ticket à 500 Ar. Le formulaire expose donc
+cinq champs et non onze : proposer six cases vides à traverser pour en remplir trois n'aide
+personne, et écrire des noms de champs qu'aucune donnée ne confirme est exactement le piège
+que ce projet a payé six fois.
+
+**Trois relevés figés dans les tests.** `7200s` est accepté et relu `2h`, au format même des
+comptes existants. Un plafond absent à la création n'envoie rien — un `0s` donnerait un
+compte épuisé d'avance. Et `0s` en modification **fait disparaître le champ**, exactement
+comme sur un compte qui n'en a jamais eu : c'est ainsi qu'on retire un plafond. J'avais
+écrit ce dernier point en commentaire avant de le vérifier ; le compte d'essai l'a confirmé,
+et le commentaire ne l'affirme plus que parce qu'il a été vu.
+
+**La distinction que l'écran doit porter** : le plafond HotSpot compte le temps *passé
+connecté* et s'arrête quand le client se déconnecte, là où la validité d'un forfait User
+Manager est calendaire et court même hors ligne. C'est la différence entre les deux
+produits, et elle est écrite dans le formulaire — la confondre ferait vendre un mois à qui
+croyait acheter deux heures, ou l'inverse.
+
+**Non exposé, délibérément** : la création et la modification des *profils* HotSpot. Le
+paquet sait les faire, le backend non. Un profil se pose une fois et se règle dans WinBox ;
+l'ouvrir ajouterait une surface d'écriture pour un geste rare.
 
 ---
 

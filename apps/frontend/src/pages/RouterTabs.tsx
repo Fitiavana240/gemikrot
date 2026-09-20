@@ -6,6 +6,9 @@ import {
   formatOctets,
   hotspotTabsApi,
   umTabsApi,
+  type CreateHotspotUser,
+  type HotspotUser,
+  type UpdateHotspotUser,
 } from '../api/mikrotik-tabs';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
@@ -13,9 +16,12 @@ import { useRouterSelection } from '../routers/RouterContext';
 import {
   Badge,
   Button,
+  Card,
   EmptyState,
   ErrorNote,
+  FormField,
   Input,
+  Select,
   Table,
   TableSkeleton,
 } from '../components/ui';
@@ -65,12 +71,141 @@ function useFiltre<T>(items: T[] | undefined, champs: (item: T) => (string | nul
   return { terme, setTerme, filtrés };
 }
 
+/**
+ * Le formulaire d'un compte HotSpot, en création comme en modification.
+ *
+ * Il reprend l'écran de WinBox en retirant ce que le parc n'utilise pas :
+ * sur ses 646 comptes, **aucun** ne porte d'adresse MAC, d'adresse fixe, de
+ * courriel, de route ni de secret OTP. Les proposer ferait six champs vides à
+ * traverser pour en remplir trois.
+ *
+ * Le plafond est saisi en heures parce que c'est ainsi qu'un ticket se vend
+ * — « 2h, 500 Ar ». RouterOS le stocke en durée, pas en nombre.
+ */
+function FormulaireCompteHotspot({
+  compte,
+  profils,
+  onValider,
+  onAnnuler,
+  enCours,
+}: {
+  compte?: HotspotUser;
+  profils: string[];
+  onValider: (valeurs: {
+    username: string;
+    password: string;
+    profileName: string;
+    comment: string;
+    limitUptimeSeconds: number | null;
+  }) => void;
+  onAnnuler: () => void;
+  enCours: boolean;
+}) {
+  const modification = compte != null;
+  const [username, setUsername] = useState(compte?.username ?? '');
+  const [password, setPassword] = useState('');
+  const [profileName, setProfileName] = useState(compte?.profile ?? '');
+  const [comment, setComment] = useState(compte?.comment ?? '');
+  const [heures, setHeures] = useState(
+    compte?.limitUptimeSeconds != null ? String(compte.limitUptimeSeconds / 3600) : '',
+  );
+
+  return (
+    <Card title={modification ? `Modifier « ${compte.username} »` : 'Nouveau compte HotSpot'}>
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const h = heures.trim() === '' ? null : Number(heures.replace(',', '.'));
+          onValider({
+            username,
+            password,
+            profileName,
+            comment,
+            // Vide veut dire « aucun plafond », pas « zéro heure » — un
+            // plafond nul créerait un compte inutilisable dès sa création.
+            limitUptimeSeconds: h != null && Number.isFinite(h) && h > 0 ? Math.round(h * 3600) : null,
+          });
+        }}
+      >
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <FormField label="Nom du compte">
+            <Input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              disabled={modification}
+              placeholder="H828018"
+            />
+          </FormField>
+          <FormField label={modification ? 'Nouveau mot de passe' : 'Mot de passe'}>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required={!modification}
+              placeholder={modification ? 'laisser vide pour ne pas changer' : ''}
+            />
+          </FormField>
+          <FormField label="Profil">
+            <Select
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              required
+            >
+              <option value="">— choisir —</option>
+              {profils.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField label="Client (commentaire)">
+            {/* Sur ce parc, le commentaire porte le nom de la personne :
+                c'est le seul lien entre un compte et quelqu'un. */}
+            <Input
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Ticket 500Ar"
+            />
+          </FormField>
+          <FormField label="Plafond de temps (heures)">
+            <Input
+              type="number"
+              min="0"
+              step="0.5"
+              value={heures}
+              onChange={(e) => setHeures(e.target.value)}
+              placeholder="vide = sans plafond"
+            />
+          </FormField>
+        </div>
+        <p className="max-w-3xl text-xs text-slate-500">
+          Le plafond compte le temps passé connecté : il s'arrête quand le client se déconnecte
+          et reprend à sa reconnexion. Pour une validité qui court même hors ligne, il faut un
+          forfait User Manager.
+        </p>
+        <div className="flex gap-2">
+          <Button type="submit" disabled={enCours}>
+            {enCours ? 'Enregistrement…' : modification ? 'Enregistrer' : 'Créer le compte'}
+          </Button>
+          <Button type="button" variant="secondary" onClick={onAnnuler}>
+            Annuler
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
 export function HotspotUsersTab() {
   const { currentId } = useRouterSelection();
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
   const [erreur, setErreur] = useState<string | null>(null);
   const [àSupprimer, setÀSupprimer] = useState<string | null>(null);
+  const [formulaire, setFormulaire] = useState<'aucun' | 'creation' | HotspotUser>('aucun');
 
   const requête = useQuery({
     queryKey: ['hotspot-users', currentId],
@@ -104,16 +239,82 @@ export function HotspotUsersTab() {
     onError,
   });
 
+  const profils = useQuery({
+    queryKey: ['hotspot-profiles', currentId],
+    queryFn: () => hotspotTabsApi.profiles(currentId),
+  });
+
+  const créer = useMutation({
+    mutationFn: (dto: CreateHotspotUser) => hotspotTabsApi.createUser(dto, currentId),
+    onSuccess: () => {
+      setFormulaire('aucun');
+      rafraîchir();
+    },
+    onError,
+  });
+  const modifier = useMutation({
+    mutationFn: ({ username, dto }: { username: string; dto: UpdateHotspotUser }) =>
+      hotspotTabsApi.updateUser(username, dto, currentId),
+    onSuccess: () => {
+      setFormulaire('aucun');
+      rafraîchir();
+    },
+    onError,
+  });
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-3xl text-sm text-slate-600">
-          La table du HotSpot lui-même. Un compte d'ici n'expire pas à une date : seul le profil
-          borne sa session, et la borne repart à chaque reconnexion. Le trafic affiché est cumulé
-          depuis la création du compte.
+          La table du HotSpot lui-même. Un compte d'ici n'expire pas à une date : son plafond
+          compte le <strong>temps passé connecté</strong> et s'arrête quand le client se
+          déconnecte — c'est l'inverse d'un forfait User Manager, calendaire. Le trafic affiché
+          est cumulé depuis la création du compte.
         </p>
-        <span className="shrink-0 text-sm text-slate-500">{filtrés.length} compte(s)</span>
+        <div className="flex shrink-0 items-center gap-3">
+          <span className="text-sm text-slate-500">{filtrés.length} compte(s)</span>
+          {canWrite && formulaire === 'aucun' && (
+            <Button onClick={() => setFormulaire('creation')}>Nouveau compte</Button>
+          )}
+        </div>
       </div>
+
+      {formulaire !== 'aucun' && (
+        <FormulaireCompteHotspot
+          compte={formulaire === 'creation' ? undefined : formulaire}
+          profils={(profils.data ?? []).map((p) => p.name)}
+          enCours={créer.isPending || modifier.isPending}
+          onAnnuler={() => setFormulaire('aucun')}
+          onValider={(v) => {
+            if (formulaire === 'creation') {
+              créer.mutate({
+                username: v.username,
+                password: v.password,
+                profileName: v.profileName,
+                ...(v.comment ? { comment: v.comment } : {}),
+                ...(v.limitUptimeSeconds != null
+                  ? { limitUptimeSeconds: v.limitUptimeSeconds }
+                  : {}),
+              });
+              return;
+            }
+            // Seuls les champs changés : renvoyer tout écraserait le profil
+            // ou le plafond avec ce que le formulaire avait chargé.
+            const dto: UpdateHotspotUser = {};
+            if (v.password) dto.password = v.password;
+            if (v.profileName !== formulaire.profile) dto.profileName = v.profileName;
+            if (v.comment !== (formulaire.comment ?? '')) dto.comment = v.comment;
+            if (v.limitUptimeSeconds !== formulaire.limitUptimeSeconds) {
+              dto.limitUptimeSeconds = v.limitUptimeSeconds;
+            }
+            if (Object.keys(dto).length === 0) {
+              setFormulaire('aucun');
+              return;
+            }
+            modifier.mutate({ username: formulaire.username, dto });
+          }}
+        />
+      )}
 
       <Input
         value={terme}
@@ -169,6 +370,9 @@ export function HotspotUsersTab() {
             <td className="space-x-2 whitespace-nowrap px-3 py-2 text-right">
               {canWrite && (
                 <>
+                  <Button variant="secondary" onClick={() => setFormulaire(u)}>
+                    Modifier
+                  </Button>
                   <Button
                     variant="secondary"
                     disabled={bloquer.isPending}
