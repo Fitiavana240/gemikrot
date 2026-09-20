@@ -9,7 +9,7 @@ import { méthodePaiement } from '../api/libelles';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import type { Payment, PaymentMethod } from '../api/types';
-import { Badge, Button, Card, FormField, Input, PageHeader, Select, Table, TableSkeleton } from '../components/ui';
+import { Badge, Button, Card, FormField, Input, PageHeader, PanneDeLecture, Select, Table, TableSkeleton } from '../components/ui';
 
 const EMPTY_FORM: CreatePaymentInput = { customerId: '', planId: '', amount: 0, method: 'CASH', reference: '' };
 
@@ -17,7 +17,8 @@ export function PaymentsPage() {
   const { canWrite } = useAuth();
   const { currency, format } = useCurrency();
   const queryClient = useQueryClient();
-  const { data: payments, isLoading } = useQuery({ queryKey: ['payments'], queryFn: paymentsApi.list });
+  const règlements = useQuery({ queryKey: ['payments'], queryFn: paymentsApi.list });
+  const payments = règlements.data;
   const { data: customers } = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
   const { data: plans } = useQuery({ queryKey: ['plans'], queryFn: plansApi.list });
 
@@ -148,8 +149,10 @@ export function PaymentsPage() {
         </Card>
       )}
 
-      {isLoading ? (
+      {règlements.isPending ? (
         <TableSkeleton columns={4} />
+      ) : règlements.isError ? (
+        <PanneDeLecture requête={règlements} quoi="les paiements" />
       ) : (
         <Table head={['Référence', 'Méthode', 'Montant', 'Statut', '']}>
           {payments?.map((payment) => (

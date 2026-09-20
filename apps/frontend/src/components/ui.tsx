@@ -247,6 +247,61 @@ export function ErrorNote({ children, onRetry }: { children: ReactNode; onRetry?
   );
 }
 
+/**
+ * Échec de lecture des registres de la console — clients, paiements,
+ * abonnements, offres, tickets.
+ *
+ * Sans ce bandeau, ces écrans affichaient une table vide : `data` reste vide
+ * faute de réponse, et la ligne « aucun client » ne s'affiche pas non plus,
+ * sa garde comparant `undefined` à zéro. La console **niait les registres de
+ * l'entreprise** — zéro paiement, zéro abonné — pour un serveur qui redémarre.
+ *
+ * Distinct de la panne d'une table lue sur le routeur : ces données-là sont
+ * en base, et ne pas pouvoir les lire ne dit rien de leur existence. D'où
+ * l'insistance de la phrase, qui est ce qu'il faut entendre en premier.
+ *
+ * La tournure évite l'accord — « Impossible de lire les offres » comme « les
+ * clients » — plutôt que de le confier à chaque appelant, où il finirait par
+ * se tromper.
+ */
+export function PanneDeLecture({
+  requête,
+  quoi,
+}: {
+  requête: { refetch: () => unknown };
+  /** Le complément tel qu'il se lit : « les paiements », « les offres ». */
+  quoi: string;
+}) {
+  return (
+    <ErrorNote onRetry={() => requête.refetch()}>
+      Impossible de lire {quoi}. Ces données sont en base et n'ont pas bougé — c'est
+      l'affichage qui manque, pas l'enregistrement.
+    </ErrorNote>
+  );
+}
+
+/**
+ * Un décompte, affiché seulement s'il a été lu.
+ *
+ * « 0 compte(s) » était écrit sans condition, à côté d'une table en échec :
+ * la longueur d'un tableau vide faute de réponse. Le routeur en portait 646, la caisse ses tickets.
+ * C'est la même confusion que la table blanche, en pire — un chiffre a l'air
+ * d'un constat.
+ */
+export function Compteur({
+  requête,
+  nombre,
+  unité,
+}: {
+  requête: { isPending: boolean; isError: boolean };
+  nombre: number;
+  unité: string;
+}) {
+  if (requête.isPending) return null;
+  const texte = requête.isError ? `${unité} : non lu` : `${nombre} ${unité}`;
+  return <span className="shrink-0 text-sm text-slate-500">{texte}</span>;
+}
+
 /** Étiquette et valeur, pour les fiches de détail. */
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (

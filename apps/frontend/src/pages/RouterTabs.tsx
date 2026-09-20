@@ -12,7 +12,7 @@ import {
 } from '../api/mikrotik-tabs';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { Compteur, ListeDuRouteur } from '../components/ListeDuRouteur';
+import { ListeDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { GenerationTickets } from '../components/GenerationTickets';
 import { ChampDuree } from '../components/Edition';
@@ -20,6 +20,7 @@ import {
   Badge,
   Button,
   Card,
+  Compteur,
   ErrorNote,
   FormField,
   Input,

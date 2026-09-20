@@ -60,25 +60,3 @@ export function ListeDuRouteur<T>({
   if (lignes.length === 0) return <EmptyState title={vide.titre} hint={vide.aide} />;
   return <Table head={colonnes}>{lignes.map(ligne)}</Table>;
 }
-
-/**
- * Un décompte, affiché seulement s'il a été lu.
- *
- * « 0 compte(s) » était écrit sans condition, à côté d'une table en échec :
- * la longueur d'un tableau vide faute de réponse. Le routeur en portait 646.
- * C'est la même confusion que la table blanche, en pire — un chiffre a l'air
- * d'un constat.
- */
-export function Compteur({
-  requête,
-  nombre,
-  unité,
-}: {
-  requête: { isPending: boolean; isError: boolean };
-  nombre: number;
-  unité: string;
-}) {
-  if (requête.isPending) return null;
-  const texte = requête.isError ? `${unité} : non lu` : `${nombre} ${unité}`;
-  return <span className="shrink-0 text-sm text-slate-500">{texte}</span>;
-}

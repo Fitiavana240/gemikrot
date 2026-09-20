@@ -5,6 +5,7 @@ import { vouchersApi, type GenerateBatchInput } from '../api/vouchers';
 import { plansApi } from '../api/plans';
 import { formatDuration } from '../api/user-manager';
 import { useAuth } from '../auth/AuthContext';
+import { libellé, STATUT_TICKET } from '../api/libelles';
 import { TabBar, type TabDef } from '../components/TabBar';
 import { userManagerApi } from '../api/user-manager';
 import { BatchesPage } from './BatchesPage';
@@ -17,10 +18,12 @@ import {
   Badge,
   Button,
   Card,
+  Compteur,
   EmptyRow,
   FormField,
   Input,
   PageHeader,
+  PanneDeLecture,
   Select,
   Table,
   TableSkeleton,
@@ -44,23 +47,15 @@ const BARRE: TabDef[] = Object.entries(ONGLETS).map(([to, { titre }]) => ({ to, 
 
 type Tab = keyof typeof ONGLETS;
 
-const STATUS_TONE: Record<VoucherStatus, 'green' | 'amber' | 'slate' | 'red'> = {
-  CREATED: 'slate',
-  SOLD: 'amber',
-  ACTIVE: 'green',
-  EXPIRED: 'slate',
-  DISABLED: 'red',
-  CANCELLED: 'red',
-};
-
-const STATUS_LABEL: Record<VoucherStatus, string> = {
-  CREATED: 'à vendre',
-  SOLD: 'vendu',
-  ACTIVE: 'en cours',
-  EXPIRED: 'expiré',
-  DISABLED: 'désactivé',
-  CANCELLED: 'annulé',
-};
+/**
+ * Les statuts viennent de `libelles.ts`, comme sur les autres écrans.
+ *
+ * Cet écran gardait ses propres tables, et elles avaient déjà divergé : un
+ * ticket coupé s'y lisait « désactivé », un ticket annulé y était rouge. Or
+ * le rouge veut dire « quelque chose à faire », et une annulation ne demande
+ * rien. C'est l'écran le plus consulté de la console.
+ */
+const STATUTS = Object.keys(STATUT_TICKET) as VoucherStatus[];
 
 /** Ce que le routeur dit de l'échéance, en clair. */
 function expiryLabel(voucher: Voucher): string {
@@ -126,6 +121,10 @@ function ByPlanTab() {
   const byPlan = useQuery({ queryKey: ['vouchers', 'by-plan'], queryFn: vouchersApi.countByPlan });
 
   if (byPlan.isLoading) return <TableSkeleton columns={4} />;
+  // Sans ce cas, une lecture en échec rendait la grille vide, et le message
+  // « Aucune offre » ne s'affichait pas non plus — une page blanche qui
+  // invitait à recréer des offres qui existent.
+  if (byPlan.isError) return <PanneDeLecture requête={byPlan} quoi="les tickets par offre" />;
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -150,7 +149,7 @@ function ByPlanTab() {
               .filter((status) => plan.counts[status])
               .map((status) => (
                 <div key={status} className="flex items-center justify-between">
-                  <span className="text-slate-500">{STATUS_LABEL[status]}</span>
+                  <span className="text-slate-500">{libellé(STATUT_TICKET, status).label}</span>
                   <span className="font-medium">{plan.counts[status]}</span>
                 </div>
               ))}
@@ -420,17 +419,19 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
           className="w-auto"
         >
           <option value="">Tous</option>
-          {(Object.keys(STATUS_LABEL) as VoucherStatus[]).map((s) => (
+          {STATUTS.map((s) => (
             <option key={s} value={s}>
-              {STATUS_LABEL[s]}
+              {libellé(STATUT_TICKET, s).label}
             </option>
           ))}
         </Select>
-        <span className="text-sm text-slate-400">{vouchers.data?.length ?? 0} ticket(s)</span>
+        <Compteur requête={vouchers} nombre={vouchers.data?.length ?? 0} unité="ticket(s)" />
       </div>
 
       {vouchers.isLoading ? (
         <TableSkeleton columns={4} />
+      ) : vouchers.isError ? (
+        <PanneDeLecture requête={vouchers} quoi="les tickets" />
       ) : (
         <VoucherTable
           vouchers={vouchers.data ?? []}
@@ -455,6 +456,7 @@ function ExpiredTab() {
   });
 
   if (expired.isLoading) return <TableSkeleton columns={4} />;
+  if (expired.isError) return <PanneDeLecture requête={expired} quoi="les tickets expirés" />;
 
   return (
     <div className="space-y-4">
@@ -496,7 +498,9 @@ function VoucherTable({
           <td className="px-3 py-2 font-mono">{voucher.code}</td>
           <td className="px-3 py-2">{format(voucher.price)}</td>
           <td className="px-3 py-2">
-            <Badge tone={STATUS_TONE[voucher.status]}>{STATUS_LABEL[voucher.status]}</Badge>
+            <Badge tone={libellé(STATUT_TICKET, voucher.status).ton}>
+              {libellé(STATUT_TICKET, voucher.status).label}
+            </Badge>
           </td>
           <td className="px-3 py-2 text-slate-500">{expiryLabel(voucher)}</td>
           <td className="px-3 py-2 text-slate-500">

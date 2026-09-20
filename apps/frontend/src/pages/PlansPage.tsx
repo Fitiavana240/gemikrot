@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { libellé, STATUT_SIMPLE } from '../api/libelles';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, FormField, Input, PageHeader, Select, Table, TableSkeleton } from '../components/ui';
+import { Badge, Button, Card, FormField, Input, PageHeader, PanneDeLecture, Select, Table, TableSkeleton } from '../components/ui';
 
 const EMPTY_FORM: CreatePlanInput = {
   name: '',
@@ -18,7 +18,8 @@ export function PlansPage() {
   const { canWrite } = useAuth();
   const { currency, format } = useCurrency();
   const queryClient = useQueryClient();
-  const { data: plans, isLoading } = useQuery({ queryKey: ['plans'], queryFn: plansApi.list });
+  const offres = useQuery({ queryKey: ['plans'], queryFn: plansApi.list });
+  const plans = offres.data;
   const [form, setForm] = useState<CreatePlanInput>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,8 +103,10 @@ export function PlansPage() {
         </Card>
       )}
 
-      {isLoading ? (
+      {offres.isPending ? (
         <TableSkeleton columns={4} />
+      ) : offres.isError ? (
+        <PanneDeLecture requête={offres} quoi="les offres" />
       ) : (
         <Table head={['Nom', 'Prix', 'Validité', 'Profil RouterOS', 'Statut', '']}>
           {plans?.map((plan) => (

@@ -17,7 +17,7 @@ import {
 } from '../api/user-manager';
 import { useAuth } from '../auth/AuthContext';
 import { ETAT_COMPTE_UM, libellé } from '../api/libelles';
-import { Compteur, PanneDuRouteur } from '../components/ListeDuRouteur';
+import { PanneDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { GenerationTickets } from '../components/GenerationTickets';
 import {
@@ -32,6 +32,7 @@ import {
   Badge,
   Button,
   Card,
+  Compteur,
   EmptyRow,
   FormField,
   Input,

@@ -12,6 +12,7 @@ import {
   Card,
   EmptyRow,
   PageHeader,
+  PanneDeLecture,
   Table,
   TableSkeleton,
 } from '../components/ui';
@@ -123,6 +124,8 @@ export function SubscriptionsPage() {
 
       {subscriptions.isLoading ? (
         <TableSkeleton columns={4} />
+      ) : subscriptions.isError ? (
+        <PanneDeLecture requête={subscriptions} quoi="les abonnements" />
       ) : (
         <Table head={['Compte', 'Client', 'Offre', 'Statut', 'Fin de période', '']}>
           {subscriptions.data?.map((subscription) => (

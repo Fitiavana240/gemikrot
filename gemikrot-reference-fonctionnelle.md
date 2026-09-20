@@ -867,6 +867,33 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — Quand la console niait les registres de l'entreprise
+
+Le même défaut, mais sur les données de la console elle-même. Clients, paiements, offres,
+abonnements, tickets : sept écrans affichaient une table vide quand la lecture échouait. «
+Aucun client », « 0 ticket(s) » — **la console niait les registres de l'entreprise**, pour un
+serveur qui redémarre.
+
+La différence avec une table lue sur le routeur tient en une phrase, et c'est celle qu'il faut
+entendre en premier : **ces données sont en base et n'ont pas bougé**. Ne pas pouvoir les lire
+ne dit rien de leur existence. D'où un bandeau distinct, dont la tournure évite l'accord —
+« Impossible de lire les offres » comme « les clients » — plutôt que de le confier à chaque
+appelant, où il finirait par se tromper.
+
+`BatchesPage` le faisait déjà, seul des huit. Le compteur a déménagé vers `ui.tsx` : il n'a
+jamais rien eu de propre au routeur, une caisse compte ses tickets comme un routeur ses
+comptes.
+
+**Deux tables de statuts avaient divergé.** L'écran Tickets — le plus consulté de la console —
+avait gardé les siennes quand les six autres étaient passés à `libelles.ts`. Un ticket coupé s'y
+lisait « désactivé », et un ticket annulé y était **rouge** : or le rouge veut dire « quelque
+chose à faire », et une annulation ne demande rien. C'est précisément ce qu'une source unique
+existait pour empêcher.
+
+**Éprouvé pour de bon** : serveur arrêté, les quatre écrans disent la bonne phrase avec un
+bouton « Réessayer » et le compteur dit « non lu » ; serveur relancé, 14 tickets affichés,
+statut « coupé », et 646 comptes HotSpot.
+
 ### 2026-09-20 — Le même défaut, cherché partout plutôt qu'écran par écran
 
 Un comptage : requêtes contre gestion d'erreur, fichier par fichier. **`UserManagerPage` :

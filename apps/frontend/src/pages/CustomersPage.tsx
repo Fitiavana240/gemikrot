@@ -5,14 +5,15 @@ import { customersApi, telephoneAffiche, type CreateCustomerInput } from '../api
 import { useAuth } from '../auth/AuthContext';
 import { libellé, STATUT_SIMPLE } from '../api/libelles';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, FormField, Input, PageHeader, Table, TableSkeleton } from '../components/ui';
+import { Badge, Button, Card, FormField, Input, PageHeader, PanneDeLecture, Table, TableSkeleton } from '../components/ui';
 
 const EMPTY_FORM: CreateCustomerInput = { name: '', phone: '' };
 
 export function CustomersPage() {
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
-  const { data: customers, isLoading } = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
+  const clients = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
+  const customers = clients.data;
   const [form, setForm] = useState<CreateCustomerInput>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,8 +77,10 @@ export function CustomersPage() {
         </Card>
       )}
 
-      {isLoading ? (
+      {clients.isPending ? (
         <TableSkeleton columns={4} />
+      ) : clients.isError ? (
+        <PanneDeLecture requête={clients} quoi="les clients" />
       ) : (
         <Table head={['Nom', 'Téléphone', 'Email', 'Statut', '']}>
           {customers?.map((customer) => (
