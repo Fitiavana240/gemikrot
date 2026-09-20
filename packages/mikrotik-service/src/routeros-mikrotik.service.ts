@@ -1246,6 +1246,31 @@ export class RouterOSMikrotikService implements IMikrotikService {
     };
   }
 
+  /**
+   * La structure du réseau : adresses, pont, ports, bail de l'interface
+   * montante.
+   *
+   * Les quatre ensemble, parce qu'ils ne se lisent pas séparément — une
+   * adresse ne dit rien sans savoir sur quoi elle est posée, et un pont ne
+   * dit rien sans ses ports. Relevé sur ce parc : les clients arrivent par
+   * `ether2`–`ether5`, pontés dans `HOTSPOT` qui porte `192.168.88.1`, et
+   * l'accès vient de `ether1` dont l'adresse est **obtenue par DHCP**.
+   */
+  async getStructureReseau() {
+    const [addresses, bridges, ports, dhcpClients] = await Promise.all([
+      this.client.get<any[]>('/ip/address'),
+      this.client.get<any[]>('/interface/bridge'),
+      this.client.get<any[]>('/interface/bridge/port'),
+      this.client.get<any[]>('/ip/dhcp-client').catch(() => []),
+    ]);
+    return {
+      addresses: addresses.map(ToolsMapper.mapIpAddress),
+      bridges: bridges.map(ToolsMapper.mapBridge),
+      ports: ports.map(ToolsMapper.mapBridgePort),
+      dhcpClients: dhcpClients.map(ToolsMapper.mapDhcpClient),
+    };
+  }
+
   // ---------- Stockage ----------
 
   async getRouterFiles() {

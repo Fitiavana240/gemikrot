@@ -85,6 +85,10 @@ import {
   RadiusClientDto,
   WireguardInterfaceDto,
   WireguardPeerDto,
+  IpAddressDto,
+  BridgeDto,
+  BridgePortDto,
+  DhcpClientDto,
 } from '../dto/router-tools.dto';
 
 /**
@@ -312,6 +316,13 @@ export interface IMikrotikService {
   getWireguard(): Promise<{
     interfaces: WireguardInterfaceDto[];
     peers: WireguardPeerDto[];
+  }>;
+  /** Adresses, pont, ports et bail montant : la structure du réseau. */
+  getStructureReseau(): Promise<{
+    addresses: IpAddressDto[];
+    bridges: BridgeDto[];
+    ports: BridgePortDto[];
+    dhcpClients: DhcpClientDto[];
   }>;
   getRouterFiles(): Promise<RouterFileDto[]>;
   /**

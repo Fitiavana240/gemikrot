@@ -148,6 +148,12 @@ export class RouterToolsController {
     };
   }
 
+  /** La structure du réseau : adresses, pont, ports, bail montant. */
+  @Get('structure')
+  async structure(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getStructureReseau();
+  }
+
   /** Le client RADIUS : ce qui relie le HotSpot à User Manager. */
   @Get('radius')
   async radius(@Param('routerId') routerId: string) {

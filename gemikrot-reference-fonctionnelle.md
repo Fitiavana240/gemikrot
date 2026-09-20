@@ -867,6 +867,37 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-21 — La structure du réseau, enfin lisible
+
+`/ip/address`, `/interface/bridge`, ses ports et le bail montant : quatre menus qui ne se lisent
+pas séparément. Une adresse ne dit rien sans savoir sur quoi elle est posée, un pont ne dit rien
+sans ses ports. Ensemble, ils répondent à la question qu'on posait à WinBox : **par où arrivent
+les clients**.
+
+```
+192.168.88.1/24   sur HOTSPOT              fixée         ← le réseau des clients
+10.88.0.2/32      sur gemikrot             fixée         ← le tunnel
+192.168.1.50/24   sur ether1-WAN-Starlink  automatique   ← obtenue par DHCP
+
+pont HOTSPOT, rstp, actif — 4 ports sur 6 portent du trafic
+  wlan1, wlan2   sans lien
+  ether2–ether5  portent du trafic
+```
+
+**Le champ qui compte est `dynamic`.** L'adresse montante est obtenue par DHCP auprès de
+Starlink : elle **peut changer au prochain bail**. Qui la recopie ailleurs — dans un pair
+WireGuard, dans une règle de pare-feu — verra son réglage cesser de marcher sans qu'aucune
+erreur ne l'explique. C'est exactement ce qui est arrivé sur ce projet, pour une heure de
+dépannage. L'écran le dit avant, pas après.
+
+Un port « sans lien » n'est ni une panne ni une normalité en soi : une borne débranchée et une
+radio qu'on n'utilise pas se présentent pareil. L'écran le nomme et laisse trancher, plutôt que
+de peindre en rouge quatre ports qui fonctionnent.
+
+`actual-interface` est préféré à `interface` dans le mapper : quand une adresse est posée sur un
+port devenu membre d'un pont, RouterOS garde l'interface d'origine dans le premier champ et met
+le pont dans le second. Lire le mauvais afficherait l'adresse sur un port qui ne la porte plus.
+
 ### 2026-09-21 — Le micrologiciel resté en arrière
 
 Suite du balayage des menus. `/system/routerboard` n'était pas lu, et il portait un écart réel :

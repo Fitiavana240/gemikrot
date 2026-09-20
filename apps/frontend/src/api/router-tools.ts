@@ -305,6 +305,7 @@ export const routerToolsApi = {
     api.get<{ radios: RadioWifi[]; clients: ClientWifi[] }>(`${base(routerId)}/wireless`),
   radius: (routerId: string) => api.get<ClientRadius[]>(`${base(routerId)}/radius`),
   wireguard: (routerId: string) => api.get<EtatTunnel>(`${base(routerId)}/wireguard`),
+  structure: (routerId: string) => api.get<StructureReseau>(`${base(routerId)}/structure`),
   services: (routerId: string) => api.get<IpService[]>(`${base(routerId)}/services`),
   cloud: (routerId: string) => api.get<IpCloud>(`${base(routerId)}/cloud`),
   arp: (routerId: string) => api.get<ArpEntry[]>(`${base(routerId)}/arp`),
@@ -424,4 +425,56 @@ export interface EtatTunnel {
   peers: PairTunnel[];
   /** Par quelle adresse la console a réellement joint ce routeur. */
   chemin: { adresse: string; parLeTunnel: boolean };
+}
+
+/**
+ * Une adresse IP posée sur une interface.
+ *
+ * `dynamique` est le champ qui compte : une adresse obtenue par DHCP **peut
+ * changer**, et qui la recopie ailleurs verra son réglage cesser de marcher
+ * sans qu'aucune erreur ne l'explique.
+ */
+export interface AdresseIp {
+  id: string;
+  address: string;
+  network: string;
+  interfaceName: string;
+  dynamique: boolean;
+  disabled: boolean;
+  invalide: boolean;
+  comment: string | null;
+}
+
+export interface Pont {
+  id: string;
+  name: string;
+  protocolMode: string;
+  vlanFiltering: boolean;
+  running: boolean;
+  disabled: boolean;
+}
+
+/** `inactif` distingue un port branché sans lien d'un port qui travaille. */
+export interface PortDuPont {
+  id: string;
+  interfaceName: string;
+  bridgeName: string;
+  inactif: boolean;
+  disabled: boolean;
+}
+
+export interface BailMontant {
+  id: string;
+  interfaceName: string;
+  status: string;
+  address: string | null;
+  gateway: string | null;
+  disabled: boolean;
+}
+
+export interface StructureReseau {
+  addresses: AdresseIp[];
+  bridges: Pont[];
+  ports: PortDuPont[];
+  dhcpClients: BailMontant[];
 }

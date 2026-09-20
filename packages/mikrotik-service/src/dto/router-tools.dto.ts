@@ -330,3 +330,60 @@ export interface WireguardPeerDto {
   rxBytes: number;
   disabled: boolean;
 }
+
+/**
+ * Une adresse IP posée sur une interface.
+ *
+ * `dynamique` est le champ qui compte : une adresse obtenue par DHCP **peut
+ * changer**, et l'exploitant qui la recopie quelque part — dans un pair
+ * WireGuard, dans une règle de pare-feu — verra son réglage cesser de marcher
+ * sans qu'aucune erreur ne l'explique. C'est exactement ce qui est arrivé sur
+ * ce projet, et une heure de dépannage.
+ */
+export interface IpAddressDto {
+  id: string;
+  address: string;
+  network: string;
+  interfaceName: string;
+  dynamique: boolean;
+  disabled: boolean;
+  /** Vrai quand l'adresse ne s'applique pas : interface absente ou éteinte. */
+  invalide: boolean;
+  comment: string | null;
+}
+
+/** Un pont, et ce qu'il fait des trames. */
+export interface BridgeDto {
+  id: string;
+  name: string;
+  protocolMode: string;
+  vlanFiltering: boolean;
+  running: boolean;
+  disabled: boolean;
+}
+
+/**
+ * Un port du pont.
+ *
+ * `inactif` distingue un port **branché mais sans lien** d'un port qui
+ * travaille. Sur ce parc, les deux radios du routeur sont dans le pont et
+ * inactives : le Wi-Fi vient de bornes sur les ports Ethernet.
+ */
+export interface BridgePortDto {
+  id: string;
+  interfaceName: string;
+  bridgeName: string;
+  inactif: boolean;
+  disabled: boolean;
+}
+
+/** Le client DHCP d'une interface montante. */
+export interface DhcpClientDto {
+  id: string;
+  interfaceName: string;
+  /** `bound` quand un bail est en cours. */
+  status: string;
+  address: string | null;
+  gateway: string | null;
+  disabled: boolean;
+}

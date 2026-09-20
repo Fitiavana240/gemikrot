@@ -17,6 +17,10 @@ import {
   RadiusClientDto,
   WireguardInterfaceDto,
   WireguardPeerDto,
+  IpAddressDto,
+  BridgeDto,
+  BridgePortDto,
+  DhcpClientDto,
 } from '../dto/router-tools.dto';
 
 /** RouterOS rend ses booléens en chaînes. */
@@ -341,6 +345,54 @@ export function mapWireguardPeer(raw: any): WireguardPeerDto {
       raw?.['last-handshake'] != null ? parseRouterOsDuration(raw['last-handshake']) : null,
     txBytes: Number(raw?.tx ?? 0),
     rxBytes: Number(raw?.rx ?? 0),
+    disabled: flag(raw?.disabled),
+  };
+}
+
+export function mapIpAddress(raw: any): IpAddressDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    address: raw?.address ?? '',
+    network: raw?.network ?? '',
+    // `actual-interface` résout le cas d'une adresse posée sur un port devenu
+    // membre d'un pont : RouterOS garde alors l'interface d'origine dans
+    // `interface` et met le pont dans `actual-interface`.
+    interfaceName: raw?.['actual-interface'] ?? raw?.interface ?? '',
+    dynamique: flag(raw?.dynamic),
+    disabled: flag(raw?.disabled),
+    invalide: flag(raw?.invalid),
+    comment: raw?.comment || null,
+  };
+}
+
+export function mapBridge(raw: any): BridgeDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    name: raw?.name ?? '',
+    protocolMode: raw?.['protocol-mode'] ?? '',
+    vlanFiltering: flag(raw?.['vlan-filtering']),
+    running: flag(raw?.running),
+    disabled: flag(raw?.disabled),
+  };
+}
+
+export function mapBridgePort(raw: any): BridgePortDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    interfaceName: raw?.interface ?? '',
+    bridgeName: raw?.bridge ?? '',
+    inactif: flag(raw?.inactive),
+    disabled: flag(raw?.disabled),
+  };
+}
+
+export function mapDhcpClient(raw: any): DhcpClientDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    interfaceName: raw?.interface ?? '',
+    status: raw?.status ?? '',
+    address: raw?.address || null,
+    gateway: raw?.gateway || null,
     disabled: flag(raw?.disabled),
   };
 }
