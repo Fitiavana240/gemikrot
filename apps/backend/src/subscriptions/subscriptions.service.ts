@@ -185,8 +185,25 @@ export class SubscriptionsService {
     return updated;
   }
 
+  /**
+   * Rétablit l'accès d'un abonnement suspendu.
+   *
+   * Refuse quand la tolérance est épuisée, et c'est délibéré : rouvrir
+   * l'accès ne prolongerait aucune échéance, si bien que le statut retomberait
+   * aussitôt sur `SUSPENDED` tandis que le routeur, lui, laisserait passer.
+   * La base dirait suspendu, le client naviguerait. Ce qu'il faut dans ce cas
+   * n'est pas une reprise mais un renouvellement.
+   */
   async resume(id: string, adminUserId?: string): Promise<Subscription> {
     const subscription = await this.findOne(id);
+
+    if (this.deriveStatus(subscription) === SubscriptionStatus.SUSPENDED) {
+      throw new ConflictException(
+        `La tolérance de l'abonnement ${id} est épuisée depuis le ` +
+          `${subscription.graceEndsAt.toLocaleDateString('fr-FR')} : le renouveler plutôt que le reprendre`,
+      );
+    }
+
     await this.pushAccessState(subscription, true, adminUserId);
 
     const updated = await this.prisma.scoped.subscription.update({
@@ -262,12 +279,19 @@ export class SubscriptionsService {
     });
   }
 
-  /** Statut dérivé des dates — la vérité vient de PostgreSQL, pas du routeur. */
+  /**
+   * Statut dérivé des dates — la vérité vient de PostgreSQL, pas du routeur.
+   *
+   * Les trois branches sont distinctes : la dernière rendait `GRACE` comme la
+   * précédente, si bien que `SUSPENDED` n'était jamais dérivé. Sans effet tant
+   * que seul `resume` appelle cette fonction ; le jour où un ordonnanceur
+   * l'emprunte, c'est un abonné hors tolérance qui reste actif.
+   */
   private deriveStatus(subscription: Subscription): SubscriptionStatus {
     const now = new Date();
     if (subscription.currentPeriodEnd > now) return SubscriptionStatus.ACTIVE;
     if (subscription.graceEndsAt > now) return SubscriptionStatus.GRACE;
-    return SubscriptionStatus.GRACE;
+    return SubscriptionStatus.SUSPENDED;
   }
 
   /**

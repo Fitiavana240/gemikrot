@@ -154,4 +154,51 @@ describe('SubscriptionsService', () => {
     expect(recommendation.reason).toBe('IN_GRACE');
     expect(recommendation.recommendedAction).toBe('WARN_CUSTOMER');
   });
+
+  describe('reprise et statut dérivé', () => {
+    it('rend ACTIVE quand la période court encore', async () => {
+      const service = buildService(
+        createFakePrisma({ status: 'SUSPENDED', periodEnd: daysFromNow(10) }),
+      );
+
+      const repris = await service.resume('sub-1', 'admin-1');
+
+      expect(repris.status).toBe('ACTIVE');
+      expect(repris.suspendedAt).toBeNull();
+      expect(mikrotik.setUserManagerUserDisabled).toHaveBeenCalledWith('Mario', false);
+    });
+
+    it('rend GRACE quand la période est passée mais la tolérance court', async () => {
+      const service = buildService(
+        createFakePrisma({
+          status: 'SUSPENDED',
+          periodEnd: daysFromNow(-1),
+          graceEndsAt: daysFromNow(2),
+        }),
+      );
+
+      expect((await service.resume('sub-1', 'admin-1')).status).toBe('GRACE');
+    });
+
+    it('refuse la reprise quand la tolérance est épuisée', async () => {
+      // Rouvrir l'accès ne prolongerait aucune échéance : le statut
+      // retomberait aussitôt sur SUSPENDED tandis que le routeur laisserait
+      // passer. La base dirait suspendu, le client naviguerait.
+      const service = buildService(
+        createFakePrisma({
+          status: 'SUSPENDED',
+          periodEnd: daysFromNow(-10),
+          graceEndsAt: daysFromNow(-3),
+        }),
+      );
+
+      await expect(service.resume('sub-1', 'admin-1')).rejects.toBeInstanceOf(ConflictException);
+
+      // Et surtout : le routeur n'a pas été touché. Un refus qui aurait déjà
+      // rouvert l'accès serait pire que pas de refus du tout.
+      expect(mikrotik.setUserManagerUserDisabled).not.toHaveBeenCalled();
+      expect(mikrotik.setIpBindingType).not.toHaveBeenCalled();
+    });
+  });
+
 });
