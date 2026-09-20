@@ -5,6 +5,7 @@ import { customersApi } from '../api/customers';
 import { plansApi } from '../api/plans';
 import { vouchersApi } from '../api/vouchers';
 import { useAuth } from '../auth/AuthContext';
+import { méthodePaiement } from '../api/libelles';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import type { Payment, PaymentMethod } from '../api/types';
@@ -154,7 +155,7 @@ export function PaymentsPage() {
           {payments?.map((payment) => (
             <tr key={payment.id}>
               <td className="px-3 py-2 font-mono text-xs">{payment.reference}</td>
-              <td className="px-3 py-2">{payment.method}</td>
+              <td className="px-3 py-2">{méthodePaiement(payment.method)}</td>
               <td className="px-3 py-2">{format(payment.amount)}</td>
               <td className="px-3 py-2">
                 <Badge tone={PAYMENT_STATUS[payment.status].tone}>

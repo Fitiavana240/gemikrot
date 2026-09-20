@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { customersApi, telephoneAffiche, type CreateCustomerInput } from '../api/customers';
 import { useAuth } from '../auth/AuthContext';
+import { libellé, STATUT_SIMPLE } from '../api/libelles';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, FormField, Input, PageHeader, Table, TableSkeleton } from '../components/ui';
 
@@ -103,7 +104,9 @@ export function CustomersPage() {
               </td>
               <td className="px-3 py-2 text-slate-500">{customer.email ?? '—'}</td>
               <td className="px-3 py-2">
-                <Badge tone={customer.status === 'ACTIVE' ? 'green' : 'red'}>{customer.status}</Badge>
+                <Badge tone={libellé(STATUT_SIMPLE, customer.status).ton}>
+                  {libellé(STATUT_SIMPLE, customer.status).label}
+                </Badge>
               </td>
               <td className="px-3 py-2 text-right">
                 {canWrite && (

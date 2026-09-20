@@ -867,6 +867,41 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — Ce que les écrans quotidiens disaient en anglais
+
+Passé sur les écrans les plus consultés au comptoir, ceux que j'avais le moins regardés.
+
+**Une phrase cassée sur la Vue d'ensemble.** La bannière collait un libellé de pastille
+derrière « est » : « Le routeur X **est pas encore interrogé** ». Un libellé de badge n'est
+pas un morceau de phrase, et vouloir les confondre casse toujours sur le cas qu'on n'avait
+pas en tête. Chaque état porte désormais ses deux formes.
+
+**Un message d'erreur écrit pour un développeur, et périmé.** L'écran Connectés renvoyait
+à `MIKROTIK_BASE_URL` dans un fichier `.env`. Doublement inutile : un vendeur au comptoir
+n'en peut rien faire, et ces variables ne sont plus le mécanisme depuis que les routeurs
+vivent en base avec leurs identifiants chiffrés. Il dit maintenant ce qui **continue de
+marcher sans la console** — les clients connectés ne sont pas coupés — et renvoie vers
+l'écran Routeurs.
+
+**Des valeurs brutes sur six écrans.** `PENDING`, `SOLD`, `ORANGE_MONEY`, `synchronized`.
+Les libellés vivaient dans les écrans qui les affichaient : chacun retraduisait à sa façon,
+et ceux qu'on regardait moins — la fiche client, les offres — restaient en anglais. Un seul
+module les porte maintenant, ton compris : les deux se décident ensemble, et se tromper de
+couleur envoie chercher un problème qui n'existe pas. « Annulé » et « remboursé » passaient
+en rouge comme un refus alors qu'ils ne demandent rien à personne.
+
+La fonction de traduction **laisse passer ce qu'elle ne connaît pas**. Un statut ajouté
+côté serveur sans l'être ici doit rester lisible, fût-ce en anglais : une case vide serait
+pire.
+
+**Deux mots choisis plutôt que traduits** : « NTP / synchronized » devient « Horloge / à
+l'heure » — c'est l'horloge du routeur qui décide des échéances, et une horloge à la dérive
+fait expirer des tickets trop tôt. Et « Uptime » devient « Actif depuis », comme sur la Vue
+d'ensemble : le même chiffre y portait deux noms.
+
+**Vérifié écran par écran** : plus aucune valeur d'énumération anglaise sur Abonnements, la
+fiche client, Connectés ni la Vue d'ensemble.
+
 ### 2026-09-20 — TIC-9 : le QR code du ticket
 
 **Ce qu'il encode compte plus que sa présence.** Un QR portant les dix caractères du code

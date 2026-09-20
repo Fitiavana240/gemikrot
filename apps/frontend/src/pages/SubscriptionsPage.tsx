@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { subscriptionsApi, type SubscriptionStatus } from '../api/subscriptions';
+import { subscriptionsApi } from '../api/subscriptions';
 import { customersApi } from '../api/customers';
 import { plansApi } from '../api/plans';
 import { useAuth } from '../auth/AuthContext';
+import { libellé, STATUT_ABONNEMENT } from '../api/libelles';
 import { ApiError } from '../api/client';
 import { useState } from 'react';
 import {
@@ -14,13 +15,6 @@ import {
   Table,
   TableSkeleton,
 } from '../components/ui';
-
-const STATUS_TONE: Record<SubscriptionStatus, 'green' | 'amber' | 'slate' | 'red'> = {
-  ACTIVE: 'green',
-  GRACE: 'amber',
-  SUSPENDED: 'red',
-  CANCELLED: 'slate',
-};
 
 const REASON_LABEL = {
   EXPIRING_SOON: 'Expire bientôt',
@@ -137,7 +131,9 @@ export function SubscriptionsPage() {
               <td className="px-3 py-2">{customerName(subscription.customerId)}</td>
               <td className="px-3 py-2 text-slate-500">{planName(subscription.planId)}</td>
               <td className="px-3 py-2">
-                <Badge tone={STATUS_TONE[subscription.status]}>{subscription.status}</Badge>
+                <Badge tone={libellé(STATUT_ABONNEMENT, subscription.status).ton}>
+                  {libellé(STATUT_ABONNEMENT, subscription.status).label}
+                </Badge>
               </td>
               <td className="px-3 py-2">{formatDate(subscription.currentPeriodEnd)}</td>
               <td className="space-x-2 px-3 py-2 text-right">

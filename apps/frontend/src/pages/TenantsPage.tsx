@@ -4,10 +4,11 @@ import { tenantsApi, type TenantStatus } from '../api/tenants';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, PageHeader, Table, TableSkeleton } from '../components/ui';
 
-const STATUS_TONE: Record<TenantStatus, 'green' | 'amber' | 'red'> = {
-  ACTIVE: 'green',
-  PENDING: 'amber',
-  SUSPENDED: 'red',
+/** Propres a cet ecran : « en attente » ne veut rien dire ailleurs. */
+const STATUT_EXPLOITANT: Record<TenantStatus, { label: string; ton: 'green' | 'amber' | 'red' }> = {
+  ACTIVE: { label: 'actif', ton: 'green' },
+  PENDING: { label: 'en attente de validation', ton: 'amber' },
+  SUSPENDED: { label: 'suspendu', ton: 'red' },
 };
 
 /** Réservé au SUPER_ADMIN : validation et suivi des exploitants. */
@@ -67,7 +68,9 @@ export function TenantsPage() {
                 {tenant.domains.join(', ') || '—'}
               </td>
               <td className="px-3 py-2">
-                <Badge tone={STATUS_TONE[tenant.status]}>{tenant.status}</Badge>
+                <Badge tone={STATUT_EXPLOITANT[tenant.status].ton}>
+                  {STATUT_EXPLOITANT[tenant.status].label}
+                </Badge>
               </td>
               <td className="space-x-2 px-3 py-2 text-right">
                 {tenant.status !== 'ACTIVE' ? (

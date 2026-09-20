@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { plansApi, type CreatePlanInput } from '../api/plans';
 import { useAuth } from '../auth/AuthContext';
+import { libellé, STATUT_SIMPLE } from '../api/libelles';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, FormField, Input, PageHeader, Select, Table, TableSkeleton } from '../components/ui';
@@ -112,7 +113,9 @@ export function PlansPage() {
               <td className="px-3 py-2">{Math.round(plan.validityDurationSeconds / 3600)} h</td>
               <td className="px-3 py-2 font-mono text-xs text-slate-500">{plan.mikrotikProfileName}</td>
               <td className="px-3 py-2">
-                <Badge tone={plan.status === 'ACTIVE' ? 'green' : 'slate'}>{plan.status}</Badge>
+                <Badge tone={libellé(STATUT_SIMPLE, plan.status).ton}>
+                  {libellé(STATUT_SIMPLE, plan.status).label}
+                </Badge>
               </td>
               <td className="space-x-2 whitespace-nowrap px-3 py-2 text-right">
                 {canWrite && plan.status === 'ACTIVE' && (

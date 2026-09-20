@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   EmptyRow,
+  ErrorNote,
   PageHeader,
   Table,
   TableSkeleton,
@@ -67,14 +68,22 @@ export function SessionsPage() {
 
       {statusQuery.isLoading && <TableSkeleton columns={5} />}
 
+      {/* L'ancien message renvoyait à MIKROTIK_BASE_URL dans un fichier .env.
+          Doublement inutile : un vendeur au comptoir ne peut rien en faire, et
+          ces variables ne sont plus le mécanisme depuis que les routeurs
+          vivent en base avec leurs identifiants chiffrés. Ce qu'il faut dire,
+          c'est ce qui continue de marcher sans la console. */}
       {statusQuery.isError && (
-        <Card title="Routeur MikroTik">
-          <p className="text-sm text-red-600">
-            Impossible de joindre le routeur. Vérifiez MIKROTIK_BASE_URL/USERNAME/PASSWORD dans
-            apps/backend/.env, et que ce serveur peut atteindre le routeur (pas bloqué par le
-            portail captif HotSpot).
-          </p>
-        </Card>
+        <ErrorNote onRetry={() => statusQuery.refetch()}>
+          Le routeur ne répond pas : impossible de savoir qui est en ligne, ni de déconnecter
+          qui que ce soit.{' '}
+          <strong>Les clients déjà connectés ne sont pas coupés pour autant</strong> — le
+          portail et les forfaits continuent sans cette console. L'écran{' '}
+          <Link to="/routers" className="font-medium underline">
+            Routeurs
+          </Link>{' '}
+          dit depuis quand et pourquoi.
+        </ErrorNote>
       )}
 
       {statusQuery.data && (
@@ -85,17 +94,22 @@ export function SessionsPage() {
               <p className="font-medium">{statusQuery.data.resource.version}</p>
             </div>
             <div>
-              <span className="text-slate-500">Uptime</span>
+              {/* « Actif depuis » sur la Vue d'ensemble, « Uptime » ici : le
+                  même chiffre, deux mots, dont un en anglais. */}
+              <span className="text-slate-500">Actif depuis</span>
               <p className="font-medium">{statusQuery.data.resource.uptime}</p>
             </div>
             <div>
-              <span className="text-slate-500">CPU</span>
+              <span className="text-slate-500">Processeur</span>
               <p className="font-medium">{statusQuery.data.resource.cpuLoadPercent}%</p>
             </div>
             <div>
-              <span className="text-slate-500">NTP</span>
+              {/* L'horloge du routeur décide des échéances : une horloge à la
+                  dérive fait expirer des tickets trop tôt ou trop tard. D'où
+                  sa place ici, et un mot plutôt que « NTP / synchronized ». */}
+              <span className="text-slate-500">Horloge</span>
               <Badge tone={statusQuery.data.ntp.status === 'synchronized' ? 'green' : 'amber'}>
-                {statusQuery.data.ntp.status}
+                {statusQuery.data.ntp.status === 'synchronized' ? 'à l\'heure' : 'non synchronisée'}
               </Badge>
             </div>
           </div>

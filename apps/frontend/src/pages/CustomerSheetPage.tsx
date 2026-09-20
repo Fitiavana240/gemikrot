@@ -3,6 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { customersApi, telephoneAffiche } from '../api/customers';
 import { formatMoney } from '../api/money';
 import {
+  libellé,
+  méthodePaiement,
+  STATUT_ABONNEMENT,
+  STATUT_PAIEMENT,
+  STATUT_TICKET,
+} from '../api/libelles';
+import {
   Badge,
   Button,
   Card,
@@ -13,28 +20,6 @@ import {
   Table,
   TableSkeleton,
 } from '../components/ui';
-
-const TICKET_TONE: Record<string, 'green' | 'amber' | 'slate' | 'red'> = {
-  ACTIVE: 'green',
-  SOLD: 'amber',
-  CREATED: 'slate',
-  EXPIRED: 'red',
-  DISABLED: 'red',
-  CANCELLED: 'slate',
-};
-
-const ABO_TONE: Record<string, 'green' | 'amber' | 'slate' | 'red'> = {
-  ACTIVE: 'green',
-  GRACE: 'amber',
-  SUSPENDED: 'red',
-  CANCELLED: 'slate',
-};
-
-const PAIEMENT_TONE: Record<string, 'green' | 'amber' | 'slate' | 'red'> = {
-  VERIFIED: 'green',
-  PENDING: 'amber',
-  REJECTED: 'red',
-};
 
 function date(valeur: string | null | undefined): string {
   return valeur ? new Date(valeur).toLocaleDateString('fr-FR') : '—';
@@ -100,8 +85,8 @@ export function CustomerSheetPage() {
             <Field label="Offre">{abonnementEnCours.plan?.name ?? '—'}</Field>
             <Field label="Jusqu'au">{date(abonnementEnCours.currentPeriodEnd)}</Field>
             <Field label="État">
-              <Badge tone={ABO_TONE[abonnementEnCours.status] ?? 'slate'}>
-                {abonnementEnCours.status}
+              <Badge tone={libellé(STATUT_ABONNEMENT, abonnementEnCours.status).ton}>
+                {libellé(STATUT_ABONNEMENT, abonnementEnCours.status).label}
               </Badge>
             </Field>
           </dl>
@@ -113,8 +98,8 @@ export function CustomerSheetPage() {
             </Field>
             <Field label="Expire le">{date(ticketEnCours.expiresAt)}</Field>
             <Field label="État">
-              <Badge tone={TICKET_TONE[ticketEnCours.status] ?? 'slate'}>
-                {ticketEnCours.status}
+              <Badge tone={libellé(STATUT_TICKET, ticketEnCours.status).ton}>
+                {libellé(STATUT_TICKET, ticketEnCours.status).label}
               </Badge>
             </Field>
           </dl>
@@ -138,7 +123,9 @@ export function CustomerSheetPage() {
                 <td className="px-3 py-2 font-mono text-xs">{ticket.code}</td>
                 <td className="px-3 py-2">{ticket.plan?.name ?? '—'}</td>
                 <td className="px-3 py-2">
-                  <Badge tone={TICKET_TONE[ticket.status] ?? 'slate'}>{ticket.status}</Badge>
+                  <Badge tone={libellé(STATUT_TICKET, ticket.status).ton}>
+                    {libellé(STATUT_TICKET, ticket.status).label}
+                  </Badge>
                 </td>
                 <td className="px-3 py-2 text-slate-500">{date(ticket.expiresAt)}</td>
               </tr>
@@ -158,7 +145,9 @@ export function CustomerSheetPage() {
                 <td className="px-3 py-2 font-mono text-xs">{abo.hotspotUsername}</td>
                 <td className="px-3 py-2">{abo.plan?.name ?? '—'}</td>
                 <td className="px-3 py-2">
-                  <Badge tone={ABO_TONE[abo.status] ?? 'slate'}>{abo.status}</Badge>
+                  <Badge tone={libellé(STATUT_ABONNEMENT, abo.status).ton}>
+                    {libellé(STATUT_ABONNEMENT, abo.status).label}
+                  </Badge>
                 </td>
                 <td className="px-3 py-2 text-slate-500">{date(abo.currentPeriodEnd)}</td>
                 <td className="px-3 py-2 text-slate-500">{date(abo.graceEndsAt)}</td>
@@ -206,9 +195,13 @@ export function CustomerSheetPage() {
                 <td className="px-3 py-2 font-medium">
                   {formatMoney(paiement.amount, paiement.currency)}
                 </td>
-                <td className="px-3 py-2 text-slate-500">{paiement.method}</td>
+                <td className="px-3 py-2 text-slate-500">
+                  {méthodePaiement(paiement.method)}
+                </td>
                 <td className="px-3 py-2">
-                  <Badge tone={PAIEMENT_TONE[paiement.status] ?? 'slate'}>{paiement.status}</Badge>
+                  <Badge tone={libellé(STATUT_PAIEMENT, paiement.status).ton}>
+                    {libellé(STATUT_PAIEMENT, paiement.status).label}
+                  </Badge>
                 </td>
                 <td className="px-3 py-2 font-mono text-xs text-slate-500">
                   {paiement.reference}
