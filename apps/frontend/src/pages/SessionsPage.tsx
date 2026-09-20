@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { mikrotikApi } from '../api/mikrotik';
 import { useRouterSelection } from '../routers/RouterContext';
 import { useAuth } from '../auth/AuthContext';
@@ -50,13 +51,6 @@ export function SessionsPage() {
     queryFn: () => mikrotikApi.activeSessions(routerId!),
     enabled: !!routerId && statusQuery.isSuccess,
     refetchInterval: 10_000,
-  });
-
-  const hostsQuery = useQuery({
-    queryKey: ['mikrotik-hosts', routerId],
-    queryFn: () => mikrotikApi.hosts(routerId!),
-    enabled: !!routerId && statusQuery.isSuccess,
-    refetchInterval: 15_000,
   });
 
   const disconnectMutation = useMutation({
@@ -139,30 +133,18 @@ export function SessionsPage() {
         </>
       )}
 
-      {hostsQuery.data && (
-        <>
-          <h2 className="text-sm font-medium text-slate-500">
-            Tous les appareils vus ({hostsQuery.data.length})
-          </h2>
-          <Table head={['MAC', 'IP', 'Autorisé', 'Inactif depuis']}>
-            {hostsQuery.data.map((host) => (
-              <tr key={host.id}>
-                <td className="px-3 py-2 font-mono text-xs">{host.macAddress}</td>
-                <td className="px-3 py-2">{host.address}</td>
-                <td className="px-3 py-2">
-                  <Badge tone={host.authorized ? 'green' : 'slate'}>
-                    {host.authorized ? 'Oui' : 'Non'}
-                  </Badge>
-                </td>
-                <td className="px-3 py-2 text-slate-500">{formatDuration(host.idleTimeSeconds)}</td>
-              </tr>
-            ))}
-            {hostsQuery.data.length === 0 && (
-              <EmptyRow colSpan={4}>Aucun appareil vu pour l'instant.</EmptyRow>
-            )}
-          </Table>
-        </>
-      )}
+      {/* La table « tous les appareils vus » vivait ici *et* dans HotSpot ▸
+          Hôtes, en moins bien : celle-là joint le nom du bail DHCP, qui est
+          ce qui permet de reconnaître une télévision d'un téléphone. Cet
+          écran garde ce qu'il est seul à faire — voir qui est en ligne et le
+          déconnecter. */}
+      <p className="text-sm text-slate-500">
+        Pour la liste complète des appareils vus sur le réseau, avec leur nom :{' '}
+        <Link to="/hotspot/hotes" className="font-medium text-sky-700 hover:underline">
+          HotSpot ▸ Hôtes
+        </Link>
+        .
+      </p>
     </div>
   );
 }

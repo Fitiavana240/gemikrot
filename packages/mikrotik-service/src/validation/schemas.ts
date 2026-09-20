@@ -201,3 +201,23 @@ export const createPppSecretSchema = z.object({
   remoteAddress: z.string().max(45).optional(),
   comment: z.string().max(255).optional(),
 });
+
+/**
+ * Modification d'un compte PPPoE.
+ *
+ * Le nom n'y figure pas : il identifie le compte, le changer reviendrait à
+ * en créer un autre en perdant son historique. Tout le reste est facultatif,
+ * et **seuls les champs fournis sont écrits** — un formulaire qui renvoie
+ * tout écraserait un réglage posé ailleurs.
+ */
+export const updatePppSecretSchema = z
+  .object({
+    password: z.string().min(4).max(128).optional(),
+    profile: z.string().max(64).optional(),
+    service: z.enum(['pppoe', 'any', 'pptp', 'l2tp', 'ovpn', 'sstp']).optional(),
+    remoteAddress: z.string().max(45).optional(),
+    comment: z.string().max(255).optional(),
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), {
+    message: 'Aucune modification demandée',
+  });

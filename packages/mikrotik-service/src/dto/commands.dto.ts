@@ -158,3 +158,22 @@ export interface CreatePppSecretDto {
   remoteAddress?: string;
   comment?: string;
 }
+
+/**
+ * Modification d'un compte PPPoE.
+ *
+ * Pas de `username` : il identifie le compte. Le changer reviendrait à en
+ * créer un autre, en perdant l'historique du premier — RouterOS ne suit pas
+ * les renommages.
+ *
+ * Tout est facultatif, et **seuls les champs fournis sont écrits**. Un
+ * formulaire qui renverrait l'objet entier écraserait au passage ce que
+ * quelqu'un d'autre a réglé entre-temps.
+ */
+export interface UpdatePppSecretDto {
+  password?: string;
+  profile?: string;
+  service?: string;
+  remoteAddress?: string;
+  comment?: string;
+}

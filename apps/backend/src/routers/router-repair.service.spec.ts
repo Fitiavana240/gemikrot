@@ -1,26 +1,121 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuditResult } from '@prisma/client';
-import { MockMikrotikService } from '@wifitati/mikrotik-service/tests/mocks/mock-mikrotik.service';
+import type { UserManagerReadinessDto } from '@wifitati/mikrotik-service';
 import { RouterRepairService } from './router-repair.service.js';
 
 const ROUTEUR = 'routeur-1';
 
 /**
+ * Un routeur de laboratoire, réduit à ce que le service de réparation touche.
+ *
+ * Il tenait d'abord au simulacre du paquet MikroTik, atteint par son dossier
+ * `tests/` — ce que `tsc` refuse de résoudre et que le backend n'a de toute
+ * façon rien à faire : dépendre des internes de test d'un autre espace de
+ * travail, c'est se lier à ce qui n'est pas un contrat.
+ *
+ * Il sait aussi **refuser de changer** tout en répondant sans erreur : c'est
+ * le comportement qui a réellement mordu (`PATCH /rest/user-manager` rendait
+ * 500, et une autre forme aurait pu rendre 200 sans rien faire).
+ */
+class RouteurDeLabo {
+  etat = { serviceEnabled: false, useProfiles: false, programme: '' as '' | 'enable' | 'disable' };
+  /** Quand c'est vrai, les écritures sont acceptées puis ignorées. */
+  ignoreLesEcritures = false;
+
+  async getUserManagerReadiness(): Promise<UserManagerReadinessDto> {
+    const constats: UserManagerReadinessDto['constats'] = [];
+    if (!this.etat.serviceEnabled) {
+      constats.push({
+        code: 'service-eteint',
+        niveau: 'bloquant',
+        titre: 'Le service User Manager est éteint',
+        detail: '',
+        commande: '/user-manager/set enabled=yes',
+        reparation: 'allumer-service',
+      });
+    }
+    if (!this.etat.useProfiles) {
+      constats.push({
+        code: 'profils-desactives',
+        niveau: 'avertissement',
+        titre: 'Les profils sont désactivés',
+        detail: '',
+        commande: '/user-manager/set use-profiles=yes',
+        reparation: 'activer-profils',
+      });
+    }
+    if (this.etat.programme === 'disable') {
+      constats.push({
+        code: 'paquet-desactivation-programmee',
+        niveau: 'bloquant',
+        titre: 'Désactivation programmée au prochain démarrage',
+        detail: '',
+        commande: '/system/package/unschedule user-manager',
+        reparation: 'annuler-desactivation',
+      });
+    } else if (this.etat.programme === '') {
+      constats.push({
+        code: 'paquet-desactive',
+        niveau: 'bloquant',
+        titre: 'Le paquet est installé mais désactivé',
+        detail: '',
+        commande: '/system/package/enable user-manager',
+        reparation: 'activer-paquet',
+      });
+    }
+
+    return {
+      packageInstalled: true,
+      packageAvailable: false,
+      packageEnabled: false,
+      packageVersion: '7.24.4',
+      packageSizeBytes: 344209,
+      packageScheduled: this.etat.programme || null,
+      serviceEnabled: this.etat.serviceEnabled,
+      useProfiles: this.etat.useProfiles,
+      database: null,
+      internalFreeBytes: 286720,
+      internalTotalBytes: 16777216,
+      disks: [],
+      constats,
+    };
+  }
+
+  async setUserManagerSettings(payload: { enabled?: boolean; useProfiles?: boolean }) {
+    if (this.ignoreLesEcritures) return;
+    if (payload.enabled !== undefined) this.etat.serviceEnabled = payload.enabled;
+    if (payload.useProfiles !== undefined) this.etat.useProfiles = payload.useProfiles;
+  }
+
+  async enablePackage() {
+    if (this.ignoreLesEcritures) return;
+    this.etat.programme = 'enable';
+  }
+
+  async unschedulePackage() {
+    if (this.ignoreLesEcritures) return;
+    this.etat.programme = '';
+  }
+}
+
+/**
  * Le cœur de ce service n'est pas l'écriture — c'est la relecture.
  *
- * Les formes de requête de `setUserManagerSettings` et `enablePackage` n'ont
- * pas pu être éprouvées contre un routeur réel : l'outillage refuse
- * l'écriture depuis ce poste. Cinq correspondances de ce projet écrites sur
- * la seule documentation se sont révélées fausses au contact du matériel.
- * Le service ne doit donc jamais déclarer un succès sur l'absence d'erreur.
+ * Ce n'est pas une précaution théorique : `PATCH /rest/user-manager`, écrit
+ * d'après la convention du reste du code, a rendu **500** sur le hAP le
+ * 2026-09-20. La bonne forme est `POST /rest/user-manager/set`, un menu
+ * singleton n'ayant pas d'élément à viser. Sans la relecture, la console
+ * aurait affiché un succès et renvoyé chercher la panne ailleurs.
+ *
+ * Le service ne doit donc jamais conclure au succès sur l'absence d'erreur.
  */
 describe('RouterRepairService', () => {
-  let mikrotik: MockMikrotikService;
+  let mikrotik: RouteurDeLabo;
   let audit: { log: ReturnType<typeof vi.fn> };
   let service: RouterRepairService;
 
   beforeEach(() => {
-    mikrotik = new MockMikrotikService();
+    mikrotik = new RouteurDeLabo();
     audit = { log: vi.fn().mockResolvedValue(undefined) };
     service = new RouterRepairService(
       { forRouter: async () => mikrotik } as never,
@@ -41,7 +136,7 @@ describe('RouterRepairService', () => {
     // Le cas qui justifie toute la relecture : RouterOS répond volontiers
     // `200` à une écriture dont la forme ne lui convient pas, et ne change
     // rien. Annoncer un succès enverrait chercher la panne ailleurs.
-    mikrotik.umIgnoreLesEcritures = true;
+    mikrotik.ignoreLesEcritures = true;
 
     const résultat = await service.appliquer(ROUTEUR, 'allumer-service', 'admin-1');
 
@@ -51,7 +146,7 @@ describe('RouterRepairService', () => {
   });
 
   it('journalise un échec silencieux comme un échec, pas comme un succès', async () => {
-    mikrotik.umIgnoreLesEcritures = true;
+    mikrotik.ignoreLesEcritures = true;
     await service.appliquer(ROUTEUR, 'allumer-service', 'admin-1');
 
     expect(audit.log).toHaveBeenCalledWith(
@@ -79,7 +174,7 @@ describe('RouterRepairService', () => {
   it('annule une désactivation programmée, sans attendre de redémarrage', async () => {
     // Le cas sournois : le service tourne encore, et mourrait au prochain
     // démarrage. L'annulation, elle, se constate tout de suite.
-    mikrotik.umEtat.paquetProgramme = 'disable';
+    mikrotik.etat.programme = 'disable';
 
     const résultat = await service.appliquer(ROUTEUR, 'annuler-desactivation', 'admin-1');
 

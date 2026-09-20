@@ -270,50 +270,10 @@ export function HotspotHostsTab() {
   );
 }
 
-export function IpBindingsTab() {
-  const { currentId } = useRouterSelection();
-  const requête = useQuery({
-    queryKey: ['ip-bindings', currentId],
-    queryFn: () => hotspotTabsApi.ipBindings(currentId),
-  });
-
-  const TON: Record<string, 'green' | 'amber' | 'slate' | 'red'> = {
-    bypassed: 'green',
-    blocked: 'red',
-    regular: 'slate',
-  };
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-slate-600">
-        Les appareils qui contournent le portail, et ceux qu'on bloque. Le contournement sert à ce
-        qui ne peut pas afficher une page de connexion ; le blocage coupe un appareil sans toucher
-        au compte.
-      </p>
-      <Liste
-        requête={requête}
-        colonnes={['Adresse MAC', 'Adresse IP', 'Traitement', 'Serveur', 'Commentaire']}
-        vide={{
-          titre: 'Aucune liaison',
-          aide: 'Les contournements se posent depuis l\'écran Appareils.',
-        }}
-        ligne={(b) => (
-          <tr key={b.id}>
-            <td className="px-3 py-2 font-mono text-xs">{b.macAddress}</td>
-            <td className="px-3 py-2 font-mono text-xs text-slate-500">{b.address ?? '—'}</td>
-            <td className="px-3 py-2">
-              <Badge tone={TON[b.type] ?? 'slate'}>{b.type}</Badge>
-            </td>
-            <td className="px-3 py-2 text-slate-500">{b.server ?? '—'}</td>
-            <td className="max-w-xs truncate px-3 py-2 text-xs text-slate-500">
-              {b.comment ?? '—'}
-            </td>
-          </tr>
-        )}
-      />
-    </div>
-  );
-}
+// `IpBindingsTab` a été retiré : il montrait en lecture seule ce que l'écran
+// Appareils gère réellement, et son propre état vide renvoyait là-bas. Deux
+// tables pour une même chose se contredisent tôt ou tard — celle qui ne sait
+// rien changer perd d'avance.
 
 export function UmSessionsTab() {
   const { currentId } = useRouterSelection();

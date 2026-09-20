@@ -22,7 +22,6 @@ import {
   HotspotServerProfilesTab,
   HotspotServicePortsTab,
   HotspotUsersTab,
-  IpBindingsTab,
 } from './RouterTabs';
 import { TabBar, type TabDef } from '../components/TabBar';
 
@@ -32,9 +31,11 @@ const ONGLETS = {
   'profils-serveur': { titre: 'Profils de serveur', rendu: () => <HotspotServerProfilesTab /> },
   comptes: { titre: 'Comptes', rendu: () => <HotspotUsersTab /> },
   profils: { titre: 'Profils de compte', rendu: () => <HotspotProfilesTab /> },
-  sessions: { titre: 'Sessions actives', rendu: () => <SessionsTab /> },
+  // « Sessions actives » était trompeur : cette table est l'historique
+  // comptabilisé par RADIUS, pas ce qui est en ligne maintenant — et le nom
+  // entrait en concurrence avec l'écran Connectés, qui, lui, l'est.
+  sessions: { titre: 'Historique RADIUS', rendu: () => <SessionsTab /> },
   hotes: { titre: 'Hôtes', rendu: () => <HotspotHostsTab /> },
-  liaisons: { titre: 'Liaisons IP', rendu: () => <IpBindingsTab /> },
   'ports-service': { titre: 'Ports de service', rendu: () => <HotspotServicePortsTab /> },
   'walled-garden': { titre: 'Walled Garden', rendu: () => <WalledGardenTab /> },
   cookies: { titre: 'Cookies', rendu: () => <CookiesTab /> },

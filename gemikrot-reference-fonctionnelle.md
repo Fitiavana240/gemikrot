@@ -179,7 +179,8 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | RTR-11 | **Reconnexion et tolérance aux pannes** : disjoncteur par routeur. Trois échecs réseau d'affilée suspendent les appels trente secondes, puis un appel sonde le retour. Mesuré : 16 153 ms → 2 ms pour un routeur mort. Seules les erreurs de réseau l'ouvrent — un mot de passe refusé n'a rien à voir avec la joignabilité | ⭐⭐⭐ | 🟡 | ✅ |
 | RTR-12 | **File d'opérations différées** : ce qui n'a pas pu partir est mis en file et rejoué dès que le disjoncteur constate le retour du routeur. N'accepte que des opérations rejouables sans dommage ; abandonne au bout de dix tentatives, mais en le disant. La console affiche ce qui attend | ⭐⭐⭐ | 🔴 | ✅ |
 | RTR-13 | **Accès distant** : le routeur ouvre un tunnel WireGuard vers le serveur. Jeton d'enrôlement à usage unique, script à coller dans Winbox, clé privée jamais transmise, compte d'API dédié, `www-ssl` restreint au tunnel. Éprouvé de bout en bout sur le hAP : script collé dans Winbox, rappel du routeur, tunnel monté, application passant dedans | ⭐⭐⭐ | 🔴 | ✅ |
-| RTR-14 | **PPPoE** en plus du HotSpot : comptes, profils, serveurs et bassins livrés, correspondances écrites contre un relevé réel (`scripts/probe-ppp-sonde.ts`). **Les sessions actives restent non vérifiées** : le parc n'a aucun PPPoE en service, les noms de champs de `/ppp/active` sont donc pris de la documentation seule — et le test le dit | ⭐⭐ | 🔴 | 🟡 |
+| RTR-14 | **PPPoE** en plus du HotSpot : comptes, profils, serveurs et bassins, correspondances écrites contre un relevé réel (`scripts/probe-ppp-sonde.ts`). **Les sessions actives restent non vérifiées** : le parc n'a aucun PPPoE en service, les noms de champs de `/ppp/active` viennent de la documentation seule — le test *et l'écran* le disent | ⭐⭐ | 🔴 | ✅ |
+| RTR-19 | **Écran PPPoE** : comptes (création, modification, suspension, suppression), profils, sessions, serveurs, bassins d'adresses. La modification n'écrit que les champs touchés, le nom est figé car il identifie le compte, et un mot de passe vide veut dire « ne pas y toucher » | ⭐⭐ | 🟡 | ✅ |
 | RTR-15 | **Menus IP en lecture** : files simples (le débit réellement alloué, client par client), journal du routeur, interfaces avec leurs coupures de lien, services d'administration, DDNS, ARP, serveurs DHCP, **pare-feu filtrage et NAT dans leur ordre d'évaluation**, DNS et entrées statiques, table de routage. **Lecture seule, par décision** : la console montre, WinBox modifie | ⭐⭐ | 🟡 | ✅ |
 | RTR-16 | **Stockage et préparation de User Manager** : mémoire interne, clés USB et leur état de montage, paquets installés, occupation par support, et où vit la base User Manager. Rend un diagnostic ordonné par gravité, avec la commande exacte quand il en existe une — dont la réponse à « pourquoi l'onglet User Manager n'apparaît-il pas dans WinBox » | ⭐⭐⭐ | 🟡 | ✅ |
 | RTR-17 | **Réparations depuis la console**, sans WinBox : allumer le service, activer les profils, programmer l'activation du paquet, annuler une désactivation programmée. **Liste blanche nommée, pas un passe-plat de commandes** — une route exécutant une commande RouterOS arbitraire donnerait à tout ADMIN une exécution de code à distance sur chaque routeur du parc. Le serveur relit l'état après avoir écrit et ne déclare le succès que si le routeur a réellement changé. Redémarrage, déplacement de la base et effacement de fichiers restent affichés comme commandes à coller, jamais comme boutons. **Les trois formes d'écriture éprouvées sur le hAP réel** : constat levé, bouton cliqué, routeur réellement changé, audit écrit, 646 comptes intacts à chaque mesure | ⭐⭐⭐ | 🟡 | ✅ |
@@ -683,10 +684,38 @@ l'échec au lieu d'un succès de façade.
   et au même centrage que le reste ; plusieurs en ont profité pour dire *pourquoi* c'est
   vide plutôt que seulement « aucun ».
 
-**Non traité, et délibérément** : PPPoE n'a aucune route HTTP — il n'existe que dans le
-paquet. Lui construire un écran maintenant reviendrait à bâtir sur les noms de champs de
-`/ppp/active`, que le parc ne permet pas de vérifier faute d'un seul PPPoE en service.
-C'est exactement ce que la règle du §15.7 interdit.
+### 2026-09-20 — PPPoE de bout en bout, et trois doublons supprimés
+
+**Vérification** : 141 tests paquet, 120 backend, frontend compilé, écrans ouverts contre le
+hAP réel (2 profils PPP, bassin `pool-hotspot` 245 adresses dont 37 utilisées).
+
+- **RTR-14 ✅ / RTR-19 ✅** — PPPoE existait dans le paquet depuis le relevé de sonde, sans
+  aucune route HTTP ni écran. J'avais écrit qu'il n'était pas constructible ; en rouvrant
+  les relevés, **quatre des cinq tables étaient déjà éprouvées sur le matériel** —
+  `/ppp/profile`, `/ppp/secret`, `/interface/pppoe-server/server`, `/ip/pool`. Seules les
+  sessions actives ne l'ont jamais été, le parc n'ayant aucun PPPoE en service. L'écran des
+  sessions le dit en clair, plutôt que de laisser croire une colonne vide au routeur.
+
+- **Les boutons de modification.** `updatePppSecret` manquait : on savait créer, suspendre et
+  supprimer un compte, pas le modifier. Il **n'écrit que les champs fournis** — renvoyer le
+  formulaire entier écraserait au passage le profil, qui porte le débit. Un mot de passe
+  laissé vide veut dire « ne pas y toucher », et le nom est figé : il identifie le compte,
+  le changer en créerait un autre sans son historique. Création et modification partagent un
+  seul formulaire, deux copies divergeant toujours.
+
+- **Trois répétitions supprimées.** *HotSpot ▸ Liaisons IP* montrait en lecture seule ce que
+  l'écran Appareils gère réellement — son propre état vide y renvoyait déjà. La table
+  « tous les appareils vus » existait sur *Connectés* **et** sur *HotSpot ▸ Hôtes*, la
+  seconde en mieux : elle joint le nom du bail DHCP, qui distingue une télévision d'un
+  téléphone. Et *HotSpot ▸ « Sessions actives »* portait un nom trompeur — cette table est
+  l'historique RADIUS, pas ce qui est en ligne, et le nom entrait en concurrence avec
+  l'écran Connectés, qui, lui, l'est. Deux tables pour une même chose finissent par se
+  contredire ; celle qui ne sait rien changer perd d'avance.
+
+- **Un défaut de mon test corrigé au passage** : il atteignait le simulacre du paquet par son
+  dossier `tests/`. `tsc` refusait de le résoudre — et le backend n'a rien à faire des
+  internes de test d'un autre espace de travail. Remplacé par un routeur de laboratoire
+  local, qui sait aussi *refuser de changer tout en répondant sans erreur*.
 
 ---
 

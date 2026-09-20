@@ -82,6 +82,11 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'User Manager',
         hint: 'Comptes, profils, limitations, sessions, RADIUS',
       },
+      {
+        to: '/pppoe',
+        label: 'PPPoE',
+        hint: "L'abonné raccordé à demeure : comptes, profils, serveurs, bassins",
+      },
     ],
   },
   {

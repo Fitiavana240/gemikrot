@@ -15,6 +15,7 @@ import { BatchesPage } from './pages/BatchesPage';
 import { CustomerSheetPage } from './pages/CustomerSheetPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { TenantsPage } from './pages/TenantsPage';
+import { PppoePage } from './pages/PppoePage';
 import { UserManagerPage } from './pages/UserManagerPage';
 import { HotspotPage } from './pages/HotspotPage';
 import { TicketPrintPage, TicketTemplatesPage } from './pages/TicketTemplatesPage';
@@ -52,6 +53,8 @@ export function App() {
             <Route path="/diagnostic/:tab" element={<RouterToolsPage />} />
             <Route path="/hotspot" element={<HotspotPage />} />
             <Route path="/hotspot/:tab" element={<HotspotPage />} />
+            <Route path="/pppoe" element={<PppoePage />} />
+            <Route path="/pppoe/:tab" element={<PppoePage />} />
             <Route path="/user-manager" element={<UserManagerPage />} />
             <Route path="/user-manager/:tab" element={<UserManagerPage />} />
             <Route path="/ticket-templates" element={<TicketTemplatesPage />} />

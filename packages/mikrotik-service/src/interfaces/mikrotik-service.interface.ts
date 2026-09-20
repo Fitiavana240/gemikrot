@@ -47,6 +47,7 @@ import {
   UpdateProfileDto,
   UpdateUserManagerUserDto,
   CreatePppSecretDto,
+  UpdatePppSecretDto,
 } from '../dto/commands.dto';
 import {
   IpPoolDto,
@@ -229,6 +230,8 @@ export interface IMikrotikService {
   getIpPools(): Promise<IpPoolDto[]>;
 
   createPppSecret(input: CreatePppSecretDto): Promise<PppSecretDto>;
+  /** N'ecrit que les champs fournis. Le nom n'est pas modifiable. */
+  updatePppSecret(username: string, input: UpdatePppSecretDto): Promise<PppSecretDto>;
   /**
    * Suspendre ne coupe pas la session en cours : PPPoE ne revérifie
    * l'authentification qu'à la reconnexion. Pour couper tout de suite,

@@ -34,6 +34,7 @@ import {
   updateUserManagerUserSchema,
   usernameParamSchema,
   createPppSecretSchema,
+  updatePppSecretSchema,
 } from './validation/schemas';
 import {
   AssignProfileDto,
@@ -54,6 +55,7 @@ import {
   UpdateProfileDto,
   UpdateUserManagerUserDto,
   CreatePppSecretDto,
+  UpdatePppSecretDto,
 } from './dto/commands.dto';
 import { IpBindingType } from './dto/hotspot.dto';
 import type { UserManagerUserDto } from './dto/user-manager.dto';
@@ -887,6 +889,41 @@ export class RouterOSMikrotikService implements IMikrotikService {
       ...(data.remoteAddress ? { 'remote-address': data.remoteAddress } : {}),
       ...(data.comment ? { comment: data.comment } : {}),
     });
+    return PppMapper.mapPppSecret(raw);
+  }
+
+  /**
+   * Modification d'un compte PPPoE.
+   *
+   * N'écrit que les champs fournis : renvoyer tout le formulaire écraserait
+   * un réglage posé ailleurs — le profil notamment, qui porte le débit.
+   *
+   * Comme la suspension, le changement ne touche pas une session en cours :
+   * PPPoE ne revérifie rien avant la reconnexion. Changer le profil d'un
+   * abonné connecté ne change pas son débit tant qu'il reste en ligne ;
+   * fermer sa session avec `disconnectPppActive` l'applique tout de suite.
+   */
+  async updatePppSecret(username: string, input: UpdatePppSecretDto) {
+    const validUsername = validate(usernameParamSchema, username);
+    const data = validate(updatePppSecretSchema, input);
+
+    const existing = await this.findPppSecretByUsername(validUsername);
+    if (!existing) throw new MikrotikNotFoundError('Compte PPPoE', validUsername);
+
+    const payload: Record<string, string> = {};
+    if (data.password !== undefined) payload.password = data.password;
+    if (data.profile !== undefined) payload.profile = data.profile;
+    if (data.service !== undefined) payload.service = data.service;
+    if (data.remoteAddress !== undefined) payload['remote-address'] = data.remoteAddress;
+    if (data.comment !== undefined) payload.comment = data.comment;
+
+    // Les noms des champs touchés, pas leurs valeurs : un mot de passe n'a
+    // rien à faire dans un journal.
+    this.logger.info('Modification compte PPPoE', {
+      username: validUsername,
+      champs: Object.keys(payload),
+    });
+    const raw = await this.client.patch<any>(`/ppp/secret/${existing.id}`, payload);
     return PppMapper.mapPppSecret(raw);
   }
 

@@ -731,6 +731,18 @@ export class MockMikrotikService implements IMikrotikService {
     return secret;
   }
 
+  async updatePppSecret(username: string, input: UpdatePppSecretDto): Promise<PppSecretDto> {
+    const secret = this.pppSecrets.find((s) => s.username === username);
+    if (!secret) throw new MikrotikNotFoundError('Compte PPPoE', username);
+    // Seuls les champs fournis, comme le vrai : un simulacre qui ecraserait
+    // tout laisserait passer un bogue que la production paierait.
+    if (input.profile !== undefined) secret.profile = input.profile;
+    if (input.service !== undefined) secret.service = input.service;
+    if (input.remoteAddress !== undefined) secret.remoteAddress = input.remoteAddress;
+    if (input.comment !== undefined) secret.comment = input.comment;
+    return secret;
+  }
+
   async setPppSecretDisabled(username: string, disabled: boolean): Promise<PppSecretDto> {
     const secret = this.pppSecrets.find((s) => s.username === username);
     if (!secret) throw new MikrotikNotFoundError('Compte PPPoE', username);
