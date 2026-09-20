@@ -17,6 +17,7 @@ import {
 } from '../api/user-manager';
 import { useAuth } from '../auth/AuthContext';
 import { ETAT_COMPTE_UM, libellé } from '../api/libelles';
+import { FormulaireLimitation } from '../components/FormulaireLimitation';
 import { phraseCoupure } from '../api/coupure';
 import { PanneDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
@@ -344,14 +345,12 @@ function ProfilesTab() {
 
 // ==================== Limitations ====================
 
-const EMPTY_LIMITATION: CreateLimitationInput = { name: '' };
-
 function LimitationsTab() {
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
   const { error, setError, onError } = useActionError();
-  const [form, setForm] = useState<CreateLimitationInput>(EMPTY_LIMITATION);
   const [àModifier, setÀModifier] = useState<UserManagerLimitation | null>(null);
+  const [nonceFormulaire, setNonceFormulaire] = useState(0);
 
   const { currentId } = useRouterSelection();
   const limitations = useQuery({
@@ -368,7 +367,10 @@ function LimitationsTab() {
       userManagerApi.createLimitation(input, currentId),
     onSuccess: () => {
       setError(null);
-      setForm(EMPTY_LIMITATION);
+      // Le formulaire porte désormais son propre état : on le remonte plutôt
+      // que de le vider de l'extérieur, ce qui demanderait de dupliquer ici la
+      // liste de ses champs — et de l'oublier au prochain champ ajouté.
+      setNonceFormulaire((n) => n + 1);
       refresh();
     },
     onError,
@@ -400,119 +402,35 @@ function LimitationsTab() {
     onError,
   });
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!form.name.trim()) {
-      setError('Indiquez le nom de la limitation');
-      return;
-    }
-    create.mutate(form);
-  }
-
   return (
     <div className="space-y-4">
       {error && <ErrorBanner>{error}</ErrorBanner>}
 
       {àModifier && (
-        <EditionUnChamp
-          titre={`Débit descendant de « ${àModifier.name} »`}
-          description={
-            <>
-              Contrairement à la validité d'un profil, ceci <strong>s'applique à tous</strong> les
-              abonnés qui utilisent cette limitation, dès leur prochaine connexion — y compris
-              ceux dont le ticket est déjà vendu.
-            </>
-          }
-          libellé="Nouveau débit descendant"
-          unité="Mb/s"
-          type="number"
-          valeurInitiale={
-            àModifier.rateLimit.rxBitsPerSecond
-              ? String(àModifier.rateLimit.rxBitsPerSecond / 1_000_000)
-              : ''
-          }
+        <FormulaireLimitation
+          limitation={àModifier}
           enCours={modifier.isPending}
           onAnnuler={() => setÀModifier(null)}
-          onValider={(saisie) => {
-            const mbps = Number(saisie.replace(',', '.'));
-            if (!Number.isFinite(mbps) || mbps <= 0) {
-              return 'Le débit doit être un nombre de Mb/s supérieur à zéro.';
-            }
-            modifier.mutate({
-              name: àModifier.name,
-              input: { rateLimitRxBitsPerSecond: Math.round(mbps * 1_000_000) },
-            });
+          onValider={(valeurs) => {
+            const { name, ...reste } = valeurs;
+            modifier.mutate({ name, input: reste });
             setÀModifier(null);
           }}
         />
       )}
 
       {canWrite && (
-        <Card title="Créer une limitation">
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 md:grid-cols-5">
-            <FormField label="Nom">
-              <Input
-                value={form.name}
-                placeholder="BRIDAGE-2M"
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-              />
-            </FormField>
-            <FormField label="Descendant (Mb/s)">
-              <Input
-                type="number"
-                min={1}
-                value={
-                  form.rateLimitRxBitsPerSecond ? form.rateLimitRxBitsPerSecond / 1_000_000 : ''
-                }
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    rateLimitRxBitsPerSecond: e.target.value
-                      ? Number(e.target.value) * 1_000_000
-                      : null,
-                  })
-                }
-              />
-            </FormField>
-            <FormField label="Montant (Mb/s)">
-              <Input
-                type="number"
-                min={1}
-                value={
-                  form.rateLimitTxBitsPerSecond ? form.rateLimitTxBitsPerSecond / 1_000_000 : ''
-                }
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    rateLimitTxBitsPerSecond: e.target.value
-                      ? Number(e.target.value) * 1_000_000
-                      : null,
-                  })
-                }
-              />
-            </FormField>
-            <FormField label="Volume (Go)">
-              <Input
-                type="number"
-                min={1}
-                value={form.transferLimitBytes ? form.transferLimitBytes / 1_073_741_824 : ''}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    transferLimitBytes: e.target.value
-                      ? Math.round(Number(e.target.value) * 1_073_741_824)
-                      : null,
-                  })
-                }
-              />
-            </FormField>
-            <div className="flex items-end">
-              <Button type="submit" disabled={create.isPending} className="w-full">
-                {create.isPending ? 'Création…' : 'Créer'}
-              </Button>
-            </div>
-          </form>
-        </Card>
+        <FormulaireLimitation
+          key={nonceFormulaire}
+          enCours={create.isPending}
+          onValider={(valeurs) => {
+            if (!valeurs.name.trim()) {
+              setError('Indiquez le nom de la limitation');
+              return;
+            }
+            create.mutate(valeurs);
+          }}
+        />
       )}
 
       {limitations.isLoading ? (

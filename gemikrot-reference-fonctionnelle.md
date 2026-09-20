@@ -867,6 +867,35 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — Une limitation qu'on ne pouvait modifier qu'à moitié
+
+Les champs étaient lisibles depuis le tour précédent ; restait à pouvoir les saisir. L'état de
+départ était pire que je ne croyais : **deux formulaires différents, tous deux incomplets**.
+
+```
+création      nom, descendant, montant, volume total          4 champs sur 8
+modification  débit descendant                                 1 champ  sur 8
+```
+
+Changer le volume d'un forfait, sa durée ou sa période de remise à zéro obligeait donc à passer
+par WinBox — ce que cette console existe précisément pour éviter. Un seul formulaire sert
+désormais les deux cas, avec les huit champs ; deux formulaires qui divergent sont exactement
+ce qui a produit cet écart.
+
+Le nom reste saisissable à la création seulement : sur RouterOS il **est** l'identifiant, et le
+changer abandonnerait les profils qui le désignent.
+
+La remise à zéro est présentée pour ce qu'elle est : « la différence entre *10 Go* et *10 Go par
+mois* ». Sa date de départ n'apparaît que si une période est demandée — un champ de date sans
+période ne veut rien dire — et l'heure est fixée à minuit, faute de mieux à demander à
+quelqu'un qui raisonne en jours.
+
+**Éprouvé sur le routeur** : limitation créée avec les huit champs, puis le volume total porté de
+10 à 20 Go et la période retirée dans la même requête — les six autres champs intacts, confirmé
+par une relecture indépendante. Le formulaire de modification recharge bien les huit valeurs, et
+celui de création reste vide en dessous. Limitation supprimée ensuite ; 2 limitations et 646
+comptes intacts.
+
 ### 2026-09-20 — Un ticket ne dépend pas de son profil
 
 Correction d'une hypothèse que je faisais : **les limites d'un compte ne découlent pas du
