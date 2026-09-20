@@ -6,11 +6,13 @@ import { formatDuration } from '../api/user-manager';
 import { useAuth } from '../auth/AuthContext';
 import { useRouterSelection } from '../routers/RouterContext';
 import { ApiError } from '../api/client';
+import { phrasePanne } from '../api/pannes';
 import {
   Badge,
   Button,
   Card,
   EmptyRow,
+  ErrorNote,
   FormField,
   Input,
   PageHeader,
@@ -85,8 +87,20 @@ function ServersTab() {
   });
 
   if (overview.isLoading) return <p className="text-slate-500">Chargement…</p>;
+
+  // `return null` sur une lecture en échec rendait une page **entièrement
+  // blanche** — et c'est l'onglet par défaut de cet écran. Rien n'indiquait
+  // qu'une lecture avait eu lieu, encore moins qu'elle avait échoué : on
+  // pouvait conclure que le HotSpot n'était pas configuré.
   const data = overview.data;
-  if (!data) return null;
+  if (!data) {
+    return (
+      <ErrorNote onRetry={() => overview.refetch()}>
+        {phrasePanne(overview.error)} La configuration HotSpot est lue en direct sur lui, elle
+        n'a pas de copie en base.
+      </ErrorNote>
+    );
+  }
 
   return (
     <div className="space-y-4">

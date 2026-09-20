@@ -12,6 +12,7 @@ import {
 } from '../api/mikrotik-tabs';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
+import { Compteur, ListeDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { GenerationTickets } from '../components/GenerationTickets';
 import { ChampDuree } from '../components/Edition';
@@ -19,13 +20,10 @@ import {
   Badge,
   Button,
   Card,
-  EmptyState,
   ErrorNote,
   FormField,
   Input,
   Select,
-  Table,
-  TableSkeleton,
 } from '../components/ui';
 
 /**
@@ -36,30 +34,6 @@ import {
  * tableau vide quand le routeur ne répond pas : un vide serait un mensonge.
  */
 
-/** Affichage commun : attente, erreur, vide, puis le contenu. */
-function Liste<T>({
-  requête,
-  colonnes,
-  vide,
-  ligne,
-}: {
-  requête: { isPending: boolean; isError: boolean; data?: T[]; refetch: () => unknown };
-  colonnes: string[];
-  vide: { titre: string; aide?: string };
-  ligne: (item: T, index: number) => React.ReactNode;
-}) {
-  if (requête.isPending) return <TableSkeleton columns={colonnes.length} />;
-  if (requête.isError) {
-    return (
-      <ErrorNote onRetry={() => requête.refetch()}>
-        Le routeur n'a pas répondu — cette table est lue en direct, elle n'a pas de copie en base.
-      </ErrorNote>
-    );
-  }
-  const lignes = requête.data ?? [];
-  if (lignes.length === 0) return <EmptyState title={vide.titre} hint={vide.aide} />;
-  return <Table head={colonnes}>{lignes.map(ligne)}</Table>;
-}
 
 /** Filtre en mémoire : ces tables tiennent en quelques centaines de lignes. */
 function useFiltre<T>(items: T[] | undefined, champs: (item: T) => (string | null | undefined)[]) {
@@ -272,7 +246,7 @@ export function HotspotUsersTab() {
           est cumulé depuis la création du compte.
         </p>
         <div className="flex shrink-0 items-center gap-3">
-          <span className="text-sm text-slate-500">{filtrés.length} compte(s)</span>
+          <Compteur requête={requête} nombre={filtrés.length} unité="compte(s)" />
           {canWrite && formulaire === 'aucun' && (
             <Button onClick={() => setFormulaire('creation')}>Nouveau compte</Button>
           )}
@@ -343,7 +317,7 @@ export function HotspotUsersTab() {
         </ErrorNote>
       )}
 
-      <Liste
+      <ListeDuRouteur
         requête={{ ...requête, data: filtrés }}
         colonnes={['Compte', 'Client', 'Profil', 'Durée', 'Reçu', 'Envoyé', 'État', '']}
         vide={{ titre: 'Aucun compte HotSpot', aide: 'Cette table est vide sur le routeur.' }}
@@ -421,7 +395,7 @@ export function HotspotProfilesTab() {
         />
       )}
 
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['Profil', 'Descendant', 'Montant', 'Durée de session', 'Appareils', '']}
         vide={{ titre: 'Aucun profil HotSpot' }}
@@ -474,7 +448,7 @@ export function UmPaymentsTab() {
         avec des colonnes vides, ce sont les noms de champs qu'il faudra corriger, pas le
         routeur.
       </div>
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['Compte', 'Profil', 'Prix', 'Devise', 'Début', 'Fin', 'État']}
         vide={{
@@ -528,7 +502,7 @@ export function HotspotHostsTab() {
         souvent un appareil incapable d'afficher un portail captif — télévision, caméra,
         imprimante.
       </p>
-      <Liste
+      <ListeDuRouteur
         requête={hôtes}
         colonnes={['Adresse MAC', 'Nom', 'Adresse IP', 'Serveur', 'Inactif depuis']}
         vide={{ titre: 'Aucun hôte', aide: 'Personne n\'est connecté au réseau en ce moment.' }}
@@ -579,7 +553,7 @@ export function UmSessionsTab() {
         placeholder="Filtrer par compte ou adresse MAC"
         className="max-w-sm"
       />
-      <Liste
+      <ListeDuRouteur
         requête={{ ...requête, data: filtrés }}
         colonnes={['Compte', 'Appareil', 'Début', 'Fin', 'Durée', 'État']}
         vide={{ titre: 'Aucune session', aide: 'Aucune authentification enregistrée.' }}
@@ -623,7 +597,7 @@ export function UmAssignmentsTab() {
         application arrêtée. Un compte peut en porter plusieurs — un rachat en ajoute une, il ne
         remplace pas la précédente.
       </p>
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['Compte', 'Profil', 'Expire le', 'État']}
         vide={{
@@ -660,7 +634,7 @@ export function HotspotServerProfilesTab() {
         est <code>login-by</code> : tant qu'elle contient <code>cookie</code>, un client déjà venu
         se reconnecte sans repasser par RADIUS — donc sans que sa validité soit vérifiée.
       </p>
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['Profil', "Méthodes d'entrée", 'Durée des cookies', 'RADIUS', 'Adresse']}
         vide={{ titre: 'Aucun profil de serveur' }}
@@ -706,7 +680,7 @@ export function HotspotServicePortsTab() {
         Les protocoles dont le HotSpot suit les connexions pour les faire passer correctement au
         travers du portail. Rarement touché : on y vient quand un usage précis ne passe pas.
       </p>
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['Protocole', 'Ports', 'État']}
         vide={{ titre: 'Aucun port de service' }}
@@ -739,7 +713,7 @@ export function UmRoutersTab() {
         Les équipements autorisés à interroger ce serveur RADIUS. Sur un parc mono-routeur, le
         routeur s'y déclare lui-même en boucle locale.
       </p>
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['Nom', 'Adresse', 'Protocole', 'Port de changement', 'Secret', 'État']}
         vide={{ titre: 'Aucun client RADIUS déclaré' }}
@@ -781,7 +755,7 @@ export function UmUserGroupsTab() {
         Les méthodes d'authentification acceptées. « Extérieur » vaut pour l'échange direct,
         « intérieur » pour ce qui passe dans un tunnel chiffré.
       </p>
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['Groupe', 'Extérieur', 'Intérieur', 'Origine']}
         vide={{ titre: "Aucun groupe d'authentification" }}
@@ -823,7 +797,7 @@ export function UmAttributesTab() {
           Le vocabulaire que RADIUS sait échanger. On le consulte pour savoir ce qu'un profil
           peut imposer à une session — rarement pour le modifier.
         </p>
-        <span className="shrink-0 text-sm text-slate-500">{filtrés.length} attribut(s)</span>
+        <Compteur requête={requête} nombre={filtrés.length} unité="attribut(s)" />
       </div>
       <Input
         value={terme}
@@ -831,7 +805,7 @@ export function UmAttributesTab() {
         placeholder="Filtrer par nom"
         className="max-w-sm"
       />
-      <Liste
+      <ListeDuRouteur
         requête={{ ...requête, data: filtrés }}
         colonnes={['Attribut', 'Numéro', 'Genre', 'Paquets', 'Origine']}
         vide={{ titre: 'Aucun attribut' }}

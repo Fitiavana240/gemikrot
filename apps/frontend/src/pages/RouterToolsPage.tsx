@@ -9,6 +9,7 @@ import {
   type ResultatReparation,
 } from '../api/router-tools';
 import { formatDuree, formatOctets } from '../api/mikrotik-tabs';
+import { ListeDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { TabBar, type TabDef } from '../components/TabBar';
 import {
@@ -32,30 +33,6 @@ import {
  * changer un réglage au hasard.
  */
 
-/** Affichage commun : attente, erreur, vide, contenu. */
-function Liste<T>({
-  requête,
-  colonnes,
-  vide,
-  ligne,
-}: {
-  requête: { isPending: boolean; isError: boolean; data?: T[]; refetch: () => unknown };
-  colonnes: string[];
-  vide: { titre: string; aide?: string };
-  ligne: (item: T) => React.ReactNode;
-}) {
-  if (requête.isPending) return <TableSkeleton columns={colonnes.length} />;
-  if (requête.isError) {
-    return (
-      <ErrorNote onRetry={() => requête.refetch()}>
-        Le routeur n'a pas répondu — cette table est lue en direct, elle n'a pas de copie en base.
-      </ErrorNote>
-    );
-  }
-  const lignes = requête.data ?? [];
-  if (lignes.length === 0) return <EmptyState title={vide.titre} hint={vide.aide} />;
-  return <Table head={colonnes}>{lignes.map(ligne)}</Table>;
-}
 
 function QueuesTab() {
   const { currentId } = useRouterSelection();
@@ -73,7 +50,7 @@ function QueuesTab() {
         HotSpot à l'ouverture d'une session : elle disparaît à la déconnexion et se refait à la
         suivante — la modifier n'aurait aucun effet durable.
       </p>
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['File', 'Cible', 'Plafond ↓', 'Plafond ↑', 'En ce moment ↓', 'Consommé', 'Origine']}
         vide={{
@@ -122,7 +99,7 @@ function LogTab() {
         client a été déconnecté, ou pourquoi une authentification a échoué. Les heures sont celles
         du routeur.
       </p>
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['Quand', 'Sujets', 'Message']}
         vide={{ titre: 'Journal vide' }}
@@ -164,7 +141,7 @@ function InterfacesTab() {
         un compteur qui grimpe sur le lien montant explique des plaintes que rien d'autre
         n'explique.
       </p>
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['Interface', 'Type', 'État', 'Reçu', 'Envoyé', 'Erreurs', 'Coupures', 'Depuis']}
         vide={{ titre: 'Aucune interface' }}
@@ -247,7 +224,7 @@ function AccesTab() {
           vide, elle autorise <strong>toutes</strong> les adresses — ce qui n'est pas la même chose
           qu'aucune, et c'est la confusion qui a déjà coupé l'accès à cette application.
         </p>
-        <Liste
+        <ListeDuRouteur
           requête={{ ...services, data: actifs }}
           colonnes={['Service', 'Port', 'Depuis', 'Certificat', 'Sessions']}
           vide={{ titre: 'Aucun service actif' }}
@@ -319,7 +296,7 @@ function AppareilsTab() {
           Quelle adresse répond sur quel matériel. Une entrée apprise du trafic disparaît d'elle-même ;
           une entrée posée à la main reste, et c'est ainsi qu'on réserve une adresse à un appareil.
         </p>
-        <Liste
+        <ListeDuRouteur
           requête={arp}
           colonnes={['Adresse', 'Matériel', 'Interface', 'État', 'Origine']}
           vide={{ titre: 'Table ARP vide' }}
@@ -356,7 +333,7 @@ function TableFirewall({
   return (
     <div className="space-y-3">
       <p className="max-w-3xl text-sm text-slate-600">{intro}</p>
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['#', 'Chaîne', 'Action', 'Condition', 'Trafic', 'Origine']}
         vide={{
@@ -554,7 +531,7 @@ function DnsTab() {
           Les noms que le routeur résout lui-même, avant d'interroger qui que ce soit. Les entrées{' '}
           <em>automatiques</em> sont posées par le portail pour son propre nom.
         </p>
-        <Liste
+        <ListeDuRouteur
           requête={statiques}
           colonnes={['Nom', 'Type', 'Adresse', 'Durée de vie', 'Origine']}
           vide={{
@@ -595,7 +572,7 @@ function RoutesTab() {
         est la sortie vers Internet : sa passerelle est celle du fournisseur. Une route{' '}
         <em>inactive</em> existe mais ne sert pas — c'est souvent le signe d'un lien tombé.
       </p>
-      <Liste
+      <ListeDuRouteur
         requête={requête}
         colonnes={['Destination', 'Par', 'Distance', 'Table', 'Origine', 'État']}
         vide={{ titre: 'Aucune route', aide: 'Le routeur ne sait joindre aucun réseau.' }}
@@ -1057,7 +1034,7 @@ function FichiersTab() {
         </div>
       )}
 
-      <Liste
+      <ListeDuRouteur
         requête={{ ...requête, data: visibles }}
         colonnes={['Fichier', 'Type', 'Taille', 'Modifié']}
         vide={{

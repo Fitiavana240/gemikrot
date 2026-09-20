@@ -44,7 +44,20 @@ export function setTenantCible(tenantId: string | null): void {
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string,
+    /**
+     * Code d'erreur du routeur, quand la panne vient de lui.
+     *
+     * Le statut HTTP ne suffit pas à orienter un dépannage : 503 dit « le
+     * routeur n'a pas répondu », 502 peut dire « il a refusé nos
+     * identifiants ». Les remèdes n'ont rien à voir — rétablir un lien, ou
+     * corriger un compte — et un écran qui ne lit que le statut envoie
+     * chercher le mauvais.
+     */
+    public routerErrorCode?: string,
+  ) {
     super(message);
   }
 }
@@ -86,7 +99,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (!res.ok) {
-    throw new ApiError(res.status, body?.message ?? `Erreur ${res.status}`);
+    throw new ApiError(res.status, body?.message ?? `Erreur ${res.status}`, body?.routerErrorCode);
   }
   return body as T;
 }

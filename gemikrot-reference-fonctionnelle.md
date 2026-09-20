@@ -867,6 +867,54 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — « Internal server error » pour une coupure de courant
+
+Parti d'une mesure. Un routeur injoignable, quatre appels : **16 s, 16 s, puis 12 ms**. Le
+disjoncteur fait son travail. Mais les corps de réponse ne se ressemblaient pas du tout.
+
+```
+appel 1  500  {"statusCode":500,"message":"Internal server error"}
+appel 3  503  {"message":"Routeur « X » injoignable — Timeout après 5000ms
+                pour GET /ip/dhcp-server/lease (nouvelle tentative dans 21 s)"}
+```
+
+**La même panne donnait deux réponses opposées, et la pire arrivait en premier.** Le message
+exact n'existe qu'une fois le disjoncteur ouvert, c'est-à-dire après deux échecs et trente
+secondes d'attente. Les premiers appels — ceux que l'exploitant voit justement au moment où la
+panne commence — rendaient la phrase que NestJS réserve à un défaut de la console elle-même.
+On cherche alors le problème du mauvais côté.
+
+Il n'existait **aucun filtre d'exception** : toute erreur MikroTik remontée jusqu'au
+contrôleur devenait `500`. Pas seulement les pannes de lien — un mot de passe refusé par le
+routeur aussi. Le filtre traduit désormais la hiérarchie entière : **503** pour un lien
+tombé (le code que rendait déjà le disjoncteur, les deux concordent enfin), **502** pour un
+routeur qui répond et refuse, **404 / 400 / 409** pour ce que la demande justifie. Aucun de
+ces messages ne porte de secret : les identifiants voyagent dans un en-tête `Authorization`,
+jamais dans l'URL, et le texte ne contient que la méthode et le chemin RouterOS — lequel est
+précisément ce qui permet de dire où regarder.
+
+**Les écrans disaient tous la même chose.** « Le routeur n'a pas répondu », quel que soit
+l'échec — y compris quand le routeur avait parfaitement répondu et refusé nos identifiants.
+On envoyait vérifier un câble pendant que le remède était un compte à corriger. Le code brut
+traverse maintenant jusqu'au client, et une seule fonction le traduit.
+
+Deux silences trouvés en éprouvant cela, tous deux sur l'écran HotSpot :
+
+- **L'onglet Serveurs rendait une page entièrement blanche.** `if (!data) return null` — et
+  c'est l'onglet par défaut. Rien n'indiquait qu'une lecture avait eu lieu, encore moins
+  qu'elle avait échoué : on pouvait en conclure que le HotSpot n'était pas configuré.
+- **« 0 compte(s) » à côté d'une table en échec.** La longueur d'un tableau vide faute de
+  réponse, écrite sans condition. Le routeur en portait 646. C'est pire qu'une table blanche :
+  un chiffre a l'air d'un constat.
+
+Au passage, la table lue en direct existait en **deux exemplaires identiques**, un par écran
+de configuration. Deux copies veulent dire deux endroits où corriger une phrase — et c'est
+exactement ce qui était arrivé.
+
+**Éprouvé sur le vrai routeur**, avec de vrais mauvais identifiants : 502 en 0,4 s, et l'écran
+nomme la bonne cause. Puis un hôte injoignable pour le 503. Routeur d'essai supprimé, comptes
+HotSpot toujours à 646.
+
 ### 2026-09-20 — L'écran Appareils disait « bloqué » de ce qui marchait
 
 **Rouge sur un téléphone qui va bien.** La colonne lisait `bypassEnabled` et n'en tirait que

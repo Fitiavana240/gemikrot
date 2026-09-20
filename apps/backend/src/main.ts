@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module.js';
+import { MikrotikExceptionFilter } from './routers/mikrotik-exception.filter.js';
 
 // Prisma retourne les colonnes BigInt (ex: Plan.transferLimitBytes) sous
 // forme de `bigint`, que JSON.stringify ne sait pas sérialiser nativement.
@@ -22,6 +23,11 @@ async function bootstrap() {
   // sans cette option elles arrivent toutes avec l'adresse du routeur, et une
   // limite de débit par IP bannirait tout le quartier d'un coup.
   app.set('trust proxy', 1);
+
+  // Sans ce filtre, une panne de routeur — un câble, une coupure, un tunnel
+  // tombé — rend à l'écran « Internal server error », la phrase qui désigne
+  // un défaut de la console. On cherche alors le problème du mauvais côté.
+  app.useGlobalFilters(new MikrotikExceptionFilter());
 
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
