@@ -83,6 +83,8 @@ import {
   WirelessInterfaceDto,
   WirelessClientDto,
   RadiusClientDto,
+  WireguardInterfaceDto,
+  WireguardPeerDto,
 } from '../dto/router-tools.dto';
 
 /**
@@ -306,6 +308,11 @@ export interface IMikrotikService {
   getWirelessClients(): Promise<WirelessClientDto[]>;
   /** Le client RADIUS : la pièce qui relie le HotSpot à User Manager. */
   getRadiusClients(): Promise<RadiusClientDto[]>;
+  /** Le tunnel côté routeur : sans cela l'accès à distance est indépannable. */
+  getWireguard(): Promise<{
+    interfaces: WireguardInterfaceDto[];
+    peers: WireguardPeerDto[];
+  }>;
   getRouterFiles(): Promise<RouterFileDto[]>;
   /**
    * Écrit un fichier **texte** sur le routeur, ASCII et sous 61 440 octets.

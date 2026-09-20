@@ -15,6 +15,8 @@ import {
   WirelessInterfaceDto,
   WirelessClientDto,
   RadiusClientDto,
+  WireguardInterfaceDto,
+  WireguardPeerDto,
 } from '../dto/router-tools.dto';
 
 /** RouterOS rend ses booléens en chaînes. */
@@ -308,5 +310,37 @@ export function mapRadiusClient(raw: any): RadiusClientDto {
     accountingPort: raw?.['accounting-port'] != null ? Number(raw['accounting-port']) : null,
     disabled: flag(raw?.disabled),
     timeout: raw?.timeout ?? null,
+  };
+}
+
+export function mapWireguardInterface(raw: any): WireguardInterfaceDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    name: raw?.name ?? '',
+    listenPort: raw?.['listen-port'] != null ? Number(raw['listen-port']) : null,
+    publicKey: raw?.['public-key'] ?? '',
+    running: flag(raw?.running),
+    disabled: flag(raw?.disabled),
+    comment: raw?.comment || null,
+  };
+}
+
+export function mapWireguardPeer(raw: any): WireguardPeerDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    name: raw?.name || null,
+    interfaceName: raw?.interface ?? '',
+    publicKey: raw?.['public-key'] ?? '',
+    // `current-endpoint-address` est ce que le routeur voit réellement ;
+    // `endpoint-address` ce qui est configuré. Le second est celui qui compte
+    // pour dépanner : c'est lui qu'on a écrit, et souvent lui qui est faux.
+    endpointAddress: raw?.['endpoint-address'] || raw?.['current-endpoint-address'] || null,
+    endpointPort: raw?.['endpoint-port'] != null ? Number(raw['endpoint-port']) : null,
+    allowedAddress: raw?.['allowed-address'] ?? '',
+    lastHandshakeSeconds:
+      raw?.['last-handshake'] != null ? parseRouterOsDuration(raw['last-handshake']) : null,
+    txBytes: Number(raw?.tx ?? 0),
+    rxBytes: Number(raw?.rx ?? 0),
+    disabled: flag(raw?.disabled),
   };
 }

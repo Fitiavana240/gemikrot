@@ -127,6 +127,27 @@ export class RouterToolsController {
     return { radios, clients };
   }
 
+  /**
+   * Le tunnel côté routeur, et par quelle adresse la console l'a joint.
+   *
+   * Les deux ensemble, parce que la question de l'exploitant est une seule :
+   * « est-ce que ça passe par le VPN ? »
+   */
+  @Get('wireguard')
+  async wireguard(@Param('routerId') routerId: string) {
+    const [mikrotik, chemin] = await Promise.all([
+      this.clients.forRouter(routerId),
+      this.clients.cheminVers(routerId),
+    ]);
+    // Renommé à la frontière HTTP : le français reste à l'intérieur, le fil
+    // porte de l'ASCII — c'est ce que fait déjà le reste des contrats de cette
+    // application, et un accent dans une clé JSON traverse trop d'outils.
+    return {
+      ...(await mikrotik.getWireguard()),
+      chemin: { adresse: chemin.hôte, parLeTunnel: chemin.parLeTunnel },
+    };
+  }
+
   /** Le client RADIUS : ce qui relie le HotSpot à User Manager. */
   @Get('radius')
   async radius(@Param('routerId') routerId: string) {

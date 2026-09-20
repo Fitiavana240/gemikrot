@@ -57,6 +57,19 @@ export class MikrotikClientFactory {
     return router.id;
   }
 
+  /**
+   * Par quelle adresse la console a joint ce routeur, pour le dire à l'écran.
+   *
+   * L'exploitant n'a qu'une question quand il parle de VPN : « est-ce que ça
+   * passe par là ? » Sans cette réponse, le tunnel reste une promesse
+   * invérifiable — il peut tourner sur le routeur sans qu'un seul appel de la
+   * console l'emprunte.
+   */
+  async cheminVers(routerId: string): Promise<{ hôte: string; parLeTunnel: boolean }> {
+    const router = await this.prisma.scoped.router.findUniqueOrThrow({ where: { id: routerId } });
+    return MikrotikClientFactory.adresseDuRouteur(router);
+  }
+
   /** Invalide le cache après modification d'un routeur (hôte, identifiants…). */
   invalidate(routerId: string): void {
     this.cache.delete(routerId);
@@ -74,16 +87,42 @@ export class MikrotikClientFactory {
     return new RouterOSMikrotikService(new RouterOSRestClient(config, logger), logger);
   }
 
+  /**
+   * Par quelle adresse joindre ce routeur.
+   *
+   * **Le tunnel d'abord, quand il existe.** Un routeur enrôlé a reçu une
+   * adresse `10.88.x.y` dans le tunnel, et son service REST n'écoute souvent
+   * plus que là — le script d'enrôlement restreint `www-ssl` à la seule
+   * adresse du serveur. Son `host` d'origine, lui, est une adresse de réseau
+   * local qui ne veut rien dire depuis ailleurs.
+   *
+   * La colonne existait et l'enrôlement la remplissait, mais **personne ne la
+   * lisait** : la fabrique composait toujours `https://${host}`. L'accès à
+   * distance ne pouvait donc pas fonctionner, quel que soit l'état du tunnel.
+   *
+   * `enrolledAt` décide, et non la seule présence d'une adresse : une adresse
+   * réservée pour une invitation jamais aboutie ne doit pas détourner les
+   * appels vers un tunnel qui n'existe pas.
+   */
+  static adresseDuRouteur(router: Router): { hôte: string; parLeTunnel: boolean } {
+    if (router.enrolledAt && router.tunnelAddress) {
+      return { hôte: router.tunnelAddress, parLeTunnel: true };
+    }
+    return { hôte: router.host, parLeTunnel: false };
+  }
+
   private build(router: Router): IMikrotikService {
-    const signature = `${router.host}:${router.restPort}:${router.credentialsEncrypted}:${router.tlsFingerprint ?? ''}`;
+    const { hôte } = MikrotikClientFactory.adresseDuRouteur(router);
+    // L'adresse entre dans la signature : basculer sur le tunnel doit
+    // reconstruire le client, pas resservir celui qui visait le réseau local.
+    const signature = `${hôte}:${router.restPort}:${router.credentialsEncrypted}:${router.tlsFingerprint ?? ''}`;
     const cached = this.cache.get(router.id);
     if (cached?.signature === signature) return cached.service;
-
 
     const { username, password } = this.credentials.decrypt(router.credentialsEncrypted);
     const service = this.buildFromConfig(
       {
-        baseUrl: `https://${router.host}:${router.restPort}`,
+        baseUrl: `https://${hôte}:${router.restPort}`,
         username,
         password,
         tlsFingerprint: router.tlsFingerprint ?? undefined,

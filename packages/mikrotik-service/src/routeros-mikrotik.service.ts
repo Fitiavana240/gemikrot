@@ -1228,6 +1228,24 @@ export class RouterOSMikrotikService implements IMikrotikService {
     return raw.map(ToolsMapper.mapRadiusClient);
   }
 
+  /**
+   * Le tunnel côté routeur : l'interface et ses pairs.
+   *
+   * Sans cette lecture, l'accès à distance n'est ni vérifiable ni dépannable :
+   * WireGuard n'a pas d'état « connecté », et une interface qui tourne ne dit
+   * rien du lien. Seule la dernière poignée de main le dit.
+   */
+  async getWireguard() {
+    const [interfaces, peers] = await Promise.all([
+      this.client.get<any[]>('/interface/wireguard'),
+      this.client.get<any[]>('/interface/wireguard/peers'),
+    ]);
+    return {
+      interfaces: interfaces.map(ToolsMapper.mapWireguardInterface),
+      peers: peers.map(ToolsMapper.mapWireguardPeer),
+    };
+  }
+
   // ---------- Stockage ----------
 
   async getRouterFiles() {

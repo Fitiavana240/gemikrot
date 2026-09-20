@@ -292,3 +292,41 @@ export interface RadiusClientDto {
   disabled: boolean;
   timeout: string | null;
 }
+
+/** L'interface WireGuard du routeur, côté routeur. */
+export interface WireguardInterfaceDto {
+  id: string;
+  name: string;
+  listenPort: number | null;
+  publicKey: string;
+  running: boolean;
+  disabled: boolean;
+  comment: string | null;
+}
+
+/**
+ * Un pair WireGuard, avec ce qui permet de savoir si le tunnel vit.
+ *
+ * `lastHandshakeSeconds` est le seul indicateur fiable : WireGuard n'a pas
+ * d'état « connecté », une interface « running » ne dit rien du lien. Une
+ * poignée de main de plus de trois minutes veut dire que le pair ne répond
+ * plus, `persistent-keepalive` étant à 25 secondes.
+ *
+ * Le couple `tx` / `rx` dit **de quel côté** ça coince : du trafic émis sans
+ * rien reçu est la signature exacte d'un pair qui parle dans le vide — une
+ * adresse d'extrémité injoignable, un port fermé, un serveur éteint.
+ */
+export interface WireguardPeerDto {
+  id: string;
+  name: string | null;
+  interfaceName: string;
+  publicKey: string;
+  /** L'adresse que ce pair appelle, telle qu'elle est configurée. */
+  endpointAddress: string | null;
+  endpointPort: number | null;
+  allowedAddress: string;
+  lastHandshakeSeconds: number | null;
+  txBytes: number;
+  rxBytes: number;
+  disabled: boolean;
+}

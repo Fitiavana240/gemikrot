@@ -12,6 +12,7 @@ import { formatDuree, formatOctets } from '../api/mikrotik-tabs';
 import { ListeDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { WifiTab } from './WifiTab';
+import { TunnelTab } from './TunnelTab';
 import { TabBar, type TabDef } from '../components/TabBar';
 import {
   Badge,
@@ -1075,6 +1076,7 @@ const ONGLETS = {
   debit: { titre: 'Débit par client', rendu: () => <QueuesTab /> },
   liens: { titre: 'Interfaces', rendu: () => <InterfacesTab /> },
   wifi: { titre: 'Wi-Fi et RADIUS', rendu: () => <WifiTab /> },
+  tunnel: { titre: 'Tunnel (VPN)', rendu: () => <TunnelTab /> },
   journal: { titre: 'Journal du routeur', rendu: () => <LogTab /> },
   acces: { titre: 'Accès et DDNS', rendu: () => <AccesTab /> },
   appareils: { titre: 'DHCP et ARP', rendu: () => <AppareilsTab /> },

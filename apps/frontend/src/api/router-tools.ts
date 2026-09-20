@@ -287,6 +287,7 @@ export const routerToolsApi = {
   wireless: (routerId: string) =>
     api.get<{ radios: RadioWifi[]; clients: ClientWifi[] }>(`${base(routerId)}/wireless`),
   radius: (routerId: string) => api.get<ClientRadius[]>(`${base(routerId)}/radius`),
+  wireguard: (routerId: string) => api.get<EtatTunnel>(`${base(routerId)}/wireguard`),
   services: (routerId: string) => api.get<IpService[]>(`${base(routerId)}/services`),
   cloud: (routerId: string) => api.get<IpCloud>(`${base(routerId)}/cloud`),
   arp: (routerId: string) => api.get<ArpEntry[]>(`${base(routerId)}/arp`),
@@ -366,4 +367,44 @@ export interface ClientRadius {
   accountingPort: number | null;
   disabled: boolean;
   timeout: string | null;
+}
+
+export interface InterfaceTunnel {
+  id: string;
+  name: string;
+  listenPort: number | null;
+  publicKey: string;
+  running: boolean;
+  disabled: boolean;
+  comment: string | null;
+}
+
+/**
+ * Un pair du tunnel, avec ce qui permet de savoir s'il vit.
+ *
+ * `lastHandshakeSeconds` est le seul indicateur fiable : WireGuard n'a pas
+ * d'état « connecté », et une interface qui tourne ne dit rien du lien.
+ *
+ * Le couple émis / reçu dit **de quel côté** ça coince : du trafic émis sans
+ * rien reçu est la signature d'un pair qui parle dans le vide.
+ */
+export interface PairTunnel {
+  id: string;
+  name: string | null;
+  interfaceName: string;
+  publicKey: string;
+  endpointAddress: string | null;
+  endpointPort: number | null;
+  allowedAddress: string;
+  lastHandshakeSeconds: number | null;
+  txBytes: number;
+  rxBytes: number;
+  disabled: boolean;
+}
+
+export interface EtatTunnel {
+  interfaces: InterfaceTunnel[];
+  peers: PairTunnel[];
+  /** Par quelle adresse la console a réellement joint ce routeur. */
+  chemin: { adresse: string; parLeTunnel: boolean };
 }

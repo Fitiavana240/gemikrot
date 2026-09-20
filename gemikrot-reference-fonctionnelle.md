@@ -867,6 +867,47 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — Le tunnel existait, personne ne l'empruntait
+
+Signalé : le VPN relie routeur et application, mais l'application se relie au réseau local, pas
+à distance. Vérifié, et la cause est nette.
+
+```ts
+baseUrl: `https://${router.host}:${router.restPort}`
+```
+
+La fabrique composait **toujours** l'adresse d'origine. `tunnelAddress` existait en base,
+l'enrôlement la remplissait, et **personne ne la lisait**. L'accès à distance ne pouvait donc
+pas fonctionner, quel que soit l'état du tunnel : un routeur enrôlé aurait été appelé sur son
+adresse de réseau local, qui ne veut rien dire depuis ailleurs — et que le script d'enrôlement
+ferme par-dessus le marché, en restreignant `www-ssl` à la seule adresse du serveur.
+
+L'adresse est maintenant résolue : **le tunnel quand `enrolledAt` est posé**, l'hôte sinon. Ce
+n'est pas la seule présence d'une adresse qui décide — une adresse réservée pour une invitation
+jamais aboutie détournerait les appels vers un tunnel qui n'existe pas, et rendrait injoignable
+un routeur qui répond parfaitement. Elle entre aussi dans la signature du cache : basculer sur
+le tunnel doit reconstruire le client. Trois tests fixent ces trois cas.
+
+**Le tunnel est désormais visible**, ce qui manquait pour le dépanner. Relevé sur ce routeur :
+
+```
+interface gemikrot   active, port 13231
+peer1                appelle 192.168.88.135:51820
+                     poignée de main il y a 12 h
+                     émis 1,2 Mio   reçu 25 Kio
+```
+
+L'écran lit ces chiffres à la place de l'exploitant. WireGuard n'a pas d'état « connecté » :
+une interface qui tourne ne dit rien du lien, seule la poignée de main le dit, et
+**émis sans reçu** est la signature d'un pair qui parle dans le vide. Et la question qu'on se
+pose vraiment est répondue en haut : « cette console joint le routeur **directement**, pas par
+le tunnel ».
+
+**Une mesure fausse, la deuxième de la journée.** La clé `hôte` semblait sortir en `hÃ´te` dans
+la réponse. Les octets étaient corrects — c'est `json.tool` qui décodait avec l'encodage de la
+console Windows. La clé a quand même été renommée `adresse` à la frontière HTTP, non pour un
+bug mais par cohérence : ce projet garde le français à l'intérieur et de l'ASCII sur le fil.
+
 ### 2026-09-20 — Ce que le routeur porte et que la console ignorait
 
 Tout vient du routeur : la couverture des menus RouterOS est donc une mesure, pas une impression.
