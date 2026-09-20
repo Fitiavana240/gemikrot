@@ -60,6 +60,23 @@ export class DashboardService {
         .catch(() => []),
     ]);
 
+    // Ce qu'un exploitant regarde en ouvrant la console le matin : combien il
+    // lui reste a vendre, qui arrive a echeance, et ce qui attend une
+    // validation. Trois questions, trois comptages — et non trois ecrans.
+    const dansSeptJours = new Date(Date.now() + 7 * 86_400_000);
+    const [ticketsDisponibles, abonnesActifs, echeancesProches, paiementsEnAttente] =
+      await Promise.all([
+        this.prisma.scoped.voucher.count({ where: { status: 'CREATED' } }),
+        this.prisma.scoped.subscription.count({ where: { status: { in: ['ACTIVE', 'GRACE'] } } }),
+        this.prisma.scoped.subscription.count({
+          where: {
+            status: { in: ['ACTIVE', 'GRACE'] },
+            currentPeriodEnd: { lte: dansSeptJours },
+          },
+        }),
+        this.prisma.scoped.payment.count({ where: { status: PaymentStatus.PENDING } }),
+      ]);
+
     return {
       vouchersByStatus,
       revenue: { today: revenueToday, thisWeek: revenueThisWeek, thisMonth: revenueThisMonth },
@@ -68,6 +85,10 @@ export class DashboardService {
       recentPayments,
       recentCustomers,
       connectedClients: hotspotActiveUsers.length,
+      ticketsDisponibles,
+      abonnesActifs,
+      echeancesProches,
+      paiementsEnAttente,
     };
   }
 

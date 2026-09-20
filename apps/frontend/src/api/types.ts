@@ -96,4 +96,10 @@ export interface DashboardSummary {
   recentPayments: Payment[];
   recentCustomers: Customer[];
   connectedClients: number;
+  /** Tickets encore vendables : zero veut dire qu'on ne peut plus vendre. */
+  ticketsDisponibles: number;
+  abonnesActifs: number;
+  /** Abonnements arrivant a echeance sous sept jours : a relancer. */
+  echeancesProches: number;
+  paiementsEnAttente: number;
 }
