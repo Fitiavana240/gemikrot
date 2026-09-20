@@ -222,7 +222,7 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 |-----|-------------|--------|------------|------------|
 | ABO-1 | **Abonnement porté par User Manager**, échéance calendaire relue depuis le routeur qui fait autorité | ⭐⭐⭐ | 🟡 | ✅ |
 | ABO-2 | **Suspension et réactivation** sans perdre le compte ni son historique | ⭐⭐⭐ | 🟢 | ✅ |
-| ABO-3 | **Tolérance de 7 jours** après échéance avant suspension, comme demandé | ⭐⭐⭐ | 🟢 | 🟡 |
+| ABO-3 | **Tolérance de 7 jours** après échéance avant suspension, comme demandé. Le statut se dérive correctement des trois états ; la reprise refuse au-delà de la tolérance plutôt que de rouvrir un accès que la base dirait suspendu | ⭐⭐⭐ | 🟢 | ✅ |
 | ABO-4 | **Avertissement avant échéance** au client (SMS). Dépend de COM-1 | ⭐⭐⭐ | 🟡 | ⬜ |
 | ABO-5 | **Suspension automatique** au dépassement de la tolérance : aujourd'hui personne ne suspend tant qu'un humain ne le fait pas | ⭐⭐⭐ | 🟡 | ⬜ |
 | ABO-6 | **Renouvellement par paiement**, avec rétablissement immédiat et échéance repoussée | ⭐⭐⭐ | 🟡 | 🟡 |
@@ -312,7 +312,7 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 
 | Ref | Description | Impact | Complexité | Implémenté |
 |-----|-------------|--------|------------|------------|
-| SECU-1 | **Isolation testée entre exploitants** : lecture, écriture, suppression, création automatique, et refus hors contexte. 8 tests contre la vraie base | ⭐⭐⭐ | 🔴 | ✅ |
+| SECU-1 | **Isolation testée entre exploitants** : lecture, écriture, suppression, création automatique, et refus hors contexte. 8 tests contre la vraie base, plus 3 au niveau service sur l'import — le seul point d'entrée qui change d'exploitant en cours de route | ⭐⭐⭐ | 🔴 | ✅ |
 | SECU-2 | **Identifiants routeur chiffrés**, jamais renvoyés au navigateur ni journalisés (§RTR-2) | ⭐⭐⭐ | 🟡 | ✅ |
 | SECU-3 | **En-têtes de sécurité HTTP**, `trust proxy` correct derrière le portail captif | ⭐⭐ | 🟢 | ✅ |
 | SECU-4 | **Modèle de ticket confronté à une liste blanche** et refusé s'il contient autre chose que de la mise en forme ; rendu dans une iframe verrouillée où le navigateur interdit toute exécution | ⭐⭐⭐ | 🟡 | ✅ |
@@ -390,6 +390,15 @@ Facturer les exploitants, piloter plusieurs routeurs pour de bon, atteindre un r
 ---
 
 ## 16. Journal de livraison
+
+### 2026-09-20 (suite) — Les deux défauts trouvés à l'audit
+
+**Vérifié** : 97 tests backend (14 fichiers), `tsc` propre, et les deux chemins de l'import éprouvés contre le hAP réel — l'exploitant propriétaire importe (7 offres, 14 abonnements, 4 appareils, 635 tickets ignorés), un autre exploitant visant le même routeur reçoit « introuvable ».
+
+- **Fuite de cloisonnement à l'import (SECU-1)** — l'import est le seul point d'entrée qui change d'exploitant en cours de route : il se place sur celui du routeur importé, le SUPER_ADMIN qui le déclenche n'en ayant pas. Le routeur était résolu avec le client **brut**, si bien qu'un ADMIN connaissant l'identifiant d'un routeur d'un autre exploitant déclenchait un import dans les données de cet autre, et en recevait le détail. La résolution passe par le client cloisonné, qui traite les deux cas de lui-même. Un routeur d'un autre exploitant et un routeur inexistant rendent le même message.
+- **`SUSPENDED` jamais dérivé (ABO-3)** — les deux dernières branches renvoyaient `GRACE` : au-delà de la tolérance, un abonné impayé restait « toléré ». Corriger la branche ne suffisait pas : `resume` rouvre l'accès sur le routeur **avant** d'écrire le statut, si bien que dériver `SUSPENDED` aurait produit une base qui dit suspendu pendant que le routeur laisse passer. La reprise refuse donc au-delà de la tolérance, avant tout appel au routeur, et renvoie vers le renouvellement.
+
+Les deux tests de non-régression ont été **vérifiés rouges contre l'ancien code** avant d'être verts contre le nouveau. Les tests de cloisonnement existants ne pouvaient pas attraper le premier : ils éprouvent l'extension Prisma, pas les services qui choisissent de s'en passer.
 
 ### 2026-09-19 — Le routeur peut tomber, et être ailleurs
 
