@@ -105,3 +105,105 @@ export function Table({ head, children }: { head: string[]; children: ReactNode 
     </div>
   );
 }
+
+/**
+ * En-tête d'écran : titre, phrase d'explication, actions.
+ *
+ * La phrase n'est pas décorative. Un exploitant qui n'est pas informaticien
+ * arrive sur un écran sans savoir ce qu'il y risque — dire en une ligne ce
+ * que l'écran fait, et ce qu'il ne fait pas, évite la moitié des hésitations.
+ */
+export function PageHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <h1 className="text-lg font-semibold text-slate-900">{title}</h1>
+        {description && <p className="mt-1 max-w-2xl text-sm text-slate-600">{description}</p>}
+      </div>
+      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+/**
+ * Ce qu'on montre quand il n'y a rien.
+ *
+ * Un tableau vide laisse l'utilisateur se demander s'il a mal cherché ou si
+ * l'application est cassée. Dire « il n'y a rien, et voici pourquoi » est une
+ * information, pas un aveu.
+ */
+export function EmptyState({
+  title,
+  hint,
+  action,
+}: {
+  title: string;
+  hint?: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/50 px-6 py-10 text-center">
+      <p className="text-sm font-medium text-slate-700">{title}</p>
+      {hint && <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">{hint}</p>}
+      {action && <div className="mt-4 flex justify-center">{action}</div>}
+    </div>
+  );
+}
+
+/**
+ * Attente d'un tableau, esquissée à la forme du contenu à venir.
+ *
+ * Un gabarit plutôt qu'un tournoyeur : l'œil garde la mise en page et ne
+ * sursaute pas quand les données arrivent.
+ */
+export function TableSkeleton({ columns, rows = 5 }: { columns: number; rows?: number }) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div className="divide-y divide-slate-100">
+        {Array.from({ length: rows }).map((_, ligne) => (
+          <div key={ligne} className="flex gap-3 px-3 py-3">
+            {Array.from({ length: columns }).map((__, colonne) => (
+              <div
+                key={colonne}
+                className="h-4 flex-1 animate-pulse rounded bg-slate-100"
+                style={{ animationDelay: `${(ligne * columns + colonne) * 40}ms` }}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Une erreur, dite une fois et au même endroit sur tous les écrans. */
+export function ErrorNote({ children, onRetry }: { children: ReactNode; onRetry?: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+      <p className="text-sm text-red-700">{children}</p>
+      {onRetry && (
+        <Button variant="secondary" onClick={onRetry}>
+          Réessayer
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** Étiquette et valeur, pour les fiches de détail. */
+export function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
+      <dd className="mt-0.5 truncate text-sm text-slate-800">{children}</dd>
+    </div>
+  );
+}

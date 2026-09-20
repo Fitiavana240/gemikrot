@@ -9,6 +9,7 @@ import { SessionsPage } from './pages/SessionsPage';
 import { SubscriptionsPage } from './pages/SubscriptionsPage';
 import { DevicesPage } from './pages/DevicesPage';
 import { RoutersPage } from './pages/RoutersPage';
+import { AuditPage } from './pages/AuditPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { TenantsPage } from './pages/TenantsPage';
 import { UserManagerPage } from './pages/UserManagerPage';
@@ -48,6 +49,7 @@ export function App() {
             <Route path="/user-manager" element={<UserManagerPage />} />
             <Route path="/ticket-templates" element={<TicketTemplatesPage />} />
             <Route path="/ticket-print" element={<TicketPrintPage />} />
+            <Route path="/audit" element={<AuditPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/tenants" element={<TenantsPage />} />
             <Route path="/plans" element={<PlansPage />} />

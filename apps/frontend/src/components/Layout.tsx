@@ -23,6 +23,12 @@ const NAV: { to: string; label: string; end?: boolean }[] = [
   { to: '/settings', label: 'Paramètres' },
 ];
 
+/**
+ * Le journal dit qui a fait quoi : le lire n'appartient pas à qui vend. Le
+ * masquer dans la navigation évite d'offrir un bouton qui répondrait 403.
+ */
+const ADMIN_NAV: typeof NAV = [{ to: '/audit', label: 'Journal' }];
+
 /** Le SUPER_ADMIN pilote la plateforme, pas un réseau en particulier. */
 const SUPER_ADMIN_NAV: typeof NAV = [{ to: '/tenants', label: 'Exploitants' }];
 
@@ -97,7 +103,11 @@ export function Layout() {
           </div>
         </div>
         <nav className="space-y-1">
-          {[...NAV, ...(user?.role === 'SUPER_ADMIN' ? SUPER_ADMIN_NAV : [])].map((item) => (
+          {[
+            ...NAV,
+            ...(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' ? ADMIN_NAV : []),
+            ...(user?.role === 'SUPER_ADMIN' ? SUPER_ADMIN_NAV : []),
+          ].map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
