@@ -620,6 +620,24 @@ refuse l'écriture depuis ce poste, et il n'a pas été contourné.
   `409` sans toucher au routeur. Un onglet resté ouvert propose encore des réparations
   déjà faites ; les rejouer réécrirait un réglage que quelqu'un a pu changer exprès.
 
+**Deux erreurs trouvées par l'essai de l'exploitant sur le hAP, le même jour.** Toutes deux
+invisibles en test, et la seconde aurait envoyé le parc dans la mauvaise direction.
+
+- **`scheduled` est une phrase, pas un code.** RouterOS écrit `scheduled for disable`. Le
+  code comparait à `'disable'` : le constat ne se serait jamais levé, et
+  `annuler-desactivation` aurait déclaré le succès sans rien faire, sa vérification étant
+  « ce n'est plus égal à `disable` » — vrai dès le départ. Lecture sur le contenu
+  désormais, et valeur exploitable séparée de la phrase d'affichage.
+
+- **« Disponible » n'est pas « installé ».** La même lecture REST a rendu **3 paquets puis
+  19** sur le même routeur. La seconde population est celle des paquets présents dans
+  l'image mais jamais installés : version vide, `available` vrai — et `disabled` vrai lui
+  aussi, ce qui est le piège. Sur un routeur neuf `user-manager` est exactement dans cet
+  état, et la console aurait annoncé « installé mais désactivé » en demandant de
+  téléverser un `.npk`. C'est l'inverse du bon geste : le paquet est déjà là, il suffit de
+  l'activer et de redémarrer — sans rien libérer sur une mémoire interne pleine à 98 %.
+  Quatre états distingués au lieu de trois.
+
 - **Ce qui manque pour clore RTR-17** : une exécution réelle. `PATCH /rest/user-manager`
   et `POST /rest/system/package/{enable,unschedule}` sont écrits d'après la convention du
   reste du code (sélection par `.id`) et non d'après un relevé. Le parcours de vérification
