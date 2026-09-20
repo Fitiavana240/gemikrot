@@ -151,7 +151,9 @@ export class RouterRepairService {
 
     await this.journaliser(routerId, code, adminUserId, appliquée ? AuditResult.SUCCESS : AuditResult.FAILURE, {
       commande: réparation.commande,
-      appliquée,
+      // Sans accent : cette charge est relue par la console d'audit, donc
+      // elle passe sur le fil comme le reste.
+      appliquee: appliquée,
     });
 
     if (!appliquée) {

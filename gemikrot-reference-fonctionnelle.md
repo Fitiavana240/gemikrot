@@ -182,7 +182,7 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | RTR-14 | **PPPoE** en plus du HotSpot : comptes, profils, serveurs et bassins livrés, correspondances écrites contre un relevé réel (`scripts/probe-ppp-sonde.ts`). **Les sessions actives restent non vérifiées** : le parc n'a aucun PPPoE en service, les noms de champs de `/ppp/active` sont donc pris de la documentation seule — et le test le dit | ⭐⭐ | 🔴 | 🟡 |
 | RTR-15 | **Menus IP en lecture** : files simples (le débit réellement alloué, client par client), journal du routeur, interfaces avec leurs coupures de lien, services d'administration, DDNS, ARP, serveurs DHCP, **pare-feu filtrage et NAT dans leur ordre d'évaluation**, DNS et entrées statiques, table de routage. **Lecture seule, par décision** : la console montre, WinBox modifie | ⭐⭐ | 🟡 | ✅ |
 | RTR-16 | **Stockage et préparation de User Manager** : mémoire interne, clés USB et leur état de montage, paquets installés, occupation par support, et où vit la base User Manager. Rend un diagnostic ordonné par gravité, avec la commande exacte quand il en existe une — dont la réponse à « pourquoi l'onglet User Manager n'apparaît-il pas dans WinBox » | ⭐⭐⭐ | 🟡 | ✅ |
-| RTR-17 | **Réparations depuis la console**, sans WinBox : allumer le service, activer les profils, programmer l'activation du paquet, annuler une désactivation programmée. **Liste blanche nommée, pas un passe-plat de commandes** — une route exécutant une commande RouterOS arbitraire donnerait à tout ADMIN une exécution de code à distance sur chaque routeur du parc. Le serveur relit l'état après avoir écrit et ne déclare le succès que si le routeur a réellement changé. Redémarrage, déplacement de la base et effacement de fichiers restent affichés comme commandes à coller, jamais comme boutons. **Formes de requête non éprouvées sur le matériel** — voir le journal | ⭐⭐⭐ | 🟡 | 🟡 |
+| RTR-17 | **Réparations depuis la console**, sans WinBox : allumer le service, activer les profils, programmer l'activation du paquet, annuler une désactivation programmée. **Liste blanche nommée, pas un passe-plat de commandes** — une route exécutant une commande RouterOS arbitraire donnerait à tout ADMIN une exécution de code à distance sur chaque routeur du parc. Le serveur relit l'état après avoir écrit et ne déclare le succès que si le routeur a réellement changé. Redémarrage, déplacement de la base et effacement de fichiers restent affichés comme commandes à coller, jamais comme boutons. Éprouvé sur le hAP réel : constat levé, bouton cliqué, routeur réellement changé, audit écrit, 646 comptes intacts. Reste à éprouver `PATCH /rest/user-manager` | ⭐⭐⭐ | 🟡 | 🟡 |
 
 ---
 
@@ -638,10 +638,28 @@ invisibles en test, et la seconde aurait envoyé le parc dans la mauvaise direct
   l'activer et de redémarrer — sans rien libérer sur une mémoire interne pleine à 98 %.
   Quatre états distingués au lieu de trois.
 
-- **Ce qui manque pour clore RTR-17** : une exécution réelle. `PATCH /rest/user-manager`
-  et `POST /rest/system/package/{enable,unschedule}` sont écrits d'après la convention du
-  reste du code (sélection par `.id`) et non d'après un relevé. Le parcours de vérification
-  sans risque pour les clients est décrit dans la note de livraison.
+**Éprouvé sur le hAP réel le 2026-09-20**, de bout en bout et sans WinBox pour le geste :
+
+- L'exploitant a programmé la désactivation du paquet depuis WinBox. `/system/package` rend
+  alors `scheduled: "scheduled for disable"` — la phrase d'affichage **jusque dans l'API**,
+  confirmée par lecture directe. Le relevé est figé dans `router-storage.spec.ts`.
+- La console a levé le constat bloquant en tête de liste, avec son bouton.
+- Le clic a rendu « Annuler la désactivation programmée : fait. », et une lecture
+  indépendante du routeur confirme `scheduled` vide, service allumé, profils actifs.
+  **`POST /rest/system/package/unschedule` avec `.id` est donc la bonne forme.**
+- L'audit porte la ligne `REPAIR_USER_MANAGER` / `SUCCESS`, attribuée au compte qui a cliqué.
+- L'invariant du parc tient : **646 comptes HotSpot** avant et après.
+
+**Ce qui reste non éprouvé** : `PATCH /rest/user-manager` (les réparations « allumer le
+service » et « activer les profils »), faute d'un moyen de l'exercer sans toucher un
+réglage qui sert des clients. `POST /rest/system/package/enable` partage la forme exacte
+de `unschedule`, vérifiée. Si une forme est mauvaise, la console le dira — c'est
+précisément ce que la relecture d'état garantit — au lieu d'afficher un succès trompeur.
+
+- **Pour clore RTR-17** : éprouver `PATCH /rest/user-manager`. Le geste sans risque est de
+  poser `use-profiles=no` depuis WinBox, de cliquer sur le bouton, puis de constater le
+  retour à `yes` — quelques secondes pendant lesquelles User Manager authentifie toujours,
+  sans appliquer les limites de profil.
 
 ---
 
