@@ -85,6 +85,18 @@ async function main(): Promise<void> {
     }
   }
 
+  // Un relevé où tout a échoué n'est pas un relevé : écrit sur disque, il
+  // finirait par passer pour une vraie lecture du routeur. Mieux vaut ne rien
+  // produire et le dire.
+  const lues = ENDPOINTS.filter((endpoint) => Array.isArray(relevé[endpoint]));
+  if (lues.length === 0) {
+    console.error(
+      "\nAucune collection n'a pu être lue : rien n'est écrit. Vérifier que ce poste " +
+        'est autorisé sur le service www-ssl du routeur (/ip/service/print, champ address).',
+    );
+    process.exit(1);
+  }
+
   const dossier = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'routers', '__fixtures__');
   mkdirSync(dossier, { recursive: true });
   const chemin = join(dossier, `ppp-${new Date().toISOString().slice(0, 10)}.json`);
