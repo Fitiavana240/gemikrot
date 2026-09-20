@@ -160,6 +160,12 @@ export class RouterToolsController {
     return (await this.clients.forRouter(routerId)).getPortsEthernet();
   }
 
+  /** L'heure du routeur : toutes les échéances sont calculées contre elle. */
+  @Get('horloge')
+  async horloge(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getHorloge();
+  }
+
   /** Les certificats du routeur, dont celui qui sert l'API. */
   @Get('certificates')
   async certificates(@Param('routerId') routerId: string) {

@@ -310,6 +310,7 @@ export const routerToolsApi = {
     api.get<Automatisations>(`${base(routerId)}/automatisations`),
   ethernet: (routerId: string) => api.get<PortEthernet[]>(`${base(routerId)}/ethernet`),
   certificats: (routerId: string) => api.get<Certificat[]>(`${base(routerId)}/certificates`),
+  horloge: (routerId: string) => api.get<HorlogeRouteur>(`${base(routerId)}/horloge`),
   services: (routerId: string) => api.get<IpService[]>(`${base(routerId)}/services`),
   cloud: (routerId: string) => api.get<IpCloud>(`${base(routerId)}/cloud`),
   arp: (routerId: string) => api.get<ArpEntry[]>(`${base(routerId)}/arp`),
@@ -554,4 +555,23 @@ export interface Certificat {
   invalidBefore: string | null;
   invalidAfter: string | null;
   expiresInSeconds: number | null;
+}
+
+/**
+ * L'heure du routeur. Toutes les échéances de forfaits sont calculées contre
+ * elle — c'est `gmtOffset`, lu sur le routeur, qui sert aux conversions.
+ */
+export interface HorlogeRouteur {
+  date: string;
+  time: string;
+  timeZone: string;
+  gmtOffset: string;
+  dstActive: boolean;
+  ntpEnabled: boolean;
+  ntpStatus: string;
+  ntpServers: string[];
+  ntpSyncedServer: string | null;
+  ntpStratum: number | null;
+  ntpOffsetMs: number | null;
+  uptime: string;
 }

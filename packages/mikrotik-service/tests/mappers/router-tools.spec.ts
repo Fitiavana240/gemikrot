@@ -7,6 +7,7 @@ import {
   mapRouterScript,
   mapEthernetPort,
   mapCertificate,
+  mapHorlogeRouteur,
   mapRouterSchedule,
   mapSimpleQueue,
   splitPaire,
@@ -352,5 +353,55 @@ describe('mapCertificate', () => {
     // 521 semaines ≈ 10 ans.
     expect(restant).toBeGreaterThan(9 * 365 * 86_400);
     expect(mapCertificate(CERT).keySizeBits).toBe(2048);
+  });
+});
+
+/** Relevé exact des trois menus sur le hAP, horloge saine. */
+const CLOCK = {
+  date: '2026-09-21',
+  time: '01:29:12',
+  'dst-active': 'false',
+  'gmt-offset': '+03:00',
+  'time-zone-name': 'Africa/Nairobi',
+  'time-zone-autodetect': 'false',
+};
+
+const NTP = {
+  enabled: 'true',
+  mode: 'unicast',
+  servers: 'pool.ntp.org',
+  status: 'synchronized',
+  'synced-server': 'pool.ntp.org',
+  'synced-stratum': '1',
+  'system-offset': '1.687',
+};
+
+describe('mapHorlogeRouteur', () => {
+  it('rassemble les trois lectures', () => {
+    const h = mapHorlogeRouteur(CLOCK, NTP, { uptime: '1d5h59m31s' });
+    expect(h.gmtOffset).toBe('+03:00');
+    expect(h.ntpStatus).toBe('synchronized');
+    expect(h.ntpStratum).toBe(1);
+    expect(h.ntpOffsetMs).toBeCloseTo(1.687);
+    expect(h.uptime).toBe('1d5h59m31s');
+  });
+
+  it('rend encore l’heure quand le client NTP est illisible', () => {
+    // L'heure seule reste la donnée la plus utile : les conversions de dates
+    // du serveur en dépendent, et elles ne doivent pas tomber parce que la
+    // lecture annexe a échoué.
+    const h = mapHorlogeRouteur(CLOCK, {}, {});
+    expect(h.date).toBe('2026-09-21');
+    expect(h.gmtOffset).toBe('+03:00');
+    expect(h.ntpEnabled).toBe(false);
+    expect(h.ntpStratum).toBeNull();
+    expect(h.ntpServers).toEqual([]);
+  });
+
+  it('garde un écart de zéro plutôt que de le confondre avec « inconnu »', () => {
+    // Zéro milliseconde de dérive est une excellente nouvelle ; la rendre
+    // `null` l'afficherait comme une mesure manquante.
+    expect(mapHorlogeRouteur(CLOCK, { ...NTP, 'system-offset': '0' }, {}).ntpOffsetMs).toBe(0);
+    expect(mapHorlogeRouteur(CLOCK, { ...NTP, 'system-offset': '' }, {}).ntpOffsetMs).toBeNull();
   });
 });

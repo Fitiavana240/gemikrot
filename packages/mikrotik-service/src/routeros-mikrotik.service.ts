@@ -1314,6 +1314,24 @@ export class RouterOSMikrotikService implements IMikrotikService {
     return ports.map((p) => ToolsMapper.mapEthernetPort(p, parNom.get(p?.name)));
   }
 
+  /**
+   * L'heure du routeur et ce qui la tient à jour.
+   *
+   * Trois lectures en une : l'heure sans le client NTP ne dit pas si elle est
+   * fiable, et le client NTP sans l'heure ne dit pas quelle heure il tient.
+   * La durée de marche complète le tableau — cette carte n'a pas d'horloge
+   * matérielle (`/system/rtc` n'existe pas dessus), donc chaque redémarrage
+   * repart d'une heure restaurée en attendant le premier recalage.
+   */
+  async getHorloge() {
+    const [clock, ntp, resource] = await Promise.all([
+      this.client.get<any>('/system/clock'),
+      this.client.get<any>('/system/ntp/client').catch(() => ({})),
+      this.client.get<any>('/system/resource').catch(() => ({})),
+    ]);
+    return ToolsMapper.mapHorlogeRouteur(clock, ntp, resource);
+  }
+
   /** Les certificats du routeur, dont celui qui sert l'API. */
   async getCertificates() {
     const raw = await this.client.get<any[]>('/certificate').catch(() => []);

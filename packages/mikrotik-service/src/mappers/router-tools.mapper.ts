@@ -25,6 +25,7 @@ import {
   RouterScheduleDto,
   EthernetPortDto,
   CertificateDto,
+  HorlogeRouteurDto,
 } from '../dto/router-tools.dto';
 
 /** RouterOS rend ses booléens en chaînes. */
@@ -504,5 +505,26 @@ export function mapCertificate(raw: any): CertificateDto {
     invalidBefore: raw?.['invalid-before'] || null,
     invalidAfter: après,
     expiresInSeconds: Number.isFinite(restant as number) ? (restant as number) : null,
+  };
+}
+
+export function mapHorlogeRouteur(
+  clock: any,
+  ntp: any,
+  resource: any,
+): HorlogeRouteurDto {
+  return {
+    date: clock?.date ?? '',
+    time: clock?.time ?? '',
+    timeZone: clock?.['time-zone-name'] ?? '',
+    gmtOffset: clock?.['gmt-offset'] ?? '',
+    dstActive: flag(clock?.['dst-active']),
+    ntpEnabled: flag(ntp?.enabled),
+    ntpStatus: ntp?.status ?? 'unknown',
+    ntpServers: listePolitique(ntp?.servers),
+    ntpSyncedServer: ntp?.['synced-server'] || null,
+    ntpStratum: nombreOuNull(ntp?.['synced-stratum']),
+    ntpOffsetMs: nombreOuNull(ntp?.['system-offset']),
+    uptime: resource?.uptime ?? '',
   };
 }

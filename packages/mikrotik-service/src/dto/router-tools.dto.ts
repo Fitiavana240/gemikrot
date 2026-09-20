@@ -503,3 +503,36 @@ export interface CertificateDto {
   /** Secondes restantes, négatif si déjà expiré. `null` si illisible. */
   expiresInSeconds: number | null;
 }
+
+/**
+ * L'heure du routeur, et ce qui la tient à jour.
+ *
+ * Pièce load-bearing de ce produit : les échéances de forfaits, les dates de
+ * validité User Manager et les dates portées sur les planches de tickets sont
+ * toutes calculées contre cette horloge. Le code la lit déjà partout
+ * (`parseRouterTime` prend son `gmtOffset` du routeur, jamais du serveur) —
+ * mais rien ne la montrait à l'exploitant.
+ */
+export interface HorlogeRouteurDto {
+  /** `2026-09-21`, dans le fuseau du routeur. */
+  date: string;
+  /** `01:29:12`, dans le fuseau du routeur. */
+  time: string;
+  /** `Africa/Nairobi`, `Indian/Antananarivo`… */
+  timeZone: string;
+  /** `+03:00`. C'est lui qui sert aux conversions, pas le nom du fuseau. */
+  gmtOffset: string;
+  dstActive: boolean;
+  ntpEnabled: boolean;
+  /** `synchronized` quand le routeur a bien recalé son heure. */
+  ntpStatus: string;
+  ntpServers: string[];
+  /** Le serveur qui a réellement répondu, souvent plus parlant que la liste. */
+  ntpSyncedServer: string | null;
+  /** Plus il est bas, plus la source est proche d'une horloge de référence. */
+  ntpStratum: number | null;
+  /** Écart rattrapé au dernier recalage, en millisecondes. */
+  ntpOffsetMs: number | null;
+  /** Durée de marche, pour situer le dernier redémarrage. */
+  uptime: string;
+}

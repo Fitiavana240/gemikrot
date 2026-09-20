@@ -83,6 +83,7 @@ import {
   RouterScheduleDto,
   EthernetPortDto,
   CertificateDto,
+  HorlogeRouteurDto,
   SimpleQueueDto,
   WirelessInterfaceDto,
   WirelessClientDto,
@@ -290,6 +291,9 @@ export interface IMikrotikService {
 
   /** État physique des ports cuivre, duplex négocié compris. */
   getPortsEthernet(): Promise<EthernetPortDto[]>;
+
+  /** L'heure du routeur, son fuseau, et l'état du recalage NTP. */
+  getHorloge(): Promise<HorlogeRouteurDto>;
 
   /** Les certificats du routeur, dont celui qui sert l'API. */
   getCertificates(): Promise<CertificateDto[]>;
