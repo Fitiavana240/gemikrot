@@ -44,7 +44,7 @@ export interface GenerationResultat {
    * des comptes, sur la clé USB du routeur. Sans ce chemin à l'écran, personne
    * ne saurait qu'il existe.
    */
-  planches?: { chemin: string; tickets: number; octets: number }[];
+  planches?: { chemin: string; tickets: number; octets: number; pdfBase64: string }[];
   planchesEnEchec?: { chemin: string; motif: string }[];
   cible: CibleGeneration;
   profileName: string;

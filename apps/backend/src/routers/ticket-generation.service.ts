@@ -45,13 +45,18 @@ export interface GenerationResultat {
    */
   plafondCumule?: number | null;
   /**
-   * Les planches A4 déposées sur le routeur, avec leur chemin.
+   * Les planches A4 déposées sur le routeur, avec leur chemin **et leurs
+   * octets**.
    *
-   * Le PDF ne transite pas par cette application : il est écrit là où vit la
-   * base des comptes, sur la clé USB du routeur. L'exploitant le récupère
-   * depuis WinBox, à côté des comptes qu'il vient de créer.
+   * La planche est rangée là où vit la base des comptes, sur la clé USB du
+   * routeur : c'est elle qui fait foi. Mais elle est aussi rendue ici, et ce
+   * n'est pas une commodité — c'est une nécessité mesurée. Le routeur ne rend
+   * pas le contenu d'un fichier de plus de 4 096 octets, et il masque les
+   * mots de passe : passé cette réponse, la planche n'est plus ni relisible
+   * ni reconstructible. Ne pas la joindre obligerait à ouvrir WinBox pour
+   * imprimer ce qu'on vient de créer.
    */
-  planches?: { chemin: string; tickets: number; octets: number }[];
+  planches?: { chemin: string; tickets: number; octets: number; pdfBase64: string }[];
   /** Planches qui n'ont pas pu être écrites, sans que les tickets en pâtissent. */
   planchesEnEchec?: { chemin: string; motif: string }[];
 }

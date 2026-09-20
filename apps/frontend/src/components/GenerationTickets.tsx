@@ -72,20 +72,36 @@ export function GenerationTickets({
             permettre de s'apercevoir tout de suite qu'un profil n'en porte
             pas — 228 tickets invendus étaient dans ce cas sur ce parc. */}
         {/* La planche compte autant que les codes : c'est elle qu'on imprime.
-            Elle vit sur le routeur, pas ici — il faut donc dire où. */}
+            Elle est rangée sur le routeur, où vit la base des comptes — et
+            elle est téléchargeable ICI, maintenant, parce que c'est le seul
+            moment où elle l'est : le routeur ne rend pas le contenu d'un
+            fichier de plus de 4 096 octets, et il masque les mots de passe.
+            Passé cet écran, il faut WinBox. */}
         {(resultat.planches?.length ?? 0) > 0 && (
           <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900">
             <strong>
               {resultat.planches!.length} planche(s) A4 écrite(s) sur le routeur
             </strong>{' '}
-            — à récupérer dans WinBox, onglet Files :
-            <ul className="mt-1 font-mono text-xs">
+            — et prêtes à imprimer :
+            <ul className="mt-1.5 space-y-1">
               {resultat.planches!.map((p) => (
-                <li key={p.chemin}>
-                  {p.chemin} <span className="text-emerald-700">({p.tickets} tickets)</span>
+                <li key={p.chemin} className="flex flex-wrap items-center gap-x-2">
+                  <a
+                    href={`data:application/pdf;base64,${p.pdfBase64}`}
+                    download={p.chemin.split('/').pop()}
+                    className="rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                  >
+                    Télécharger
+                  </a>
+                  <span className="font-mono text-xs">{p.chemin}</span>
+                  <span className="text-xs text-emerald-700">({p.tickets} tickets)</span>
                 </li>
               ))}
             </ul>
+            <p className="mt-2 text-xs text-emerald-800">
+              Téléchargez-les maintenant : une fois cet écran quitté, la planche ne se
+              récupère plus que depuis WinBox, onglet <em>Files</em>.
+            </p>
           </div>
         )}
         {(resultat.planchesEnEchec?.length ?? 0) > 0 && (

@@ -30,6 +30,27 @@ import { deflateSync } from 'node:zlib';
 export const LIMITE_CONTENU_ROUTEUR = 61_440;
 
 /**
+ * **4 096 octets : au-delà, le routeur ne rend plus le contenu.**
+ *
+ * Sondé sur le hAP en 7.24.4, par dichotomie : `GET /rest/file?name=…` rend
+ * `contents` en entier jusqu'à 4 095 octets, et une **chaîne vide** à partir
+ * de 4 096 — sans erreur, sans avertissement, avec un `size` pourtant juste.
+ * Le type ne change rien : un PDF de 1 000 octets revient, un `.txt` de 4 096
+ * ne revient pas.
+ *
+ * Conséquence, et c'est elle qui compte : **une planche de tickets écrite sur
+ * le routeur ne peut pas en être relue**. Elle pèse plusieurs kilo-octets.
+ * Qui construirait un bouton « télécharger la planche » sur cette API
+ * obtiendrait un fichier vide, et s'en apercevrait à l'impression.
+ *
+ * Ajoutez-y que RouterOS masque les mots de passe (`*****` sur
+ * `/ip/hotspot/user`) : une planche n'est pas non plus reconstructible depuis
+ * les comptes. Elle n'existe donc récupérable qu'**au moment de la
+ * génération**, ce que le service de génération doit garantir.
+ */
+export const LIMITE_LECTURE_ROUTEUR = 4_096;
+
+/**
  * ASCII85, tel que le PDF l'attend : cinq caractères imprimables pour quatre
  * octets, `z` pour un groupe nul, et `~>` en terminateur.
  */

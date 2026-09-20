@@ -8,6 +8,16 @@ export interface PlancheÉcrite {
   chemin: string;
   tickets: number;
   octets: number;
+  /**
+   * Le PDF lui-même, en base64.
+   *
+   * Porté dans la réponse parce que c'est **le seul moment où il est
+   * récupérable** : le routeur ne rend pas le contenu d'un fichier de plus de
+   * 4 096 octets (voir `LIMITE_LECTURE_ROUTEUR`), et il masque les mots de
+   * passe, donc la planche n'est ni relisible ni reconstructible ensuite.
+   * Sans cela, imprimer supposerait d'ouvrir WinBox.
+   */
+  pdfBase64: string;
 }
 
 export interface RapportPlanches {
@@ -62,7 +72,16 @@ export class PlancheRouteurService {
 
       try {
         await mikrotik.writeRouterFile(chemin, contenu);
-        rapport.planches.push({ chemin, tickets: groupe.length, octets: contenu.length });
+        rapport.planches.push({
+          chemin,
+          tickets: groupe.length,
+          octets: contenu.length,
+          // `latin1` et non `utf8` : le PDF est une suite d'octets, et
+          // `construirePdf` n'émet que de l'ASCII. Passer par utf8 rendrait
+          // les octets ≥ 128 sur deux octets et corromprait le fichier si le
+          // générateur venait à en produire.
+          pdfBase64: Buffer.from(contenu, 'latin1').toString('base64'),
+        });
       } catch (error) {
         // Une planche en échec n'annule pas les autres : les tickets existent
         // déjà sur le routeur, et sept feuilles moins une valent mieux que
