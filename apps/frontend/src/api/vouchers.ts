@@ -35,6 +35,14 @@ export interface ReconcileReport {
   expired: number;
   activated: number;
   accessCut: number;
+  /**
+   * Codes des tickets qu'aucun compte ne porte sur le routeur.
+   *
+   * Un ticket « vendu » dans cette liste veut dire qu'un client a payé pour
+   * un code qui n'ouvre rien. La réconciliation les rencontrait et passait au
+   * suivant sans un mot.
+   */
+  sansCompte: string[];
 }
 
 

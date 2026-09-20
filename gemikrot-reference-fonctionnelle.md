@@ -867,6 +867,37 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — Un ticket « vendu » que rien ne porte
+
+Confronté la base au routeur, ticket par ticket et abonnement par abonnement. **Aucun désaccord
+sur les suspensions** : les quatorze abonnements et les huit tickets réels concordent avec ce
+que le routeur applique. C'est une bonne nouvelle qui mérite d'être écrite.
+
+Mais **cinq tickets n'ont aucun compte derrière eux**, dont un marqué `SOLD`. Si c'était une
+vraie vente, le client a payé et son code n'ouvre rien — pendant que la console affiche
+« vendu » comme si tout allait bien.
+
+La réconciliation aurait dû les trouver. Elle avait deux trous :
+
+```ts
+where: { umUsername: { not: null }, ... }   // les non-provisionnés exclus d'emblée
+...
+if (mine.length === 0) continue;            // le compte absent, passé sous silence
+```
+
+Le premier filtre excluait précisément les tickets que ce contrôle devait trouver : un ticket
+jamais posé sur le routeur n'a pas d'`umUsername`. Le second rencontrait un compte disparu et
+passait au suivant sans un mot.
+
+Trois cas distingués désormais, parce qu'ils ne se cherchent pas au même endroit : un ticket
+**User Manager** par ses attributions, un ticket **HotSpot** par la table du HotSpot — ne lire
+que les attributions revenait à le déclarer absent — et un ticket **sans cible**, qui n'a jamais
+été posé nulle part. Un ticket annulé sans compte reste normal et n'est pas signalé.
+
+**Éprouvé sur le routeur** : le bouton « Actualiser depuis le routeur » rend maintenant
+« 5 ticket(s) sans compte » avec les codes, dont le `SOLD`. Le sixième, annulé, est
+correctement ignoré. Cinq tests neufs sur un service qui touche à l'argent et n'en avait aucun.
+
 ### 2026-09-20 — Une offre vendable dont le profil n'existe plus
 
 Confronté les huit offres de l'application aux profils du routeur. Les durées concordent

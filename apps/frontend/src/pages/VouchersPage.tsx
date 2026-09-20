@@ -72,6 +72,7 @@ export function VouchersPage() {
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
   const [notice, setNotice] = useState<string | null>(null);
+  const [sansCompte, setSansCompte] = useState<string[]>([]);
 
   const reconcile = useMutation({
     mutationFn: vouchersApi.reconcile,
@@ -80,9 +81,13 @@ export function VouchersPage() {
         `${report.examined} ticket(s) relus : ${report.expired} expiré(s), ${report.activated} passé(s) en cours` +
           (report.accessCut ? `, ${report.accessCut} accès coupé(s)` : ''),
       );
+      setSansCompte(report.sansCompte ?? []);
       queryClient.invalidateQueries({ queryKey: ['vouchers'] });
     },
-    onError: (err) => setNotice(err instanceof ApiError ? err.message : 'Erreur inconnue'),
+    onError: (err) => {
+      setSansCompte([]);
+      setNotice(err instanceof ApiError ? err.message : 'Erreur inconnue');
+    },
   });
 
   return (
@@ -106,6 +111,19 @@ export function VouchersPage() {
       {notice && (
         <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-800">
           {notice}
+        </div>
+      )}
+
+      {/* Un ticket que la base croit vendable sans qu'aucun compte ne le porte
+          est le pire résultat possible : le client a payé, son code n'ouvre
+          rien, et la liste affiche « vendu ». Le rouge est justifié — il y a
+          quelque chose à faire, et vite. */}
+      {sansCompte.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <strong>{sansCompte.length} ticket(s) sans compte sur le routeur.</strong> Ces codes
+          n'ouvrent rien : le compte n'a jamais été créé, ou il a été supprimé depuis. Si l'un
+          d'eux est marqué vendu, le client a payé pour rien.
+          <p className="mt-1.5 font-mono text-xs">{sansCompte.join(', ')}</p>
         </div>
       )}
 

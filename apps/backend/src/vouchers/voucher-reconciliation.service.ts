@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { VoucherStatus } from '@prisma/client';
+import { VoucherStatus, VoucherTarget } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 import { ROUTER_OPERATIONS, RouterOperationQueue } from '../routers/router-operation.service.js';
@@ -14,6 +14,16 @@ export interface ReconcileVouchersReport {
   accessCut: number;
   /** Coupures mises en file faute de routeur joignable. */
   deferred: number;
+  /**
+   * Tickets que la base croit vendables alors qu'**aucun compte ne les porte
+   * sur le routeur**.
+   *
+   * C'est le pire résultat commercial possible : le client a payé, son code
+   * n'ouvre rien, et la console affiche « vendu » comme si tout allait bien.
+   * La réconciliation les rencontrait et passait au suivant sans un mot ;
+   * ceux qui n'ont jamais été provisionnés n'étaient même pas candidats.
+   */
+  sansCompte: string[];
 }
 
 /**
@@ -48,24 +58,38 @@ export class VoucherReconciliationService {
       ? await this.clients.forRouter(routerId)
       : await this.clients.forDefaultRouter();
 
+    // Le filtre excluait les tickets sans `umUsername` — or c'est le cas d'un
+    // ticket HotSpot, dont le compte porte le code, **et** celui d'un ticket
+    // jamais provisionné. Les seconds étaient donc invisibles à ce contrôle,
+    // qui est justement celui qui devait les trouver.
     const candidates = await this.prisma.scopedStrict.voucher.findMany({
       where: {
-        umUsername: { not: null },
         status: { in: [VoucherStatus.CREATED, VoucherStatus.SOLD, VoucherStatus.ACTIVE] },
       },
-      select: { id: true, code: true, umUsername: true, status: true, expiresAt: true },
+      select: {
+        id: true,
+        code: true,
+        umUsername: true,
+        target: true,
+        status: true,
+        expiresAt: true,
+      },
     });
 
     if (candidates.length === 0) {
-      return { examined: 0, expired: 0, activated: 0, accessCut: 0, deferred: 0 };
+      return { examined: 0, expired: 0, activated: 0, accessCut: 0, deferred: 0, sansCompte: [] };
     }
 
     // Une seule lecture de la collection pour tout le lot : la filtrer par
     // compte ferait un appel par ticket.
-    const [assignments, clock] = await Promise.all([
+    const [assignments, clock, comptesHotspot] = await Promise.all([
       mikrotik.getUserManagerUserProfiles(),
       mikrotik.getClock(),
+      // Un ticket HotSpot n'a pas d'attribution User Manager : son compte est
+      // dans l'autre table, et ne pas la lire revenait à le déclarer absent.
+      mikrotik.getHotspotUsers(),
     ]);
+    const nomsHotspot = new Set(comptesHotspot.map((u) => u.username));
 
     const byUser = new Map<string, typeof assignments>();
     for (const assignment of assignments) {
@@ -81,11 +105,31 @@ export class VoucherReconciliationService {
       activated: 0,
       accessCut: 0,
       deferred: 0,
+      sansCompte: [],
     };
 
     for (const voucher of candidates) {
-      const mine = byUser.get(voucher.umUsername!) ?? [];
-      if (mine.length === 0) continue;
+      // Ticket HotSpot : rien à recopier, son profil ne porte pas d'échéance.
+      // Seule son existence se vérifie — et c'est déjà beaucoup.
+      if (voucher.target === VoucherTarget.HOTSPOT) {
+        if (!nomsHotspot.has(voucher.code)) report.sansCompte.push(voucher.code);
+        continue;
+      }
+
+      // Ni compte User Manager ni cible : ce ticket n'a jamais été posé sur
+      // le routeur. Le dire, plutôt que de l'ignorer comme avant.
+      if (!voucher.umUsername) {
+        if (!nomsHotspot.has(voucher.code)) report.sansCompte.push(voucher.code);
+        continue;
+      }
+
+      const mine = byUser.get(voucher.umUsername) ?? [];
+      if (mine.length === 0) {
+        // Le compte a disparu du routeur, ou n'y a jamais été posé. Passer au
+        // suivant sans rien dire laissait un ticket « vendu » qui n'ouvre rien.
+        report.sansCompte.push(voucher.code);
+        continue;
+      }
 
       // Un rachat ajoute une attribution : l'échéance qui compte est la plus
       // lointaine, sinon un ticket renouvelé passerait pour expiré.
@@ -144,6 +188,11 @@ export class VoucherReconciliationService {
     if (report.expired || report.activated) {
       this.logger.log(
         `Tickets réconciliés : ${report.examined} examinés, ${report.expired} expirés, ${report.activated} activés`,
+      );
+    }
+    if (report.sansCompte.length) {
+      this.logger.warn(
+        `${report.sansCompte.length} ticket(s) sans compte sur le routeur : ${report.sansCompte.join(', ')}`,
       );
     }
     return report;
