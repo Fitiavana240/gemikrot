@@ -126,6 +126,8 @@ Deux défauts que seule cette répétition pouvait révéler, tous deux corrigé
 
 Relevé au passage : le champ de `/ip/service` s'appelle `available-from`, `address=` n'en étant qu'un alias déprécié.
 
+**Le symptôme à savoir lire** : côté routeur, `tx` qui grimpe, `rx` à zéro et aucune poignée de main signifient que le routeur appelle une adresse où personne ne répond — mauvais point de terminaison, port fermé, ou serveur déplacé. Ce n'est ni une affaire de clés ni de pare-feu du routeur. Éprouvé à la dure pendant la répétition : le bail DHCP du poste avait tourné entre la génération du script et son exécution, et le pair pointait sur une adresse que la machine ne portait plus. La console devra distinguer ce cas de « tunnel monté mais API muette », dont le remède n'a rien à voir.
+
 **Ce qui reste sur RTR-13** : le tunnel n'a jamais été monté — aucun WireGuard n'écoutait côté serveur, c'était assumé. Et le `/tool/fetch` n'a pas atteint l'application, le pare-feu Windows bloquant l'entrant ; RouterOS avait bien accepté la commande et tenté la connexion, l'échec est réseau et non syntaxique. En production le pare-feu concerné est celui du VPS.
 
 **Ce qui reste** : les sessions actives (`/ppp/active`) ne se relèvent qu'avec un abonné PPPoE réellement connecté. La logique de leur correspondance est testée, leurs **noms de champs** ne le sont pas, et c'est écrit dans le test. À confirmer au premier abonné.
