@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatDuration } from '../api/user-manager';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
@@ -65,6 +66,24 @@ export function GenerationTickets({
   if (resultat) {
     return (
       <Card title={`${resultat.codes.length} ticket(s) créé(s) — ${profileName}`}>
+        {/* Le plafond cumulé est ce qui borne réellement un ticket HotSpot :
+            le `session-timeout` du profil repart à zéro à chaque reconnexion,
+            et le cookie rend cette reconnexion automatique. Le dire ici, c'est
+            permettre de s'apercevoir tout de suite qu'un profil n'en porte
+            pas — 228 tickets invendus étaient dans ce cas sur ce parc. */}
+        {resultat.cible === 'hotspot' &&
+          (resultat.plafondCumule ? (
+            <p className="mb-3 text-sm text-slate-600">
+              Chaque ticket est borné à <strong>{formatDuration(resultat.plafondCumule)}</strong>{' '}
+              de temps cumulé, repris de la durée du profil.
+            </p>
+          ) : (
+            <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+              Le profil « {profileName} » ne porte <strong>aucune durée</strong> : ces tickets
+              partent sans plafond de temps cumulé. Le seul garde-fou sera la durée de session du
+              profil, qui <strong>repart à zéro à chaque reconnexion</strong>.
+            </p>
+          ))}
         {resultat.echecs.length > 0 && (
           <div className="mb-3">
             <ErrorNote>

@@ -14,9 +14,15 @@ const ROUTEUR = 'routeur-1';
  */
 class RouteurDeLabo {
   profilsUm = ['TEST-1H', '1Mois-15000Ar'];
-  profilsHotspot = ['2Heure-500Ar'];
+  /** Le profil porte sa durée, comme sur le vrai routeur. */
+  profilsHotspot = [
+    { name: '2Heure-500Ar', sessionTimeoutSeconds: 7200 },
+    { name: 'Admin', sessionTimeoutSeconds: null },
+  ];
   comptesUm: string[] = [];
   comptesHotspot: string[] = [];
+  /** Ce qui a été écrit sur chaque compte, pour éprouver le plafond. */
+  creationsHotspot: { username: string; limitUptimeSeconds?: number | null }[] = [];
   attributions: { username: string; profileName: string }[] = [];
   /** Les codes dont l'attribution (ou la création) doit échouer. */
   échouerSur = new Set<string>();
@@ -25,7 +31,7 @@ class RouteurDeLabo {
     return this.profilsUm.map((name) => ({ name }));
   }
   async getHotspotProfiles() {
-    return this.profilsHotspot.map((name) => ({ name }));
+    return this.profilsHotspot;
   }
   async createUserManagerUsers(inputs: { username: string }[]) {
     this.comptesUm.push(...inputs.map((i) => i.username));
@@ -36,9 +42,10 @@ class RouteurDeLabo {
     this.attributions.push(input);
     return {};
   }
-  async createHotspotUser(input: { username: string }) {
+  async createHotspotUser(input: { username: string; limitUptimeSeconds?: number | null }) {
     if (this.échouerSur.has(input.username)) throw new Error('compte déjà existant');
     this.comptesHotspot.push(input.username);
+    this.creationsHotspot.push(input);
     return {};
   }
 }
@@ -193,5 +200,41 @@ describe('TicketGenerationService', () => {
         }),
       }),
     );
+  });
+
+  /**
+   * Le défaut le plus cher trouvé sur ce parc, et il ne se voyait nulle part.
+   *
+   * Relevé sur le routeur : **228 tickets « 2 heures » invendus n'avaient
+   * aucun plafond cumulé**, tous générés par ce chemin ; les 100 déjà vendus,
+   * passés par l'écran Tickets, le portaient. Sans plafond, le
+   * `session-timeout` du profil est le seul garde-fou — et il repart à zéro à
+   * chaque reconnexion, que le `mac-cookie` rend automatique.
+   */
+  it('pose le plafond de temps cumulé sur les comptes HotSpot créés', async () => {
+    const résultat = await service.generer(ROUTEUR, {
+      cible: 'hotspot',
+      profileName: '2Heure-500Ar',
+      quantite: 3,
+    });
+
+    expect(résultat.plafondCumule).toBe(7200);
+    expect(mikrotik.creationsHotspot).toHaveLength(3);
+    for (const création of mikrotik.creationsHotspot) {
+      expect(création.limitUptimeSeconds, création.username).toBe(7200);
+    }
+  });
+
+  it("ne devine pas de plafond quand le profil n'en porte aucun", async () => {
+    // Inventer une durée ici couperait un accès que l'exploitant voulait
+    // sans limite. L'absence est rendue telle quelle, pour que l'écran la dise.
+    const résultat = await service.generer(ROUTEUR, {
+      cible: 'hotspot',
+      profileName: 'Admin',
+      quantite: 1,
+    });
+
+    expect(résultat.plafondCumule).toBeNull();
+    expect(mikrotik.creationsHotspot[0].limitUptimeSeconds).toBeUndefined();
   });
 });

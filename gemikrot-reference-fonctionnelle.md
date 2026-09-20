@@ -867,6 +867,51 @@ création qui souffraient du même mal : « Validité (heures) » d'un profil Us
 **Éprouvé à l'écran** : `TEST-1H` s'ouvre sur « 15 minutes », `1Mois-15000Ar` sur « 30 jours »,
 le compte `H828018` sur « 2 heures » — chacun à son échelle. Rien ne déborde à 375 px.
 
+### 2026-09-20 — 228 tickets dans le tiroir, sans plafond
+
+Parti des MAC aléatoires, arrivé ailleurs. La mesure intermédiaire : **28 des 59 cookies
+portent une MAC aléatoire**, et sept comptes en cumulent deux ou trois. En cherchant ce que
+cela coûte au client, j'ai relu les profils du routeur — et c'est là qu'était le vrai défaut.
+
+Un ticket HotSpot est borné par deux choses qui n'ont rien à voir :
+
+- le **`session-timeout`** du profil, qui **repart à zéro à chaque reconnexion** ;
+- le **`limit-uptime`** du compte, qui cumule.
+
+Avec `mac-cookie`, la reconnexion est automatique. Sans `limit-uptime`, un ticket de deux heures
+sert donc deux heures **par session**, sans fin.
+
+Relevé sur le parc :
+
+```
+2Heure-500Ar    328 comptes    228 sans plafond    ← tous à compteur zéro : invendus
+4Heure-1000Ar   300 comptes      0 sans plafond
+```
+
+Les 100 comptes « 2 heures » déjà utilisés portent tous `limit-uptime: 7200`. Les 228 autres,
+aucun. **Deux chemins créaient des tickets HotSpot, et un seul posait le plafond** :
+`provisionOnHotspot`, dans l'écran Tickets, le pose — avec un commentaire qui explique
+pourquoi ; `genererHotspot`, la génération par lot, ne le posait pas. Les 228 sont des tickets
+invendus, en attente dans le tiroir : ils sous-factureront à la vente.
+
+La durée est désormais **reprise du profil** — ce que l'exploitant a écrit lui-même en créant
+« 2Heure-500Ar » — et non inventée. Quand le profil n'en porte aucune, on ne devine pas : le
+résultat le dit, et l'écran de génération affiche un avertissement.
+
+Le correctif ne vaut que pour les prochains. Pour ceux déjà créés, l'écran Comptes montre
+maintenant le détail, **par profil et non en un seul nombre** — « 242 » recouvrait des cas de
+poids très différents :
+
+```
+228 × 2Heure-500Ar            plafond à poser : 2 h
+ 12 × 1Mois-15000Ar           plafond à poser : 30 j
+  1 × Ticket 25000Ar-2App.    plafond à poser : 30 j
+  1 × 1MoisPremium-50000Ar    plafond à poser : 30 j
+```
+
+**Le bouton n'a pas été actionné.** 242 écritures sur un routeur en production ne se décident
+pas à la place de l'exploitant ; la capacité est là, le choix lui revient. 646 comptes intacts.
+
 ### 2026-09-20 — Huit cookies que personne ne pouvait voir
 
 Une mesure, pas une intuition : **59 cookies pour 10 sessions**. Quarante-neuf reconnexions

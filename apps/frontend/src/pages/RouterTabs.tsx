@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
 import { phraseCoupure } from '../api/coupure';
+import { formatDuration } from '../api/user-manager';
 import { ListeDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { GenerationTickets } from '../components/GenerationTickets';
@@ -188,6 +189,11 @@ export function HotspotUsersTab() {
     queryKey: ['hotspot-users', currentId],
     queryFn: () => hotspotTabsApi.users(currentId),
   });
+  // Les profils portent la durée vendue : c'est à eux qu'on compare.
+  const profilsDuRouteur = useQuery({
+    queryKey: ['hotspot-profiles', currentId],
+    queryFn: () => hotspotTabsApi.profiles(currentId),
+  });
   const { terme, setTerme, filtrés } = useFiltre(requête.data, (u) => [
     u.username,
     u.profile,
@@ -211,6 +217,67 @@ export function HotspotUsersTab() {
    * coquetterie : c'est ce qui permet de vérifier que le client est hors
    * ligne, plutôt que de le supposer.
    */
+  /**
+   * Les comptes vendus sous une durée, mais sans plafond de temps cumulé.
+   *
+   * Le `session-timeout` du profil **repart à zéro à chaque reconnexion**, et
+   * le `mac-cookie` rend cette reconnexion automatique : seul `limit-uptime`
+   * borne vraiment un ticket. Relevé sur ce parc : 228 tickets « 2 heures »
+   * invendus n'en portaient aucun. Le correctif de la génération ne vaut que
+   * pour les suivants — ceux-là sont déjà dans le tiroir.
+   */
+  const duréeDuProfil = new Map(
+    (profilsDuRouteur.data ?? []).map((p) => [p.name, p.sessionTimeoutSeconds]),
+  );
+  const sansPlafond = (requête.data ?? []).filter(
+    (u) => u.limitUptimeSeconds === null && (duréeDuProfil.get(u.profile) ?? null) !== null,
+  );
+  const [pose, setPose] = useState<{ faits: number; total: number } | null>(null);
+
+  /**
+   * Le détail par profil, plutôt qu'un seul nombre.
+   *
+   * « 242 comptes » recouvre des cas qui n'ont pas le même poids : 228 tickets
+   * horaires invendus, où le plafond manquant se paie en heures offertes, et
+   * une douzaine d'abonnements au mois, où poser trente jours de temps
+   * **connecté** ne changera rien en pratique. L'exploitant doit voir ce qu'il
+   * s'apprête à écrire avant de l'écrire.
+   */
+  const sansPlafondParProfil = [...sansPlafond.reduce((acc, u) => {
+    acc.set(u.profile, (acc.get(u.profile) ?? 0) + 1);
+    return acc;
+  }, new Map<string, number>())].sort((a, b) => b[1] - a[1]);
+
+  const poserLesPlafonds = useMutation({
+    mutationFn: async (comptes: HotspotUser[]) => {
+      let faits = 0;
+      for (const compte of comptes) {
+        const durée = duréeDuProfil.get(compte.profile);
+        if (!durée) continue;
+        // Un par un, et sans s'arrêter sur un échec : 228 écritures sur un
+        // routeur lent, mieux vaut en poser 227 que zéro.
+        try {
+          await hotspotTabsApi.updateUser(
+            compte.username,
+            { limitUptimeSeconds: durée },
+            currentId,
+          );
+          faits += 1;
+        } catch {
+          /* compte disparu entre-temps : on continue */
+        }
+        setPose({ faits, total: comptes.length });
+      }
+      return faits;
+    },
+    onSuccess: (faits) => {
+      setPose(null);
+      setCompteRendu(`Plafond posé sur ${faits} compte(s).`);
+      rafraîchir();
+    },
+    onError,
+  });
+
   const bloquer = useMutation({
     mutationFn: ({ username, disabled }: { username: string; disabled: boolean }) =>
       hotspotTabsApi.setUserDisabled(username, disabled, currentId),
@@ -318,6 +385,41 @@ export function HotspotUsersTab() {
         <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           {compteRendu}
         </p>
+      )}
+
+      {sansPlafond.length > 0 && (
+        <Card title={`${sansPlafond.length} compte(s) sans plafond de temps cumulé`}>
+          <p className="text-sm text-slate-600">
+            Leur profil annonce une durée, mais rien ne la fait respecter :{' '}
+            <strong>la durée de session repart à zéro à chaque reconnexion</strong>, et le cookie
+            rend cette reconnexion automatique. Un ticket de deux heures peut alors servir deux
+            heures par session, sans fin. Poser le plafond reprend la durée écrite sur le profil.
+          </p>
+          <ul className="mt-2 space-y-0.5 text-sm text-slate-700">
+            {sansPlafondParProfil.map(([profil, nombre]) => (
+              <li key={profil}>
+                <span className="font-medium">{nombre}</span> × {profil} — plafond à poser :{' '}
+                {formatDuration(duréeDuProfil.get(profil) ?? 0)}
+              </li>
+            ))}
+          </ul>
+          {canWrite && (
+            <div className="mt-3 flex items-center gap-3">
+              <Button
+                variant="danger"
+                disabled={poserLesPlafonds.isPending}
+                onClick={() => poserLesPlafonds.mutate(sansPlafond)}
+              >
+                {poserLesPlafonds.isPending
+                  ? `Écriture… ${pose?.faits ?? 0}/${pose?.total ?? sansPlafond.length}`
+                  : `Poser le plafond sur ces ${sansPlafond.length} compte(s)`}
+              </Button>
+              <span className="text-xs text-slate-500">
+                Une écriture par compte sur le routeur : comptez quelques minutes.
+              </span>
+            </div>
+          )}
+        </Card>
       )}
 
       {/* Une suppression perd le trafic consommé et le nom porté par le

@@ -33,6 +33,13 @@ export interface GenerationResultat {
   codes: string[];
   /** Ce qui a échoué, avec son motif — la génération ne s'arrête pas pour un. */
   echecs: { code: string; motif: string }[];
+  /**
+   * Plafond de temps cumulé posé sur chaque compte HotSpot créé, en secondes.
+   *
+   * `null` quand il n'y avait rien à en déduire — et c'est alors une
+   * information, pas un détail : les tickets partent sans borne cumulée.
+   */
+  plafondCumule?: number | null;
 }
 
 /**
@@ -74,10 +81,12 @@ export class TicketGenerationService {
     // Vérifier le profil avant de créer quoi que ce soit : un nom mal
     // orthographié produirait sinon des dizaines de comptes sans forfait,
     // qu'il faudrait retrouver et supprimer un par un.
+    const profilsHotspot =
+      demande.cible === 'hotspot' ? await mikrotik.getHotspotProfiles() : [];
     const profils =
       demande.cible === 'user-manager'
         ? (await mikrotik.getUserManagerProfiles()).map((p) => p.name)
-        : (await mikrotik.getHotspotProfiles()).map((p) => p.name);
+        : profilsHotspot.map((p) => p.name);
 
     if (!profils.includes(demande.profileName)) {
       throw new BadRequestException(
@@ -85,11 +94,33 @@ export class TicketGenerationService {
       );
     }
 
+    /**
+     * Le plafond de temps **cumulé**, déduit du profil du routeur.
+     *
+     * Deux chemins créaient des tickets HotSpot, et un seul posait ce
+     * plafond. Relevé sur le parc : **228 tickets « 2 heures » invendus
+     * n'en avaient aucun**, tous générés par ici ; les 100 déjà vendus, passés
+     * par l'autre chemin, le portaient. Sans lui, le `session-timeout` du
+     * profil est le seul garde-fou — or il **repart à zéro à chaque
+     * reconnexion**, et le `mac-cookie` rend cette reconnexion automatique.
+     * Un ticket de deux heures pouvait donc servir deux heures par session,
+     * sans fin.
+     *
+     * La durée est prise sur le profil plutôt qu'inventée : c'est ce que
+     * l'exploitant a écrit lui-même en créant « 2Heure-500Ar ». Quand le
+     * profil n'en porte pas, on ne devine pas — on le dit.
+     */
+    const plafondCumule =
+      demande.cible === 'hotspot'
+        ? (profilsHotspot.find((p) => p.name === demande.profileName)?.sessionTimeoutSeconds ??
+          null)
+        : null;
+
     const codes = this.tirerCodes(demande);
     const resultat =
       demande.cible === 'user-manager'
         ? await this.genererUserManager(mikrotik, codes, demande)
-        : await this.genererHotspot(mikrotik, codes, demande);
+        : await this.genererHotspot(mikrotik, codes, demande, plafondCumule);
 
     await this.audit.log({
       adminUserId,
@@ -170,6 +201,7 @@ export class TicketGenerationService {
     mikrotik: Awaited<ReturnType<MikrotikClientFactory['forRouter']>>,
     codes: string[],
     demande: GenerationDemande,
+    plafondCumule: number | null,
   ): Promise<GenerationResultat> {
     const crees: string[] = [];
     const echecs: GenerationResultat['echecs'] = [];
@@ -181,6 +213,8 @@ export class TicketGenerationService {
           password: code,
           profileName: demande.profileName,
           ...(demande.commentaire ? { comment: demande.commentaire } : {}),
+          // Le seul plafond qui borne réellement un ticket HotSpot.
+          ...(plafondCumule !== null ? { limitUptimeSeconds: plafondCumule } : {}),
         });
         crees.push(code);
       } catch (error) {
@@ -196,6 +230,6 @@ export class TicketGenerationService {
         `Génération ${demande.profileName} : ${echecs.length} création(s) en échec sur ${codes.length}`,
       );
     }
-    return { cible: 'hotspot', profileName: demande.profileName, codes: crees, echecs };
+    return { cible: 'hotspot', profileName: demande.profileName, codes: crees, echecs, plafondCumule };
   }
 }

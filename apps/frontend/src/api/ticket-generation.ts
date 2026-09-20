@@ -29,6 +29,14 @@ export interface GenerationDemande {
 }
 
 export interface GenerationResultat {
+  /**
+   * Plafond de temps cumulé posé sur chaque compte HotSpot, en secondes.
+   *
+   * `null` quand le profil n'en portait aucun — et c'est alors à dire : les
+   * tickets partent sans borne cumulée, et leur `session-timeout` repart à
+   * zéro à chaque reconnexion.
+   */
+  plafondCumule?: number | null;
   cible: CibleGeneration;
   profileName: string;
   /** Les codes réellement créés. */
