@@ -37,5 +37,10 @@ export const subscriptionsApi = {
   create: (input: CreateSubscriptionInput) => api.post<Subscription>('/subscriptions', input),
   suspend: (id: string) => api.post<Subscription>(`/subscriptions/${id}/suspend`),
   resume: (id: string) => api.post<Subscription>(`/subscriptions/${id}/resume`),
+  /**
+   * Relit l'échéance tenue par le routeur et l'aligne en base. RouterOS
+   * fait autorité : il applique l'expiration même application arrêtée.
+   */
+  reconcile: (id: string) => api.post<Subscription>(`/subscriptions/${id}/reconcile`),
   renew: (id: string) => api.post<Subscription>(`/subscriptions/${id}/renew`),
 };

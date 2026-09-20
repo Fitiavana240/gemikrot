@@ -62,6 +62,9 @@ export const customersApi = {
   get: (id: string) => api.get<Customer>(`/customers/${id}`),
   fiche: (id: string) => api.get<CustomerSheet>(`/customers/${id}/fiche`),
   create: (input: CreateCustomerInput) => api.post<Customer>('/customers', input),
+  /** Corriger un nom ou un numéro sans recréer la fiche. */
+  update: (id: string, input: Partial<CreateCustomerInput>) =>
+    api.patch<Customer>(`/customers/${id}`, input),
   disable: (id: string) => api.patch<Customer>(`/customers/${id}/disable`),
   enable: (id: string) => api.patch<Customer>(`/customers/${id}/enable`),
   listDevices: (id: string) => api.get<Device[]>(`/customers/${id}/devices`),

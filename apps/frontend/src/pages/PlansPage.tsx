@@ -4,7 +4,7 @@ import { plansApi, type CreatePlanInput } from '../api/plans';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, FormField, Input, Select, Table } from '../components/ui';
+import { Badge, Button, Card, FormField, Input, PageHeader, Select, Table, TableSkeleton } from '../components/ui';
 
 const EMPTY_FORM: CreatePlanInput = {
   name: '',
@@ -31,6 +31,16 @@ export function PlansPage() {
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Erreur inconnue'),
   });
 
+  /**
+   * Repousse l'offre vers User Manager. Utile quand quelqu'un a modifié le
+   * profil directement dans WinBox : la base et le routeur ont alors divergé,
+   * et c'est le routeur qui sert les clients.
+   */
+  const syncMutation = useMutation({
+    mutationFn: plansApi.syncUserManager,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['plans'] }),
+  });
+
   const archiveMutation = useMutation({
     mutationFn: plansApi.archive,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['plans'] }),
@@ -43,7 +53,10 @@ export function PlansPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-lg font-semibold">Offres</h1>
+      <PageHeader
+        title="Offres"
+        description="Ce que vous vendez : durée, prix, débit. Une offre créée ici se retrouve sur le routeur, et sur la page de paiement de vos clients."
+      />
 
       {canWrite && (
         <Card title="Nouvelle offre">
@@ -89,7 +102,7 @@ export function PlansPage() {
       )}
 
       {isLoading ? (
-        <p className="text-slate-500">Chargement…</p>
+        <TableSkeleton columns={4} />
       ) : (
         <Table head={['Nom', 'Prix', 'Validité', 'Profil RouterOS', 'Statut', '']}>
           {plans?.map((plan) => (
@@ -101,11 +114,23 @@ export function PlansPage() {
               <td className="px-3 py-2">
                 <Badge tone={plan.status === 'ACTIVE' ? 'green' : 'slate'}>{plan.status}</Badge>
               </td>
-              <td className="px-3 py-2 text-right">
+              <td className="space-x-2 whitespace-nowrap px-3 py-2 text-right">
                 {canWrite && plan.status === 'ACTIVE' && (
-                  <Button variant="secondary" onClick={() => archiveMutation.mutate(plan.id)}>
-                    Archiver
-                  </Button>
+                  <>
+                    {/* Repousser l'offre vers le routeur quand quelqu'un a
+                        modifié le profil depuis WinBox : c'est le routeur qui
+                        sert les clients, la base ne fait que le suivre. */}
+                    <Button
+                      variant="secondary"
+                      disabled={syncMutation.isPending}
+                      onClick={() => syncMutation.mutate(plan.id)}
+                    >
+                      {syncMutation.isPending ? 'Envoi…' : 'Synchroniser'}
+                    </Button>
+                    <Button variant="secondary" onClick={() => archiveMutation.mutate(plan.id)}>
+                      Archiver
+                    </Button>
+                  </>
                 )}
               </td>
             </tr>

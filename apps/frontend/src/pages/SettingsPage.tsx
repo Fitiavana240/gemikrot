@@ -4,7 +4,7 @@ import { tenantsApi, type UpdateTenantInput } from '../api/tenants';
 import type { PaymentMethod } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, FormField, Input, Select, Table } from '../components/ui';
+import { Badge, Button, Card, FormField, Input, PageHeader, Select, Table, TableSkeleton } from '../components/ui';
 import { CURRENCIES, PROVIDERS } from '../lib/options';
 
 export function SettingsPage() {
@@ -69,7 +69,7 @@ export function SettingsPage() {
     save.mutate(form);
   }
 
-  if (tenant.isLoading) return <p className="text-slate-500">Chargement…</p>;
+  if (tenant.isLoading) return <TableSkeleton columns={4} />;
   if (tenant.isError) {
     return (
       <Card>
@@ -83,7 +83,10 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-lg font-semibold">Paramètres</h1>
+      <PageHeader
+        title="Paramètres"
+        description="Votre marque, vos puces Mobile Money et vos comptes. Ce que le client voit sur la page de paiement vient d'ici."
+      />
 
       {error && (
         <Card>

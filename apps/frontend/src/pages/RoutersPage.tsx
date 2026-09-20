@@ -11,7 +11,7 @@ import {
 } from '../api/routers';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, FormField, Input, Table } from '../components/ui';
+import { Badge, Button, Card, FormField, Input, PageHeader, Table } from '../components/ui';
 
 export function RoutersPage() {
   const { canWrite } = useAuth();
@@ -73,7 +73,10 @@ export function RoutersPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-lg font-semibold">Routeurs</h1>
+      <PageHeader
+        title="Routeurs"
+        description="Vos équipements, leur joignabilité et leur raccordement. L'import recopie l'état du routeur en base et n'écrit jamais dessus."
+      />
 
       {error && (
         <Card>

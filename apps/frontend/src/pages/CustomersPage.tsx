@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { customersApi, type CreateCustomerInput } from '../api/customers';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, FormField, Input, Table } from '../components/ui';
+import { Badge, Button, Card, FormField, Input, PageHeader, Table, TableSkeleton } from '../components/ui';
 
 const EMPTY_FORM: CreateCustomerInput = { name: '', phone: '' };
 
@@ -38,7 +38,10 @@ export function CustomersPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-lg font-semibold">Clients</h1>
+      <PageHeader
+        title="Clients"
+        description="Les personnes à qui vous vendez. Cliquez un nom pour voir sa fiche : tickets, abonnement, appareils et paiements réunis."
+      />
 
       {canWrite && (
         <Card title="Nouveau client">
@@ -73,7 +76,7 @@ export function CustomersPage() {
       )}
 
       {isLoading ? (
-        <p className="text-slate-500">Chargement…</p>
+        <TableSkeleton columns={4} />
       ) : (
         <Table head={['Nom', 'Téléphone', 'Email', 'Statut', '']}>
           {customers?.map((customer) => (

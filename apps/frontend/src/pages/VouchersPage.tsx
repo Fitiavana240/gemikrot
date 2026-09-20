@@ -7,7 +7,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import type { Voucher, VoucherStatus } from '../api/types';
-import { Badge, Button, Card, FormField, Input, Select, Table } from '../components/ui';
+import { Badge, Button, Card, FormField, Input, PageHeader, Select, Table, TableSkeleton } from '../components/ui';
 
 type Tab = 'par-offre' | 'tous' | 'expires' | 'historique';
 
@@ -59,7 +59,10 @@ export function VouchersPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold">Tickets</h1>
+          <PageHeader
+        title="Tickets"
+        description="Les accès vendus à l'unité. Leur validité est tenue par le routeur : elle court même si cette console est fermée."
+      />
           <p className="mt-1 text-sm text-slate-500">
             L'échéance est tenue par le routeur : elle court à partir de la première connexion du
             client, et s'applique même cette console fermée.
@@ -119,7 +122,7 @@ function ByPlanTab() {
   const { format } = useCurrency();
   const byPlan = useQuery({ queryKey: ['vouchers', 'by-plan'], queryFn: vouchersApi.countByPlan });
 
-  if (byPlan.isLoading) return <p className="text-slate-500">Chargement…</p>;
+  if (byPlan.isLoading) return <TableSkeleton columns={4} />;
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -266,7 +269,7 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
       </div>
 
       {vouchers.isLoading ? (
-        <p className="text-slate-500">Chargement…</p>
+        <TableSkeleton columns={4} />
       ) : (
         <VoucherTable
           vouchers={vouchers.data ?? []}
@@ -290,7 +293,7 @@ function ExpiredTab() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['vouchers'] }),
   });
 
-  if (expired.isLoading) return <p className="text-slate-500">Chargement…</p>;
+  if (expired.isLoading) return <TableSkeleton columns={4} />;
 
   return (
     <div className="space-y-4">
@@ -316,7 +319,7 @@ function LegacyTab() {
     queryFn: () => vouchersApi.list({ scope: 'legacy' }),
   });
 
-  if (legacy.isLoading) return <p className="text-slate-500">Chargement…</p>;
+  if (legacy.isLoading) return <TableSkeleton columns={4} />;
 
   return (
     <div className="space-y-4">

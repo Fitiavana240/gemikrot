@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { mikrotikApi } from '../api/mikrotik';
 import { useRouterSelection } from '../routers/RouterContext';
 import { useAuth } from '../auth/AuthContext';
-import { Badge, Button, Card, Table } from '../components/ui';
+import { Badge, Button, Card, PageHeader, Table, TableSkeleton } from '../components/ui';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} o`;
@@ -58,9 +58,12 @@ export function SessionsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-lg font-semibold">Appareils &amp; tickets actifs</h1>
+      <PageHeader
+        title="Connectés"
+        description="Qui est en ligne en ce moment, lu en direct sur le routeur."
+      />
 
-      {statusQuery.isLoading && <p className="text-slate-500">Connexion au routeur…</p>}
+      {statusQuery.isLoading && <TableSkeleton columns={5} />}
 
       {statusQuery.isError && (
         <Card title="Routeur MikroTik">

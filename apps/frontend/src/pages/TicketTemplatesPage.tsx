@@ -4,7 +4,7 @@ import { ticketTemplatesApi, type TicketTemplate } from '../api/ticket-templates
 import { vouchersApi } from '../api/vouchers';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, FormField, Input, Select } from '../components/ui';
+import { Badge, Button, Card, FormField, Input, PageHeader, Select, TableSkeleton } from '../components/ui';
 
 /**
  * L'aperçu et la feuille d'impression sont rendus dans une iframe
@@ -102,12 +102,15 @@ export function TicketTemplatesPage() {
     setError(null);
   }
 
-  if (templates.isLoading || !draft) return <p className="text-slate-500">Chargement…</p>;
+  if (templates.isLoading || !draft) return <TableSkeleton columns={4} />;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-semibold">Modèles de ticket</h1>
+        <PageHeader
+        title="Modèle de ticket"
+        description="La mise en page de ce que vous imprimez. Trente tickets par planche A4, prêts à découper."
+      />
         <p className="mt-1 text-sm text-slate-500">
           Le ticket imprimé que reçoit votre client. Modifiable en HTML, avec votre logo.
         </p>

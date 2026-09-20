@@ -8,7 +8,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import type { Payment, PaymentMethod } from '../api/types';
-import { Badge, Button, Card, FormField, Input, Select, Table } from '../components/ui';
+import { Badge, Button, Card, FormField, Input, PageHeader, Select, Table, TableSkeleton } from '../components/ui';
 
 const EMPTY_FORM: CreatePaymentInput = { customerId: '', planId: '', amount: 0, method: 'CASH', reference: '' };
 
@@ -74,7 +74,10 @@ export function PaymentsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-lg font-semibold">Paiements</h1>
+      <PageHeader
+        title="Paiements"
+        description="Les encaissements, et ceux qui attendent une validation. Valider un paiement ouvre l'accès du client."
+      />
 
       {lastVerifiedVoucherCode && (
         <Card>
@@ -153,7 +156,7 @@ export function PaymentsPage() {
       )}
 
       {isLoading ? (
-        <p className="text-slate-500">Chargement…</p>
+        <TableSkeleton columns={4} />
       ) : (
         <Table head={['Référence', 'Méthode', 'Montant', 'Statut', '']}>
           {payments?.map((payment) => (

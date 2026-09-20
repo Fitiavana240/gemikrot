@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tenantsApi, type TenantStatus } from '../api/tenants';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, Table } from '../components/ui';
+import { Badge, Button, Card, PageHeader, Table, TableSkeleton } from '../components/ui';
 
 const STATUS_TONE: Record<TenantStatus, 'green' | 'amber' | 'red'> = {
   ACTIVE: 'green',
@@ -35,7 +35,10 @@ export function TenantsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-lg font-semibold">Exploitants</h1>
+      <PageHeader
+        title="Exploitants"
+        description="Les réseaux Wi-Fi hébergés par la plateforme. Un compte inscrit reste bloqué tant qu'il n'est pas activé ici."
+      />
 
       {error && (
         <Card>
@@ -52,7 +55,7 @@ export function TenantsPage() {
       )}
 
       {tenants.isLoading ? (
-        <p className="text-slate-500">Chargement…</p>
+        <TableSkeleton columns={4} />
       ) : (
         <Table head={['Exploitant', 'Réseau Wi-Fi', 'Devise', 'Domaines', 'Statut', '']}>
           {tenants.data?.map((tenant) => (

@@ -5,7 +5,7 @@ import { plansApi } from '../api/plans';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
 import { useState } from 'react';
-import { Badge, Button, Card, Table } from '../components/ui';
+import { Badge, Button, Card, PageHeader, Table, TableSkeleton } from '../components/ui';
 
 const STATUS_TONE: Record<SubscriptionStatus, 'green' | 'amber' | 'slate' | 'red'> = {
   ACTIVE: 'green',
@@ -58,6 +58,16 @@ export function SubscriptionsPage() {
     onSuccess: () => { setError(null); refresh(); },
     onError,
   });
+  /**
+   * Relit l'échéance sur le routeur. C'est lui qui fait autorité : il applique
+   * l'expiration même cette console fermée, et la base peut avoir pris du
+   * retard si quelqu'un a prolongé le compte depuis WinBox.
+   */
+  const reconcile = useMutation({
+    mutationFn: subscriptionsApi.reconcile,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['subscriptions'] }),
+  });
+
   const renew = useMutation({
     mutationFn: subscriptionsApi.renew,
     onSuccess: () => { setError(null); refresh(); },
@@ -69,7 +79,10 @@ export function SubscriptionsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-lg font-semibold">Abonnements</h1>
+      <PageHeader
+        title="Abonnements"
+        description="Les accès au mois. L'échéance vient du routeur, qui l'applique même cette console fermée."
+      />
 
       {error && (
         <Card>
@@ -107,7 +120,7 @@ export function SubscriptionsPage() {
       )}
 
       {subscriptions.isLoading ? (
-        <p className="text-slate-500">Chargement…</p>
+        <TableSkeleton columns={4} />
       ) : (
         <Table head={['Compte', 'Client', 'Offre', 'Statut', 'Fin de période', '']}>
           {subscriptions.data?.map((subscription) => (
@@ -122,6 +135,15 @@ export function SubscriptionsPage() {
               <td className="space-x-2 px-3 py-2 text-right">
                 {canWrite && (
                   <>
+                    {/* Relire avant de décider : la base peut avoir pris du
+                        retard si quelqu'un a prolongé le compte depuis WinBox. */}
+                    <Button
+                      variant="secondary"
+                      disabled={reconcile.isPending}
+                      onClick={() => reconcile.mutate(subscription.id)}
+                    >
+                      {reconcile.isPending ? 'Lecture…' : 'Relire le routeur'}
+                    </Button>
                     <Button variant="secondary" onClick={() => renew.mutate(subscription.id)}>
                       Renouveler
                     </Button>

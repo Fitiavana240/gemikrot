@@ -4,7 +4,7 @@ import { devicesApi, type DeviceType, type DiscoveredDevice } from '../api/devic
 import { useRouterSelection } from '../routers/RouterContext';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, Select, Table } from '../components/ui';
+import { Badge, Button, Card, PageHeader, Select, Table } from '../components/ui';
 
 const DEVICE_TYPES: DeviceType[] = ['PHONE', 'COMPUTER', 'TV', 'CAMERA', 'ROUTER', 'OTHER'];
 
@@ -60,7 +60,10 @@ export function DevicesPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-lg font-semibold">Appareils</h1>
+      <PageHeader
+        title="Appareils"
+        description="Ce qui se connecte au réseau. Le contournement du portail sert aux appareils incapables d'afficher une page de connexion — télévision, caméra, imprimante."
+      />
 
       {error && (
         <Card>
