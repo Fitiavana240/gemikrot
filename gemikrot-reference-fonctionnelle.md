@@ -1,7 +1,7 @@
 # GEMIKROT — Document de référence fonctionnel du SaaS
 # Gestion de réseaux Wi-Fi MikroTik · Tickets, abonnements et paiement mobile — Madagascar
 
-**Date de rédaction :** 2026-09-19 · **Statut :** v0.2 — socle multi-exploitants livré, tickets sur User Manager livrés, page de paiement publique livrée en validation manuelle, console multi-routeurs et tolérance aux pannes livrées (lot du 2026-09-19 ci-dessous). Reconnaissance automatique des SMS non commencée, PPPoE non couvert. Voir §16 Journal.
+**Date de rédaction :** 2026-09-19 · **Dernière relecture de la colonne « Implémenté » :** 2026-09-21 · **Statut :** v0.3 — socle multi-exploitants, tickets sur User Manager, page de paiement publique en validation manuelle, console multi-routeurs, tolérance aux pannes, statistiques et abonnement plateforme livrés. Reconnaissance automatique des SMS **non commencée** — c'est elle qui sépare le produit d'un carnet électronique. PPPoE non couvert. Voir §16 Journal.
 **Objet :** remplacer Winbox et le carnet de tickets par une console web multi-exploitants qui pilote **plusieurs routeurs MikroTik à distance**, vend des accès Wi-Fi (tickets et abonnements), encaisse par Mobile Money et coupe réellement les accès expirés.
 
 > **Impact :** ⭐ Utile · ⭐⭐ Important · ⭐⭐⭐ Critique
@@ -230,9 +230,9 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | ABO-1 | **Abonnement porté par User Manager**, échéance calendaire relue depuis le routeur qui fait autorité | ⭐⭐⭐ | 🟡 | ✅ |
 | ABO-2 | **Suspension et réactivation** sans perdre le compte ni son historique | ⭐⭐⭐ | 🟢 | ✅ |
 | ABO-3 | **Tolérance de 7 jours** après échéance avant suspension, comme demandé. Le statut se dérive correctement des trois états ; la reprise refuse au-delà de la tolérance plutôt que de rouvrir un accès que la base dirait suspendu | ⭐⭐⭐ | 🟢 | ✅ |
-| ABO-4 | **Avertissement avant échéance** au client (SMS). Dépend de COM-1 | ⭐⭐⭐ | 🟡 | ⬜ |
+| ABO-4 | **Avertissement avant échéance** au client (SMS). Dépend de COM-1. *Livré de ce qui n'en dépend pas : le tableau de bord dit combien des échéances proches sont **injoignables** — 14 des 16 fiches de ce parc portent un numéro provisoire écrit par l'import. Prévenir personne n'aide personne : c'est ce nombre qui décidera de l'utilité de COM-1.* | ⭐⭐⭐ | 🟡 | ⬜ |
 | ABO-5 | **Suspension automatique** au dépassement de la tolérance, par le travail d'expiration. Le compte n'est marqué suspendu que si le routeur l'a réellement coupé | ⭐⭐⭐ | 🟡 | ✅ |
-| ABO-6 | **Renouvellement par paiement**, avec rétablissement immédiat et échéance repoussée | ⭐⭐⭐ | 🟡 | 🟡 |
+| ABO-6 | **Renouvellement par paiement**, avec rétablissement immédiat et échéance repoussée | ⭐⭐⭐ | 🟡 | ✅ livré — l'échéance est repoussée **sur le routeur**, pas seulement en base ; jamais plus tôt que ce qui a été payé |
 | ABO-7 | **Coupure effective** identique à TIC-4 (cookies + session), branchée sur le chemin abonnement par le travail d'expiration | ⭐⭐⭐ | 🟢 | ✅ |
 
 ---
@@ -244,7 +244,7 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | CLI-1 | **Fiche client** : nom, téléphone (unique par exploitant), historique d'achats | ⭐⭐ | 🟢 | ✅ |
 | CLI-2 | **Appareils** rattachés à un client, avec MAC, adresse et type | ⭐⭐ | 🟢 | ✅ |
 | CLI-3 | **Détection du type d'appareil** (nom DHCP, fabricant MAC) pour repérer ceux qui ne peuvent pas afficher un portail captif ; proposition confirmée par un admin, jamais imposée | ⭐⭐ | 🟡 | ✅ |
-| CLI-4 | **Consommation par client** : durée et volume, depuis la comptabilité RADIUS | ⭐⭐ | 🟢 | 🟡 |
+| CLI-4 | **Consommation par client** : durée et volume | ⭐⭐ | 🟢 | ✅ livré — lu d'abord sur les **compteurs du compte**, jamais additionné aux sessions RADIUS : sur ce parc un abonné porte 26,66 Gio au compteur et **zéro** session conservée |
 | CLI-5 | **Fiche client unifiée** : tickets, abonnement, appareils et paiements sur un écran, avec l'accès en cours mis en avant — c'est la question posée au comptoir | ⭐⭐ | 🟡 | ✅ |
 
 ---
@@ -274,9 +274,9 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | PUB-4 | **Normalisation partagée** du téléphone et de la référence entre le formulaire et le futur lecteur de SMS. Deux implémentations divergentes donneraient zéro rapprochement, sans erreur ni trace | ⭐⭐⭐ | 🟡 | ✅ |
 | PUB-5 | **Bilingue français / malgache** sur la page client | ⭐⭐ | 🟢 | ✅ |
 | PUB-6 | **Limitation de débit** par (exploitant, téléphone) et (exploitant, référence) en primaire, l'IP en filet — derrière le portail captif tous les clients partagent l'adresse du routeur | ⭐⭐⭐ | 🟡 | ✅ |
-| PUB-7 | **Page captive branchée** sur la page de paiement : lien « j'ai payé par Mobile Money », marque de l'exploitant à la place du nom en dur, et récupération du code sans quitter le portail | ⭐⭐⭐ | 🟡 | ⬜ |
-| PUB-8 | **Lien WhatsApp d'assistance** sur la page client — le canal naturel ici quand un paiement n'aboutit pas | ⭐⭐ | 🟢 | ⬜ |
-| PUB-9 | **Vitrine de l'exploitant** (offres publiques, présentation) sur son domaine ou sous-domaine | ⭐ | 🟡 | ⬜ |
+| PUB-7 | **Page captive branchée** sur la page de paiement : lien « j'ai payé par Mobile Money », marque de l'exploitant à la place du nom en dur, et récupération du code sans quitter le portail | ⭐⭐⭐ | 🟡 | 🟡 page écrite, aperçu et publication depuis la console (`hotspot/login.html`) — **non publiée sur le routeur réel** : elle remplace celle que voient les clients, la décision revient à l'exploitant |
+| PUB-8 | **Lien WhatsApp d'assistance** sur la page client — le canal naturel ici quand un paiement n'aboutit pas | ⭐⭐ | 🟢 | ✅ livré — le lien n'apparaît que si un numéro est enregistré : une porte d'assistance qui ne mène nulle part est pire que pas d'assistance annoncée |
+| PUB-9 | **Vitrine de l'exploitant** (offres publiques, présentation) sur son domaine ou sous-domaine | ⭐ | 🟡 | 🟡 la résolution par domaine est livrée : un visiteur anonyme arrivant par le domaine d'un exploitant va sur sa page de paiement, et non sur l'écran de connexion de la console. Reste ce qui n'est pas dans ce dépôt — faire pointer le domaine et son certificat (§ déploiement) |
 
 ---
 
@@ -295,11 +295,11 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 
 | Ref | Description | Impact | Complexité | Implémenté |
 |-----|-------------|--------|------------|------------|
-| STAT-1 | **Tableau de bord** : recette, clients, tickets, sessions actives | ⭐⭐ | 🟢 | 🟡 |
-| STAT-2 | **Recette par offre et par période**, pour savoir ce qui se vend | ⭐⭐ | 🟡 | 🟡 |
+| STAT-1 | **Tableau de bord** : recette, clients, tickets, sessions actives | ⭐⭐ | 🟢 | ✅ livré — les quatre y sont, plus le stock réel du routeur à côté des tickets suivis ici (10 annoncés, 602 en tiroir sur ce parc) |
+| STAT-2 | **Recette par offre et par période**, pour savoir ce qui se vend | ⭐⭐ | 🟡 | ✅ livré — écran Recettes : période, recette, panier moyen, part par offre, détail par jour/semaine/mois |
 | STAT-3 | **Consommation par compte** depuis la comptabilité RADIUS : durée, volumes, cause de fin | ⭐⭐ | 🟢 | ✅ |
-| STAT-4 | **Taux d'occupation et pointes** : à quelle heure le réseau sature | ⭐ | 🟡 | ⬜ |
-| STAT-5 | **Export comptable** (CSV) des paiements sur une période | ⭐⭐ | 🟢 | ⬜ |
+| STAT-4 | **Taux d'occupation et pointes** : à quelle heure le réseau sature | ⭐ | 🟡 | ✅ livré — et il dit sur **combien de sessions** il calcule : RouterOS n'en garde que 34 ici, couvrant 5 jours. Un profil d'affluence tiré de trop peu de données ne doit pas se présenter comme une mesure |
+| STAT-5 | **Export comptable** (CSV) des paiements sur une période | ⭐⭐ | 🟢 | ✅ livré |
 
 ---
 
@@ -308,10 +308,10 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | Ref | Description | Impact | Complexité | Implémenté |
 |-----|-------------|--------|------------|------------|
 | SAS-1 | **Liste des exploitants**, activation, suspension | ⭐⭐⭐ | 🟢 | ✅ |
-| SAS-2 | **Abonnement plateforme** : offre, nombre de routeurs autorisé, échéance, blocage à l'expiration. Un exploitant est aujourd'hui actif ou suspendu, rien ne le fait payer | ⭐⭐⭐ | 🟡 | ⬜ |
-| SAS-3 | **Accompagnement à la mise en route** : étapes visibles (routeur connecté, offres créées, puce enregistrée, première vente) | ⭐⭐ | 🟡 | ⬜ |
+| SAS-2 | **Abonnement plateforme** : offre, nombre de routeurs autorisé, échéance, blocage à l'expiration | ⭐⭐⭐ | 🟡 | ✅ livré — tolérance de 15 jours, puis **seule la vente s'arrête** : la consultation reste ouverte, et les clients finaux gardent leur accès (le routeur applique seul les validités). On ferme la console, pas le Wi-Fi |
+| SAS-3 | **Accompagnement à la mise en route** : étapes visibles (routeur connecté, offres créées, puce enregistrée, première vente) | ⭐⭐ | 🟡 | ✅ livré — chaque étape est **constatée**, jamais déclarée, et la carte disparaît d'elle-même une fois les quatre franchies |
 | SAS-4 | **Supervision de la plateforme** : exploitants actifs, routeurs joignables, volumétrie | ⭐⭐ | 🟡 | ⬜ |
-| SAS-5 | **Prise en main d'un compte** (impersonation) pour l'assistance, tracée | ⭐ | 🟡 | ⬜ |
+| SAS-5 | **Prise en main d'un compte** (impersonation) pour l'assistance, tracée | ⭐ | 🟡 | ✅ livré — bandeau permanent pendant la prise en main, et chaque ligne du journal porte la marque : le cloisonnement ignore qui agit, le journal non |
 
 ---
 
@@ -366,19 +366,19 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 
 ### P1 — L'encaissement automatique
 
-> COM-1 · PAY-3/4/5 · SECU-11 · PUB-7/8 · COM-2/3
+> COM-1 · PAY-3/4/5 · SECU-11 · COM-2/3 — *PUB-8 livré ; PUB-7 écrit, reste à publier sur le routeur*
 
 Le client paie et se connecte seul, sans intervention. C'est le différenciateur ; c'est aussi ce qui rend la console vendable à un exploitant qui n'est pas toujours sur place.
 
 ### P2 — La plateforme comme produit
 
-> SAS-2/3/4 · SOC-9 · RTR-13 · SECU-8/10/13 · STAT-1/2/5 · TIC-9/11
+> SAS-4 · RTR-13 · SECU-8/10/13 · TIC-11 — *SAS-2/3, SOC-9, STAT-1/2/5 et TIC-9 livrés*
 
 Facturer les exploitants, piloter plusieurs routeurs pour de bon, atteindre un routeur sans IP publique.
 
 ### P3 — La profondeur
 
-> RTR-12/14 · OFF-7/8 · CLI-4/5 · TIC-10 · PUB-9 · SOC-8 · PERF-2/3 · FIAB-4 · PAY-6/7/8
+> RTR-14 · OFF-7/8 · CLI-5 · TIC-10 · SOC-8 · PERF-2/3 · FIAB-4 · PAY-6/7/8 — *RTR-12 et CLI-4 livrés ; PUB-9 attend le déploiement*
 
 ---
 
@@ -1802,6 +1802,98 @@ ce parc encaisse par Mobile Money, hors du routeur. Les noms de champs viennent 
 colonnes de WinBox et **non d'un relevé** — troisième table dans ce cas, après `/ppp/active`.
 L'écran le dit en bandeau, et distingue explicitement cette table de l'écran Paiements de
 l'application, qui est la source de vérité commerciale.
+
+### 2026-09-21 — Le tarif du client ne venait pas du routeur
+
+La question posée par l'exploitant : *« je vois que profil dans router ne corresponds au
+portail captif de l'application »*. Vérifié plutôt que supposé — la page de paiement lit
+**uniquement Postgres** : `tenants` par son slug, `plans` en `status=ACTIVE AND kind=TICKET`,
+`mobile_money_accounts` actives. `PublicService` ne prend que `PrismaService` et
+`TenantContextService` : aucune référence au routeur dans le fichier. Les deux listes ne
+pouvaient donc que diverger, et aucun geste ne les rapprochait dans le sens qui manquait.
+
+**« Afficher au tarif d'abonnement »**, sur chaque profil User Manager, est ce geste. Il fait
+entrer le profil dans la vitrine, à son prix et pour sa durée, et **n'écrit rien sur le
+routeur** — le profil existe déjà et sert déjà des clients ; le toucher pour une raison
+commerciale reviendrait à modifier ce qui les sert. Un test le fige : aucun appel d'écriture
+ne part. Le même bouton fait le chemin inverse, et retirer archive l'offre au lieu de la
+supprimer, pour que les tickets vendus continuent de fonctionner.
+
+Trois refus, et ce sont eux qui font la valeur du bouton. Un profil **sans prix**
+s'afficherait à 0 Ar et se vendrait pour rien, à n'importe qui connecté au Wi-Fi. Une offre
+dont le prix a été deviné à l'import montrerait un tarif que personne n'a validé — poser ce
+prix dans l'écran Offres vaut désormais confirmation, sans quoi le drapeau `priceNeedsReview`
+ne retombait jamais et l'offre restait bloquée hors du tarif. Et un **abonnement** n'a pas ce
+bouton : il se renouvelle au comptoir, et l'y proposer changerait ce qu'il est.
+
+`auTarif` est calculé par le serveur avec la règle exacte de la page de paiement. Le déduire
+dans l'écran aurait fini par diverger, et le bouton aurait annoncé « au tarif » sur un profil
+que le client ne voit nulle part.
+
+### 2026-09-21 — Archiver ne répondait pas à tout
+
+L'écran Offres ne savait qu'archiver. Un doublon, un essai, une offre créée de travers
+restaient dans la liste et dans le rapprochement, et on les relisait à chaque fois pour
+conclure à chaque fois qu'elles ne servaient à rien.
+
+**Supprimer** est là, sur les offres actives comme archivées — c'est sur les secondes qu'il
+sert le plus. Le profil du routeur n'est pas touché : l'effacer au passage couperait des gens
+au nom d'un ménage dans une liste. Refusé dès qu'un ticket, un lot, un paiement ou un
+abonnement s'y rattache, avec un message qui **nomme ce qui retient** plutôt que de laisser
+parler la contrainte de la base, que personne ne peut lire.
+
+### 2026-09-21 — 14 clients sur 16 qu'on ne peut prévenir de rien
+
+Le tableau de bord montrait les dix derniers clients sans jamais dire combien il y en a : une
+liste de dix noms se lit pareil qu'on en ait douze ou six cents. C'était le seul des quatre
+chiffres de STAT-1 qui manquait.
+
+Le sous-titre de la tuile dit ce que le total cache, et c'est là que le relevé devient
+gênant : **14 des 16 fiches portent un numéro provisoire** de la forme `import:<compte>`. Le
+routeur ne stocke aucun téléphone ; l'import en écrit un faute de mieux, il ressemble à un
+vrai dans la liste, et personne ne pense à le corriger. « Échéances sous 7 jours » annonçait
+« à relancer » sans que rien ne garantisse qu'on sache où joindre qui que ce soit ; il dit
+maintenant combien de ces échéances sont injoignables.
+
+C'est la moitié d'ABO-4 qui ne dépend pas de la passerelle SMS, et celle qui décidera de
+l'utilité de l'autre : prévenir personne n'aide personne. **ABO-4 reste ouvert.**
+
+*Au passage* : `revenueByPlan` et `revenueByMethod` étaient calculés à chaque chargement du
+tableau de bord — toutes les trente secondes — et **aucun écran ne les lisait**. L'écran
+Recettes répond déjà à la question, avec une période et un export. Deux `groupBy` de moins
+par appel.
+
+### 2026-09-21 — Le domaine de l'exploitant menait à l'écran de connexion
+
+Les domaines étaient enregistrés depuis le début. Ils s'impriment même dans le QR des
+tickets. Et rien ne s'en servait pour répondre : un client qui tapait l'adresse de son
+fournisseur tombait sur une page d'administration — un formulaire lui demandant un mot de
+passe qu'il n'a pas, sans aucun rapport avec ce qu'il cherchait.
+
+Un visiteur anonyme est désormais envoyé sur la page de paiement de l'exploitant à qui
+appartient l'adresse. `wifitati.net` est déjà enregistré sur ce parc et résout correctement :
+le jour où il pointera vers ce serveur, il marchera sans rien d'autre à faire.
+
+Trois précautions décident si la chose est utilisable ou dangereuse. `localhost` et les
+adresses IP ne résolvent **jamais** — le portail captif sert la console par son adresse, et
+la laisser résoudre vers une vitrine rendrait l'écran de connexion inatteignable ; la requête
+ne part même pas. Le domaine nu et son `www.` désignent le même site, parce que c'est ce que
+croit qui les tape. Et la question n'est posée que pour un visiteur anonyme : le chargement
+de la console ne coûte pas un appel de plus, puisque l'exploitant y est connecté. `/login`
+reste atteignable en le tapant.
+
+### 2026-09-21 — État de la colonne « Implémenté »
+
+Treize items relus **dans le code** avant d'être cochés, conformément à la règle d'or :
+ABO-6, CLI-4, PUB-8, STAT-1, STAT-2, STAT-4, STAT-5, SAS-2, SAS-3, SAS-5 passent à ✅ ;
+PUB-7 et PUB-9 restent 🟡 ; ABO-4 reste ⬜.
+
+Les deux 🟡 et le ⬜ ne dépendent plus de ce dépôt, et c'est pourquoi ils ne sont pas cochés.
+**PUB-7** : la page captive est écrite, prévisualisable et publiable depuis la console, mais
+elle n'a **pas** été publiée sur le routeur réel — elle remplacerait celle que voient les
+clients, et c'est une décision d'exploitant. **PUB-9** : la résolution par domaine est faite,
+le DNS et le certificat ne sont pas dans ce dépôt. **ABO-4** : il faut une passerelle SMS
+(COM-1) qui n'existe pas.
 
 ---
 
