@@ -99,6 +99,17 @@ export interface SessionView {
 }
 
 export const hotspotApi = {
+  /** PUB-7 : la page du portail, remplie mais pas envoyée. */
+  apercuPageConnexion: (portail: string) =>
+    api.get<{ contenu: string; chemin: string; octets: number }>(
+      `/hotspot/page-connexion?portail=${encodeURIComponent(portail)}`,
+    ),
+  /** Écrit la page sur le routeur, en écrasant celle qui s'y trouve. */
+  publierPageConnexion: (portail: string, routerId?: string) =>
+    api.post<{ chemin: string; octets: number }>(
+      `/hotspot/page-connexion${routerId ? `?routerId=${routerId}` : ''}`,
+      { portail },
+    ),
   overview: (routerId?: string) =>
     api.get<HotspotOverview>(`/hotspot/overview${routerQuery(routerId)}`),
   walledGarden: (routerId?: string) =>

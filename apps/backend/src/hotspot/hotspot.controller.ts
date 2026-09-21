@@ -4,6 +4,7 @@ import { Roles } from '../auth/roles.decorator.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { AuthenticatedUser } from '../auth/jwt.strategy.js';
 import { HotspotService } from './hotspot.service.js';
+import { PageConnexionService } from './page-connexion.service.js';
 import {
   CreateHotspotUserDto,
   CreateWalledGardenDto,
@@ -19,7 +20,33 @@ const CAN_OPERATE = [AdminRole.SUPER_ADMIN, AdminRole.ADMIN, AdminRole.OPERATOR]
 
 @Controller('hotspot')
 export class HotspotController {
-  constructor(private readonly hotspot: HotspotService) {}
+  constructor(
+    private readonly hotspot: HotspotService,
+    private readonly pageConnexion: PageConnexionService,
+  ) {}
+
+  /**
+   * PUB-7 : la page du portail captif, remplie mais pas envoyee.
+   *
+   * Previsualiser avant d'ecraser n'est pas un luxe : une page fautive sur
+   * le routeur, et plus personne ne se connecte -- ni les clients deja
+   * payants, ni ceux qui viennent d'acheter.
+   */
+  @Get('page-connexion')
+  apercuPageConnexion(@Query('portail') portail: string) {
+    return this.pageConnexion.apercu(portail ?? '');
+  }
+
+  /** Ecrit la page sur le routeur, en ecrasant celle qui s'y trouve. */
+  @Roles(AdminRole.SUPER_ADMIN, AdminRole.ADMIN)
+  @Post('page-connexion')
+  publierPageConnexion(
+    @Body() body: { portail: string },
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('routerId') routerId?: string,
+  ) {
+    return this.pageConnexion.publier(body.portail ?? '', user.id, routerId);
+  }
 
   @Get('overview')
   overview(@Query('routerId') routerId?: string) {

@@ -1,23 +1,35 @@
 <!doctype html>
 <!--
-  Page captive HotSpot — Zone WIFI-TATI (Sections 6, 9 du cahier des charges).
+  Page captive HotSpot -- MODELE.
 
-  Ce fichier n'est PAS servi par apps/frontend : il est destiné à être
-  importé tel quel dans RouterOS (Files > hotspot, ou Winbox > IP > Hotspot >
-  Files) pour remplacer le login.html par défaut du serveur HotSpot
-  "hotspot-tati". Les balises $(...) sont interprétées par RouterOS, pas par
-  un navigateur ou un bundler — ne pas passer ce fichier dans Vite/React.
+  Ce fichier n'est PAS servi par apps/frontend : il est destine a etre pousse
+  tel quel dans RouterOS (Files > flash/hotspot/login.html). Les balises
+  $(...) sont interpretees par RouterOS, pas par un navigateur ni un bundler
+  -- ne jamais le passer dans Vite.
 
-  Le voucher (Section 17) sert à la fois de nom d'utilisateur et de mot de
-  passe côté User Manager (décision Phase 1, cf. apps/backend VouchersService
-  .activate) : le client ne voit qu'un seul champ "Code d'accès", recopié en
-  JS dans les deux champs cachés username/password avant l'envoi.
+  QUATRE MARQUEURS sont remplaces par la console avant l'envoi :
+    __MARQUE__   le nom du reseau vu par le client
+    __LIEU__     la mention du bas de page
+    __PORTAIL__  l'adresse de la page de paiement, sans barre finale
+    __SLUG__     l'identifiant public de l'exploitant
+
+  ASCII SEULEMENT. L'API du routeur refuse tout octet au-dessus de 127 :
+  les accents s'ecrivent donc en entites HTML (&eacute;, &agrave;...), ce
+  qui s'affiche correctement chez le client.
+
+  POURQUOI AUCUN APPEL RESEAU ICI. La page pourrait aller chercher les
+  offres et les numeros aupres de l'application, mais elle est servie depuis
+  le routeur : l'appel serait inter-origine, et le navigateur le refuserait
+  sauf a ouvrir CORS. Surtout, une page de connexion ne doit avoir aucun
+  mode de panne -- si la liste ne repond pas, personne ne se connecte plus.
+  Elle se contente donc d'un lien, et les offres vivent sur la page de
+  paiement, ou elles ont leur place.
 -->
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Zone WIFI-TATI — Connexion</title>
+    <title>__MARQUE__ &mdash; Connexion</title>
     <style>
       * { box-sizing: border-box; }
       body {
@@ -40,16 +52,8 @@
         padding: 28px;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
       }
-      h1 {
-        font-size: 18px;
-        color: #0369a1;
-        margin: 0 0 4px;
-      }
-      p.subtitle {
-        margin: 0 0 20px;
-        color: #64748b;
-        font-size: 13px;
-      }
+      h1 { font-size: 18px; color: #0369a1; margin: 0 0 4px; }
+      p.subtitle { margin: 0 0 20px; color: #64748b; font-size: 13px; }
       label {
         display: block;
         font-size: 12px;
@@ -62,25 +66,29 @@
         padding: 10px 12px;
         border: 1px solid #cbd5e1;
         border-radius: 8px;
+        /* 16px au moins : en dessous, iOS zoome sur le champ au focus et le
+           client perd la page de vue. */
         font-size: 16px;
         letter-spacing: 1px;
-        text-transform: uppercase;
       }
+      /* Plus de `text-transform: uppercase` : il affichait "HERVE-RAZAFY"
+         pour un nom saisi "Herve-Razafy", alors que seul le second est
+         envoye. Voir un texte et en transmettre un autre est le genre
+         d'ecart qu'on ne soupconne pas quand la connexion echoue. */
       button {
         width: 100%;
-        margin-top: 16px;
+        margin-top: 14px;
         padding: 11px;
-        background: #0284c7;
-        color: white;
-        border: none;
+        border: 0;
         border-radius: 8px;
+        background: #0284c7;
+        color: #ffffff;
         font-size: 15px;
         font-weight: 600;
         cursor: pointer;
       }
-      button:active { background: #0369a1; }
       .error {
-        margin: 0 0 16px;
+        margin-bottom: 14px;
         padding: 10px 12px;
         background: #fef2f2;
         border: 1px solid #fecaca;
@@ -88,20 +96,57 @@
         border-radius: 8px;
         font-size: 13px;
       }
+      /* La separation dit qu'il y a deux chemins, pas un bouton de plus. */
+      .ou {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 22px 0 16px;
+        /* #94a3b8 rendait 2,8:1 sur blanc, sous le seuil AA. Cette page se
+           lit au soleil, sur un telephone : le contraste y compte plus
+           qu'ailleurs. */
+        color: #64748b;
+        font-size: 12px;
+      }
+      .ou::before,
+      .ou::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: #e2e8f0;
+      }
+      .payer {
+        display: block;
+        padding: 11px;
+        border: 1px solid #10b981;
+        border-radius: 8px;
+        background: #ecfdf5;
+        color: #047857;
+        font-size: 15px;
+        font-weight: 600;
+        text-align: center;
+        text-decoration: none;
+      }
+      .payer-aide {
+        margin: 8px 0 0;
+        text-align: center;
+        font-size: 12px;
+        color: #64748b;
+      }
       .footer {
         margin-top: 18px;
         text-align: center;
         font-size: 12px;
-        color: #94a3b8;
+        color: #64748b;
       }
     </style>
   </head>
   <body>
     <div class="card">
-      <h1>Zone WIFI-TATI</h1>
-      <p class="subtitle">Entrez le code reçu après votre achat pour accéder à Internet.</p>
+      <h1>__MARQUE__</h1>
+      <p class="subtitle">Entrez le code re&ccedil;u apr&egrave;s votre achat pour acc&eacute;der &agrave; Internet.</p>
 
-      $(if chap-id)<div class="error">Session expirée, veuillez réessayer.</div>$(endif)
+      $(if chap-id)<div class="error">Session expir&eacute;e, veuillez r&eacute;essayer.</div>$(endif)
       $(if error)<div class="error">$(error)</div>$(endif)
 
       <form name="login" action="$(link-login-only)" method="post" onsubmit="return prepareSubmit();">
@@ -110,29 +155,78 @@
         <input type="hidden" name="username" id="hidden-username" />
         <input type="hidden" name="password" id="hidden-password" />
 
-        <label for="code">Code d'accès</label>
+        <label for="code">Code d'acc&egrave;s ou nom</label>
         <input
           type="text"
           id="code"
           autocomplete="off"
-          autocapitalize="characters"
+          autocapitalize="off"
+          autocorrect="off"
           spellcheck="false"
           required
-          placeholder="EX: KF77HRT7C4"
+          placeholder="KF77HRT7C4"
+        />
+
+        <!--
+          Le second champ n'existe que pour les acces achetes en ligne, qui
+          ont un nom ET une reference. Un ticket imprime le laisse vide : son
+          code vaut des deux cotes, et c'est le cas courant -- lui imposer de
+          taper deux fois la meme chose serait une corvee ajoutee pour rien.
+        -->
+        <label for="motdepasse" style="margin-top:14px">
+          Mot de passe <span style="font-weight:400;color:#64748b">(achat en ligne)</span>
+        </label>
+        <input
+          type="text"
+          id="motdepasse"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+          placeholder="laisser vide si vous avez un ticket"
         />
 
         <button type="submit">Se connecter</button>
       </form>
 
-      <div class="footer">Zone WIFI-TATI — Motombe-Tanambao</div>
+      <!--
+        Le second chemin, celui qui manquait. Un client sans code voyait une
+        page qui ne lui proposait rien : il devait trouver le vendeur. Le
+        lien mene a la page de paiement, joignable SANS Internet -- elle est
+        servie sur le reseau local et ouverte dans le Walled Garden.
+      -->
+      <div class="ou">ou</div>
+
+      <a class="payer" href="__PORTAIL__/p/__SLUG__">Acheter un acc&egrave;s</a>
+      <p class="payer-aide">
+        Payez par Mobile Money, sans quitter le Wi-Fi.
+      </p>
+
+      <div class="footer">__LIEU__</div>
     </div>
 
     <script>
       function prepareSubmit() {
-        var code = document.getElementById('code').value.trim().toUpperCase();
-        if (!code) return false;
-        document.getElementById('hidden-username').value = code;
-        document.getElementById('hidden-password').value = code;
+        var identifiant = document.getElementById('code').value.trim();
+        var motdepasse = document.getElementById('motdepasse').value.trim();
+        if (!identifiant) return false;
+
+        if (motdepasse) {
+          // Achat en ligne : un nom et une reference, envoyes tels quels.
+          // Surtout PAS de passage en majuscules -- l'identifiant est un nom
+          // propre, "Herve-Razafy", et le majusculer ne correspondrait plus
+          // au compte cree. C'est pour cela que le champ porte
+          // autocapitalize="off" : sur un telephone, le clavier l'aurait fait
+          // tout seul.
+          document.getElementById('hidden-username').value = identifiant;
+          document.getElementById('hidden-password').value = motdepasse;
+        } else {
+          // Ticket imprime : un seul code, qui vaut des deux cotes. Il est
+          // genere en majuscules, donc on accepte qu'il soit tape autrement.
+          var code = identifiant.toUpperCase();
+          document.getElementById('hidden-username').value = code;
+          document.getElementById('hidden-password').value = code;
+        }
         return true;
       }
     </script>
