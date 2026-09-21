@@ -7,6 +7,14 @@ export interface AuditEntry {
   targetType: string;
   targetId: string | null;
   result: 'SUCCESS' | 'FAILURE';
+  /**
+   * Vrai quand l'auteur est un SUPER_ADMIN agissant **au nom** de
+   * l'exploitant, et non l'exploitant lui-même.
+   *
+   * « L'exploitant a supprimé ce compte » et « l'éditeur l'a supprimé pour
+   * lui » ne se relisent pas de la même façon, et rien ne les distinguait.
+   */
+  priseEnMain: boolean;
   ipAddress: string | null;
   createdAt: string;
   /** Nul si le compte a été supprimé depuis : le journal survit à son auteur. */

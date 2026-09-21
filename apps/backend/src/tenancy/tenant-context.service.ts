@@ -6,6 +6,16 @@ export interface TenantContext {
   tenantId: string | null;
   /** Vrai uniquement pour le SUPER_ADMIN : contourne le cloisonnement. */
   isSuperAdmin: boolean;
+  /**
+   * Vrai quand un SUPER_ADMIN agit **au nom** d'un exploitant.
+   *
+   * Distinct de `isSuperAdmin`, qui est justement abandonné dans ce cas : le
+   * contexte devient indiscernable de celui de l'exploitant, et c'est voulu
+   * pour le cloisonnement. Mais le journal, lui, doit pouvoir dire qui a
+   * réellement agi — « l'exploitant a supprimé ce compte » et « l'éditeur
+   * l'a supprimé pour lui » ne se relisent pas de la même façon.
+   */
+  priseEnMain?: boolean;
 }
 
 /**

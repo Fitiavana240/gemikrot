@@ -160,6 +160,12 @@ export function AuditPage() {
                 {/* Un compte supprimé laisse ses traces : le dire plutôt que
                     d'afficher une case vide. */}
                 {entrée.adminUserName ?? <span className="text-slate-400">compte supprimé</span>}
+                {/* Le geste d'une assistance ne se lit pas comme celui de
+                    l'exploitant : c'est la premiere question qu'on pose en
+                    relisant un journal apres une intervention. */}
+                {entrée.priseEnMain && (
+                  <Badge tone="amber">pour vous</Badge>
+                )}
               </td>
               <td className="px-3 py-2">
                 <Badge tone={entrée.result === 'SUCCESS' ? 'green' : 'red'}>

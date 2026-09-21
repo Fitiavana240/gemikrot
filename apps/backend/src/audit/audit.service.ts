@@ -71,6 +71,9 @@ export class AuditService {
         targetId: entry.targetId,
         payloadDiff: entry.payloadDiff,
         ipAddress: entry.ipAddress,
+        // Lu du contexte, jamais de l'appelant : un service qui devrait y
+        // penser finirait par l'oublier là où cela compte le plus.
+        priseEnMain: this.tenantContext.get()?.priseEnMain === true,
         result: entry.result ?? AuditResult.SUCCESS,
       },
     });

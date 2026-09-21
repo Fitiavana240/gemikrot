@@ -54,6 +54,23 @@ describe('TenantContextInterceptor', () => {
     expect(vu.isSuperAdmin).toBe(false);
   });
 
+  it('marque la prise en main, là où le contournement est abandonné', () => {
+    // `isSuperAdmin` tombe pour que le cloisonnement ignore qui agit — c'est
+    // voulu. Mais le journal, lui, doit pouvoir dire que l'éditeur agissait
+    // au nom de l'exploitant : sans ce drapeau, les deux gestes se relisent
+    // pareil.
+    const vu = contexteVu('SUPER_ADMIN', null, 'tenant-b');
+
+    expect(vu.priseEnMain).toBe(true);
+    expect(vu.isSuperAdmin).toBe(false);
+  });
+
+  it('ne marque aucune prise en main pour un exploitant chez lui', () => {
+    const vu = contexteVu('ADMIN', 'tenant-a');
+
+    expect(vu.priseEnMain).toBeFalsy();
+  });
+
   it('garde le contournement quand aucun exploitant n’est ciblé', () => {
     const vu = contexteVu('SUPER_ADMIN', null);
 

@@ -125,6 +125,53 @@ function SelecteurExploitant() {
   );
 }
 
+/**
+ * « Vous agissez au nom de X », en permanence.
+ *
+ * Le sélecteur d'exploitant est un menu déroulant parmi d'autres commandes :
+ * on oublie très vite qu'on est chez quelqu'un d'autre, et chaque geste part
+ * alors sur son parc, marqué à son nom. Le journal, lui, s'en souviendra.
+ *
+ * Le bandeau ne s'affiche que pour un SUPER_ADMIN ayant ciblé un exploitant
+ * — pour tout autre compte, il n'y a personne au nom de qui agir.
+ */
+function BandeauPriseEnMain() {
+  const { user } = useAuth();
+  const [cible] = useState(getTenantCible);
+
+  const exploitants = useQuery({
+    queryKey: ['tenants-cibles'],
+    queryFn: tenantsApi.list,
+    enabled: user?.role === 'SUPER_ADMIN' && Boolean(cible),
+    retry: false,
+  });
+
+  if (user?.role !== 'SUPER_ADMIN' || !cible) return null;
+  const exploitant = exploitants.data?.find((t) => t.id === cible);
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-amber-300 bg-amber-100 px-4 py-2 text-sm text-amber-900 lg:px-6">
+      <span className="font-medium">
+        Vous agissez au nom de {exploitant ? (exploitant.wifiName || exploitant.name) : "cet exploitant"}.
+      </span>
+      <span className="text-amber-800">
+        Tout ce que vous ferez portera son nom, sur son parc, et le journal le
+        signalera comme une prise en main.
+      </span>
+      <button
+        type="button"
+        onClick={() => {
+          setTenantCible(null);
+          window.location.reload();
+        }}
+        className="ml-auto rounded-md border border-amber-400 bg-white px-2 py-0.5 text-xs font-medium text-amber-900 hover:bg-amber-50"
+      >
+        Quitter
+      </button>
+    </div>
+  );
+}
+
 export function Layout() {
   const { user, logout } = useAuth();
 
@@ -228,6 +275,11 @@ export function Layout() {
             Déconnexion
           </button>
         </header>
+        {/* Agir au nom de quelqu'un doit se voir en permanence, pas se
+            deviner dans un menu deroulant : on oublie tres vite qu'on est
+            chez l'autre, et le journal, lui, s'en souviendra. */}
+        <BandeauPriseEnMain />
+
         <main className="min-w-0 flex-1 p-4 lg:p-6">
           <Outlet />
         </main>

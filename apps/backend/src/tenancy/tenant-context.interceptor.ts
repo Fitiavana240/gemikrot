@@ -42,7 +42,9 @@ export class TenantContextInterceptor implements NestInterceptor {
 
     return this.tenantContext.run(
       ciblé
-        ? { tenantId: ciblé, isSuperAdmin: false }
+        ? // `priseEnMain` survit là où `isSuperAdmin` est abandonné : le
+          // cloisonnement doit ignorer qui agit, le journal non.
+          { tenantId: ciblé, isSuperAdmin: false, priseEnMain: true }
         : { tenantId: user?.tenantId ?? null, isSuperAdmin: estSuperAdmin },
       () => next.handle(),
     );

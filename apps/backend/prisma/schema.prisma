@@ -628,6 +628,14 @@ model AuditLog {
   targetId    String?     @map("target_id")
   payloadDiff Json?       @map("payload_diff")
   ipAddress   String?     @map("ip_address")
+  /// Vrai quand l'auteur est un SUPER_ADMIN agissant **au nom** d'un
+  /// exploitant, et non l'exploitant lui-même.
+  ///
+  /// Le geste et son auteur sont déjà enregistrés, mais rien ne distinguait
+  /// « l'exploitant a supprimé ce compte » de « l'éditeur l'a supprimé pour
+  /// lui ». C'est pourtant la première question qu'on pose en relisant un
+  /// journal après une intervention d'assistance.
+  priseEnMain Boolean     @default(false) @map("prise_en_main")
   result      AuditResult @default(SUCCESS)
   createdAt   DateTime    @default(now()) @map("created_at")
 
