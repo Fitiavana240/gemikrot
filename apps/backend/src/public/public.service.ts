@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { identifiantDepuisNom, identifiantUtilisable } from './identifiant.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
+import { CourrielService } from '../courriel/courriel.service.js';
 import {
   isUsablePhone,
   isUsableReference,
@@ -114,7 +115,64 @@ export class PublicService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    /**
+     * Facultatif, et il faut qu'il le soit.
+     *
+     * Ce service est éprouvé contre la vraie base, construit à la main dans
+     * ses tests. Le rendre obligatoire ferait de l'envoi de courriel une
+     * condition pour déclarer un paiement — et un paiement qu'on ne peut pas
+     * déclarer parce qu'un serveur SMTP manque serait un client perdu pour
+     * une raison qui ne le regarde pas.
+     */
+    private readonly courriel?: CourrielService,
   ) {}
+
+  /**
+   * Prévient les administrateurs qu'un client attend son code.
+   *
+   * C'est la panne la plus chère du produit : un paiement déclaré qui dort
+   * trois jours parce que personne n'a ouvert le bon écran. Relevé sur ce
+   * parc — deux clients dans ce cas.
+   *
+   * N'interrompt jamais la déclaration : le client a payé, son paiement doit
+   * être enregistré même si aucun courriel ne part. L'échec est tracé dans le
+   * journal des envois, où il se voit.
+   */
+  private async prevenirLesAdmins(
+    tenantId: string,
+    quoi: { offre: string; identifiant: string; reference: string },
+  ): Promise<void> {
+    if (!this.courriel) return;
+    try {
+      const admins = await this.prisma.adminUser.findMany({
+        // Les comptes qui peuvent agir sur le paiement, et eux seuls : prevenir
+        // un lecteur seul le laisserait devant une alerte qu'il ne peut pas
+        // lever, et diluerait celles qui comptent.
+        where: { tenantId, role: { in: ['SUPER_ADMIN', 'ADMIN'] } },
+        select: { email: true },
+      });
+      for (const admin of admins) {
+        await this.courriel.envoyer({
+          tenantId,
+          destinataire: admin.email,
+          sujet: `Paiement à vérifier — ${quoi.offre}`,
+          texte:
+            `Un client vient de déclarer un paiement et attend son accès.\n\n` +
+            `Offre : ${quoi.offre}\n` +
+            `Identifiant : ${quoi.identifiant}\n` +
+            `Référence : ${quoi.reference}\n\n` +
+            `Tant qu'il n'est pas vérifié, ce client a payé et n'a rien reçu.\n\n` +
+            `— GeMikrot`,
+          type: 'paiement-declare',
+        });
+      }
+    } catch (e) {
+      // Tracé et oublié : prévenir est un accessoire, encaisser ne l'est pas.
+      this.logger.warn(
+        `Avertissement des administrateurs impossible : ${e instanceof Error ? e.message : e}`,
+      );
+    }
+  }
 
   /**
    * L'exploitant à qui appartient cette adresse.
@@ -371,6 +429,11 @@ export class PublicService {
         this.logger.log(
           `Temps racheté : ${plan.name} pour ${déjàPris.code} (${account.provider})`,
         );
+        await this.prevenirLesAdmins(tenant.id, {
+          offre: plan.name,
+          identifiant: déjàPris.code,
+          reference,
+        });
         return { token: suivi.token, state: 'EN_ATTENTE' as const, identifiant: déjàPris.code };
       }
 
@@ -421,6 +484,11 @@ export class PublicService {
       this.logger.log(
         `Paiement déclaré : ${plan.name} par ${phone} (${account.provider}), identifiant ${identifiant}`,
       );
+      await this.prevenirLesAdmins(tenant.id, {
+        offre: plan.name,
+        identifiant,
+        reference,
+      });
       return { token: claim.token, state: 'EN_ATTENTE' as const, identifiant };
     });
   }

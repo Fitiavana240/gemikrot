@@ -12,6 +12,7 @@ import { MotDePasseCard } from '../components/MotDePasseCard';
 import { ApparenceTab } from './ApparenceTab';
 import { TicketTemplatesTab } from './TicketTemplatesPage';
 import { PageConnexionTab } from './PageConnexionTab';
+import { CourrielTab } from './CourrielTab';
 import {
   Badge,
   Button,
@@ -377,6 +378,7 @@ const ONGLETS: TabDef[] = [
   { to: 'apparence', label: 'Apparence' },
   { to: 'tickets', label: 'Modèle de ticket' },
   { to: 'portail', label: 'Portail captif' },
+  { to: 'courriel', label: 'Courriel' },
   { to: 'compte', label: 'Mon compte' },
 ];
 
@@ -395,6 +397,7 @@ export function SettingsPage() {
       {tab === 'apparence' && <ApparenceTab />}
       {tab === 'tickets' && <TicketTemplatesTab />}
       {tab === 'portail' && <PageConnexionTab />}
+      {tab === 'courriel' && <CourrielTab />}
       {tab === 'compte' && <MotDePasseCard />}
     </div>
   );

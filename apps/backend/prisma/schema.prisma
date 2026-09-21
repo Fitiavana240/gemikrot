@@ -35,6 +35,31 @@ model Tenant {
   /// Domaines du portail captif (ex: wifitati.net).
   domains   String[]     @default([])
   logoUrl   String?      @map("logo_url")
+  // ---------- Courriel ----------
+  //
+  // Un SMTP par exploitant : le message part de SON adresse, a sa marque. Un
+  // compte unique de plateforme ferait partir les courriels d'une adresse qui
+  // n'est pas la sienne, et une reputation abimee par un seul les toucherait
+  // tous.
+
+  /// Serveur d'envoi, ex. `smtp.gmail.com`. Vide, rien ne part.
+  smtpHost     String?  @map("smtp_host")
+  /// 587 pour STARTTLS, 465 pour TLS direct.
+  smtpPort     Int?     @map("smtp_port")
+  /// Vrai pour le port 465, faux pour 587 : ce n'est pas << chiffrer ou non >>,
+  /// c'est << chiffre des la connexion, ou apres un STARTTLS >>.
+  smtpSecure   Boolean  @default(false) @map("smtp_secure")
+  smtpUser     String?  @map("smtp_user")
+  /// Chiffre par la meme cle que les identifiants routeur : il ne doit jamais
+  /// transiter en clair ni revenir au navigateur.
+  smtpPasswordEncrypted String? @map("smtp_password_encrypted")
+  /// L'expediteur affiche, ex. `Zone WIFI-TATI <contact@wifitati.net>`.
+  smtpFrom     String?  @map("smtp_from")
+  /// Interrupteur general. **Faux par defaut**, et c'est deliberе : une
+  /// configuration enregistree ne doit pas se mettre a ecrire a des clients
+  /// avant que l'exploitant ait dit oui.
+  smtpActif    Boolean  @default(false) @map("smtp_actif")
+
   /// Numéro WhatsApp d'assistance, affiché au client quand son paiement
   /// n'aboutit pas. Au format international sans « + » ni espaces, tel que
   /// l'attend `wa.me` : `261340000000`. Vide, aucun lien n'est proposé —
@@ -83,8 +108,40 @@ model Tenant {
   paymentClaims       PaymentClaim[]
   routerOperations    RouterOperation[]
   hotspotLoginPage    HotspotLoginPage?
+  courriels           Courriel[]
 
   @@map("tenants")
+}
+
+/// Un courriel, tel qu'il est parti -- ou tel qu'il a echoue.
+///
+/// **Chaque tentative laisse une ligne, reussie ou non.** Un envoi qui echoue
+/// en silence est pire que pas d'envoi du tout : l'exploitant croit avoir
+/// prevenu, le client n'a rien recu, et personne ne le saura jamais. C'est la
+/// meme raison qui fera exiger un journal des SMS le jour ou la passerelle
+/// existera.
+///
+/// Le corps n'est pas garde : il se reconstruit depuis le type et la cible, et
+/// stocker le texte de milliers de messages ferait grossir la base pour une
+/// information qu'on relit une fois par an.
+model Courriel {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  /// A qui. Une seule adresse par ligne : un envoi groupe en fait plusieurs.
+  destinataire String
+  sujet     String
+  /// Ce qui a declenche l'envoi, ex. `paiement-declare`, `essai`.
+  type      String
+  /// `ENVOYE` ou `ECHEC`. Pas de `EN_ATTENTE` : l'envoi est synchrone, et une
+  /// ligne en attente pour toujours serait un mensonge de plus.
+  statut    String
+  /// Le refus du serveur, tel qu'il l'a dit. Nul quand tout s'est bien passe.
+  erreur    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@map("courriels")
 }
 
 /// Une notification qu'un administrateur a ecartee.

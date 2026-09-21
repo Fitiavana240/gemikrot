@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
 import { TenancyModule } from './tenancy/tenancy.module.js';
 import { TenantsModule } from './tenants/tenants.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
+import { CourrielModule } from './courriel/courriel.module.js';
 import { AdminUsersModule } from './admin-users/admin-users.module.js';
 import { RoutersModule } from './routers/routers.module.js';
 import { AuditModule } from './audit/audit.module.js';
@@ -30,6 +31,7 @@ import { PublicModule } from './public/public.module.js';
     PrismaModule,
     TenantsModule,
     NotificationsModule,
+    CourrielModule,
     AdminUsersModule,
     RoutersModule,
     AuditModule,
