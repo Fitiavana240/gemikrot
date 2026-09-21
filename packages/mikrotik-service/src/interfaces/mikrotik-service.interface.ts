@@ -74,6 +74,7 @@ import {
   DnsStaticEntryDto,
   FirewallRuleDto,
   RouteDto,
+  AddressPoolDto,
   DhcpServerDto,
   IpCloudDto,
   IpServiceDto,
@@ -330,6 +331,11 @@ export interface IMikrotikService {
   /** Table ARP : correspondance adresse / materiel. */
   getArpEntries(): Promise<ArpEntryDto[]>;
   getDhcpServers(): Promise<DhcpServerDto[]>;
+  /**
+   * Bassins d'adresses, avec le detail de qui les occupe. C'est le plafond
+   * reel du nombre de clients simultanes, independant des tickets vendus.
+   */
+  getAddressPools(): Promise<AddressPoolDto[]>;
 
   /** Regles de filtrage, dans leur ordre d'evaluation. */
   getFirewallFilterRules(): Promise<FirewallRuleDto[]>;

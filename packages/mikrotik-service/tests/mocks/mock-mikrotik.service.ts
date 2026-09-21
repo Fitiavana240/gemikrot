@@ -56,7 +56,7 @@ import {
   PppSecretDto,
   PppoeServerDto,
 } from '../../src/dto/ppp.dto';
-import { CreatePppSecretDto } from '../../src/dto/commands.dto';
+import { CreatePppSecretDto, UpdatePppSecretDto } from '../../src/dto/commands.dto';
 import {
   HotspotServicePortDto,
   UmAttributeDto,
@@ -69,7 +69,13 @@ import {
   UserManagerReadinessDto,
 } from '../../src/dto/router-storage.dto';
 import {
+  AddressPoolDto,
   ArpEntryDto,
+  BridgeDto,
+  BridgePortDto,
+  CertificateDto,
+  ChangementRouteurDto,
+  DhcpClientDto,
   DnsSettingsDto,
   DnsStaticEntryDto,
   FirewallRuleDto,
@@ -77,9 +83,23 @@ import {
   DhcpServerDto,
   IpCloudDto,
   IpServiceDto,
+  EthernetPortDto,
+  HorlogeRouteurDto,
+  IpAddressDto,
   NetworkInterfaceStatsDto,
+  RadiusClientDto,
+  RouterAccountDto,
+  RouterAccountGroupDto,
+  RouterExpositionDto,
   RouterLogEntryDto,
+  RouterScheduleDto,
+  RouterScriptDto,
   SimpleQueueDto,
+  SuiviConnexionsDto,
+  WireguardInterfaceDto,
+  WireguardPeerDto,
+  WirelessClientDto,
+  WirelessInterfaceDto,
 } from '../../src/dto/router-tools.dto';
 import { MikrotikConflictError, MikrotikNotFoundError } from '../../src/errors/mikrotik.errors';
 
@@ -192,6 +212,7 @@ export class MockMikrotikService implements IMikrotikService {
       bytesOut: 0,
       uptimeSeconds: 0,
       limitUptimeSeconds: null,
+      limitBytesTotal: null,
       limitBytesIn: null,
       limitBytesOut: null,
     };
@@ -234,6 +255,11 @@ export class MockMikrotikService implements IMikrotikService {
       sessionTimeoutSeconds: input.sessionTimeoutSeconds ?? null,
       sharedUsers: input.sharedUsers ?? 1,
       idleTimeoutSeconds: null,
+      keepaliveTimeoutSeconds: null,
+      // Le cookie est ce qui rouvre une session sans repasser par le
+      // portail : un profil créé sans lui n'en pose pas.
+      addMacCookie: false,
+      macCookieTimeoutSeconds: null,
     };
     this.hotspotProfiles.set(input.name, profile);
     return profile;
@@ -551,6 +577,9 @@ export class MockMikrotikService implements IMikrotikService {
       profileName: input.profileName,
       endTime,
       state: 'running-active',
+      // Une attribution créée ici porte forcément un compte existant : le
+      // cas contraire vient d'attributions orphelines lues sur le routeur.
+      usernameIntrouvable: false,
     };
     this.userProfiles.push(assignment);
     return assignment;
@@ -608,7 +637,33 @@ export class MockMikrotikService implements IMikrotikService {
         txBitsPerSecond: input.rateLimitTxBitsPerSecond ?? null,
       },
       transferLimitBytes: input.transferLimitBytes ?? null,
+      downloadLimitBytes: input.downloadLimitBytes ?? null,
+      uploadLimitBytes: input.uploadLimitBytes ?? null,
       uptimeLimitSeconds: input.uptimeLimitSeconds ?? null,
+      resetCountersIntervalSeconds: input.resetCountersIntervalSeconds ?? null,
+      resetCountersStartTime: input.resetCountersStartTime ?? null,
+      // Le garanti, par opposition au plafond : RouterOS le sert d'abord à
+      // tout le monde, puis distribue ce qui reste.
+      rateLimitMin: {
+        rxBitsPerSecond: input.rateLimitMinRxBitsPerSecond ?? null,
+        txBitsPerSecond: input.rateLimitMinTxBitsPerSecond ?? null,
+      },
+      rateLimitPriority: input.rateLimitPriority ?? null,
+      // Les trois réglages de pointe ne veulent rien dire séparément :
+      // `burst` sans `burstTime` ne s'applique jamais. Une limitation créée
+      // sans eux n'en porte aucun.
+      rateLimitBurst: {
+        rxBitsPerSecond: input.rateLimitBurstRxBitsPerSecond ?? null,
+        txBitsPerSecond: input.rateLimitBurstTxBitsPerSecond ?? null,
+      },
+      rateLimitBurstThreshold: {
+        rxBitsPerSecond: input.rateLimitBurstThresholdRxBitsPerSecond ?? null,
+        txBitsPerSecond: input.rateLimitBurstThresholdTxBitsPerSecond ?? null,
+      },
+      rateLimitBurstTimeSeconds: {
+        rx: input.rateLimitBurstTimeRxSeconds ?? null,
+        tx: input.rateLimitBurstTimeTxSeconds ?? null,
+      },
     };
     this.limitations.set(input.name, limitation);
     return limitation;
@@ -667,6 +722,11 @@ export class MockMikrotikService implements IMikrotikService {
       id: this.nextId(),
       profileName: input.profileName,
       limitationName: input.limitationName,
+      // Une jonction créée sans condition vaut toute la journée, tous les
+      // jours — c'est aussi ce que RouterOS écrit par défaut.
+      fromTimeSeconds: 0,
+      tillTimeSeconds: 86_399,
+      weekdays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
     };
     this.profileLimitations.push(junction);
     return junction;
@@ -873,6 +933,7 @@ export class MockMikrotikService implements IMikrotikService {
       disks: [],
       packages: [],
       parRacine: [],
+      routerboard: null,
     };
   }
 
@@ -973,6 +1034,123 @@ export class MockMikrotikService implements IMikrotikService {
   async unschedulePackage(_name: string) {
     if (this.umIgnoreLesEcritures) return;
     this.umEtat.paquetProgramme = '';
+  }
+
+  // ---------- Outils de diagnostic ----------
+  //
+  // Ce simulacre modélise ce que le backend **écrit** : comptes, profils,
+  // attributions, baux. Les écrans de diagnostic, eux, ne font que lire un
+  // état que le routeur produit tout seul — ports cuivre, historique,
+  // certificats, table de suivi. Il n'y a rien à simuler qu'on ne serait
+  // en train d'inventer, et un jeu de données inventé ferait passer des
+  // tests qui ne prouvent rien.
+  //
+  // Ils rendent donc un état vide, et c'est le contrat : un test qui a
+  // besoin d'un cas particulier le pose lui-même avec un `jest.spyOn`,
+  // plutôt que de dépendre de valeurs choisies ici.
+
+  async getPortsEthernet(): Promise<EthernetPortDto[]> {
+    return [];
+  }
+
+  async getHorloge(): Promise<HorlogeRouteurDto> {
+    return {
+      date: '1970-01-01',
+      time: '00:00:00',
+      timeZone: 'UTC',
+      gmtOffset: '+00:00',
+      dstActive: false,
+      ntpEnabled: false,
+      ntpStatus: '',
+      ntpServers: [],
+      ntpSyncedServer: null,
+      ntpStratum: null,
+      ntpOffsetMs: null,
+      uptime: '0s',
+    };
+  }
+
+  async getHistoriqueConfiguration(): Promise<ChangementRouteurDto[]> {
+    return [];
+  }
+
+  async getSuiviConnexions(): Promise<SuiviConnexionsDto> {
+    return { total: 0, maxEntries: 0, tcpEstablishedTimeout: '', clients: [] };
+  }
+
+  async getAcces(): Promise<{
+    comptes: RouterAccountDto[];
+    groupes: RouterAccountGroupDto[];
+    exposition: RouterExpositionDto;
+  }> {
+    return {
+      comptes: [],
+      groupes: [],
+      exposition: {
+        macServerInterfaces: '',
+        macPingEnabled: false,
+        proxyEnabled: false,
+        upnpEnabled: false,
+        snmpEnabled: false,
+      },
+    };
+  }
+
+  async getCertificates(): Promise<CertificateDto[]> {
+    return [];
+  }
+
+  async getAutomatisations(): Promise<{
+    scripts: RouterScriptDto[];
+    taches: RouterScheduleDto[];
+  }> {
+    return { scripts: [], taches: [] };
+  }
+
+  async getAddressPools(): Promise<AddressPoolDto[]> {
+    return [];
+  }
+
+  async getWirelessInterfaces(): Promise<WirelessInterfaceDto[]> {
+    return [];
+  }
+
+  async getWirelessClients(): Promise<WirelessClientDto[]> {
+    return [];
+  }
+
+  async getRadiusClients(): Promise<RadiusClientDto[]> {
+    return [];
+  }
+
+  async getWireguard(): Promise<{
+    interfaces: WireguardInterfaceDto[];
+    peers: WireguardPeerDto[];
+  }> {
+    return { interfaces: [], peers: [] };
+  }
+
+  async getStructureReseau(): Promise<{
+    addresses: IpAddressDto[];
+    bridges: BridgeDto[];
+    ports: BridgePortDto[];
+    dhcpClients: DhcpClientDto[];
+  }> {
+    return { addresses: [], bridges: [], ports: [], dhcpClients: [] };
+  }
+
+  /**
+   * L'écriture de fichier, elle, est bien modélisée : elle sert aux planches
+   * de tickets, et un test qui la croit muette manquerait une régression.
+   */
+  private fichiers = new Map<string, string>();
+
+  async writeRouterFile(name: string, contents: string): Promise<void> {
+    this.fichiers.set(name, contents);
+  }
+
+  async deleteRouterFile(id: string): Promise<void> {
+    this.fichiers.delete(id);
   }
 
   // ---------- Aides de test ----------

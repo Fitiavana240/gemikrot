@@ -1,5 +1,6 @@
 import { parseRouterOsDuration } from './hotspot.mapper';
 import {
+  AddressPoolDto,
   ArpEntryDto,
   DhcpServerDto,
   DnsSettingsDto,
@@ -197,6 +198,41 @@ export function mapDhcpServer(raw: any): DhcpServerDto {
     useRadius: flag(raw?.['use-radius']),
     disabled: flag(raw?.disabled),
     invalid: flag(raw?.invalid),
+  };
+}
+
+/**
+ * Le bassin, et qui en tient les adresses.
+ *
+ * `utilisees` vient d'un second appel (`/ip/pool/used`) : le décompte par
+ * propriétaire est la seule façon de voir que le HotSpot prend une adresse de
+ * plus par client, et c'est précisément ce qui trompe quand on estime
+ * l'occupation à partir des baux DHCP.
+ */
+export function mapAddressPool(raw: any, utilisees: any[]): AddressPoolDto {
+  const nom = raw?.name ?? '';
+  const parProprietaire = new Map<string, number>();
+  for (const entree of utilisees) {
+    if ((entree?.pool ?? '') !== nom) continue;
+    const owner = String(entree?.owner ?? 'inconnu');
+    parProprietaire.set(owner, (parProprietaire.get(owner) ?? 0) + 1);
+  }
+
+  // `used` est renvoyé par RouterOS 7 ; on le recompte tout de même quand il
+  // manque, plutôt que d'afficher un bassin sans occupation.
+  const compte = [...parProprietaire.values()].reduce((a, b) => a + b, 0);
+  const used = nombreOuNull(raw?.used) ?? (utilisees.length > 0 ? compte : null);
+
+  return {
+    id: raw?.['.id'] ?? '',
+    name: nom,
+    ranges: raw?.ranges ?? '',
+    total: nombreOuNull(raw?.total),
+    used,
+    available: nombreOuNull(raw?.available),
+    byOwner: [...parProprietaire.entries()]
+      .map(([owner, count]) => ({ owner, count }))
+      .sort((a, b) => b.count - a.count),
   };
 }
 

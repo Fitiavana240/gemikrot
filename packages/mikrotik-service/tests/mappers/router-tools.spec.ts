@@ -1,4 +1,5 @@
 import {
+  mapAddressPool,
   mapArpEntry,
   mapIpCloud,
   mapIpService,
@@ -594,3 +595,50 @@ describe('mapIpService — risque et origine', () => {
   });
 });
 
+describe('mapAddressPool', () => {
+  // Relevé sur le parc : un seul bassin, 245 adresses, 29 prises pour
+  // 20 appareils. L'écart n'est pas une erreur de comptage.
+  const bassin = {
+    '.id': '*2',
+    name: 'pool-hotspot',
+    ranges: '192.168.88.10-192.168.88.254',
+    total: '245',
+    used: '29',
+    available: '216',
+  };
+  const utilisees = [
+    { address: '192.168.88.10', owner: 'hotspot', pool: 'pool-hotspot' },
+    { address: '192.168.88.12', owner: 'DHCP', pool: 'pool-hotspot' },
+    { address: '192.168.88.19', owner: 'DHCP', pool: 'pool-hotspot' },
+    // Une adresse d'un AUTRE bassin ne doit pas entrer dans le décompte.
+    { address: '10.0.0.5', owner: 'DHCP', pool: 'pool-admin' },
+  ];
+
+  it('rend les totaux du routeur en nombres', () => {
+    const p = mapAddressPool(bassin, utilisees);
+    expect(p.total).toBe(245);
+    expect(p.used).toBe(29);
+    expect(p.available).toBe(216);
+  });
+
+  it('compte par propriétaire, et seulement pour son bassin', () => {
+    const p = mapAddressPool(bassin, utilisees);
+    expect(p.byOwner).toEqual([
+      { owner: 'DHCP', count: 2 },
+      { owner: 'hotspot', count: 1 },
+    ]);
+  });
+
+  it('recompte les adresses prises quand le routeur ne les totalise pas', () => {
+    // Les versions qui ne renvoient pas `used` laisseraient sinon un bassin
+    // sans occupation, donc un écran qui ne dit rien.
+    const sansTotaux = { '.id': '*3', name: 'pool-hotspot', ranges: '10.0.0.2-10.0.0.9' };
+    const p = mapAddressPool(sansTotaux, utilisees);
+    expect(p.used).toBe(3);
+    expect(p.total).toBeNull();
+  });
+
+  it('ne conclut rien d’un bassin dont aucune adresse n’est lue', () => {
+    expect(mapAddressPool({ '.id': '*4', name: 'vide', ranges: '' }, []).used).toBeNull();
+  });
+});

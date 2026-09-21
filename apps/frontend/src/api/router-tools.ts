@@ -102,6 +102,29 @@ export interface DhcpServer {
 }
 
 
+/**
+ * Un bassin d'adresses — `/ip/pool`.
+ *
+ * Le plafond **réel** du nombre de clients simultanés, sans rapport avec le
+ * nombre de tickets vendus. Épuisé, le DHCP ne distribue plus rien : le
+ * client voit « connecté, sans Internet », le portail ne s'affiche même pas,
+ * et le HotSpot se porte très bien. Rien d'autre dans la console ne le dit.
+ */
+export interface BassinAdresses {
+  id: string;
+  name: string;
+  ranges: string;
+  total: number | null;
+  used: number | null;
+  available: number | null;
+  /**
+   * En NAT un-pour-un, le HotSpot prend une **seconde** adresse du même
+   * bassin par client : vingt appareils en consomment vingt-neuf, mesuré sur
+   * ce parc. Compter les baux DHCP donne donc un chiffre trop bas.
+   */
+  byOwner: { owner: string; count: number }[];
+}
+
 export interface FirewallRule {
   id: string;
   /** Position dans la chaine, a partir de 0 : c'est l'ordre d'evaluation. */
@@ -327,6 +350,7 @@ export const routerToolsApi = {
   cloud: (routerId: string) => api.get<IpCloud>(`${base(routerId)}/cloud`),
   arp: (routerId: string) => api.get<ArpEntry[]>(`${base(routerId)}/arp`),
   dhcpServers: (routerId: string) => api.get<DhcpServer[]>(`${base(routerId)}/dhcp-servers`),
+  pools: (routerId: string) => api.get<BassinAdresses[]>(`${base(routerId)}/pools`),
   firewallFilter: (routerId: string) =>
     api.get<FirewallRule[]>(`${base(routerId)}/firewall/filter`),
   firewallNat: (routerId: string) => api.get<FirewallRule[]>(`${base(routerId)}/firewall/nat`),

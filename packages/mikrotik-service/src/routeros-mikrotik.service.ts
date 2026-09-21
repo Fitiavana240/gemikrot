@@ -1201,6 +1201,22 @@ export class RouterOSMikrotikService implements IMikrotikService {
     return raw.map(ToolsMapper.mapDhcpServer);
   }
 
+  /**
+   * Les bassins d'adresses, avec le détail de qui les occupe.
+   *
+   * Deux appels, et non un : `/ip/pool` donne les totaux, `/ip/pool/used`
+   * donne le propriétaire de chaque adresse prise. Le second est ce qui rend
+   * visible la double consommation du HotSpot — sans lui, un bassin à moitié
+   * plein paraît au quart.
+   */
+  async getAddressPools() {
+    const [pools, utilisees] = await Promise.all([
+      this.client.get<any[]>('/ip/pool'),
+      this.client.get<any[]>('/ip/pool/used'),
+    ]);
+    return pools.map((pool) => ToolsMapper.mapAddressPool(pool, utilisees));
+  }
+
 
   // ---------- Pare-feu, DNS, routes ----------
 

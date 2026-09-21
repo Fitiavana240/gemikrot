@@ -21,6 +21,7 @@ import { CertificatsTab } from './CertificatsTab';
 import { HorlogeTab } from './HorlogeTab';
 import { AccesRouteurTab } from './AccesRouteurTab';
 import { ConnexionsTab } from './ConnexionsTab';
+import { BassinsTab } from './BassinsTab';
 import { HistoriqueTab } from './HistoriqueTab';
 import { TabBar, type TabDef } from '../components/TabBar';
 import {
@@ -1145,6 +1146,7 @@ const ONGLETS = {
   historique: { titre: 'Ce qui a changé', rendu: () => <HistoriqueTab /> },
   acces: { titre: 'Accès et DDNS', rendu: () => <AccesTab /> },
   appareils: { titre: 'DHCP et ARP', rendu: () => <AppareilsTab /> },
+  bassins: { titre: 'Réserve d’adresses', rendu: () => <BassinsTab /> },
   'pare-feu': { titre: 'Pare-feu', rendu: () => <PareFeuTab /> },
   dns: { titre: 'DNS', rendu: () => <DnsTab /> },
   routes: { titre: 'Routes', rendu: () => <RoutesTab /> },

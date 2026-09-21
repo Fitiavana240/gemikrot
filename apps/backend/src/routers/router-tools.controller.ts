@@ -77,6 +77,18 @@ export class RouterToolsController {
   }
 
   /**
+   * Bassins d'adresses : le plafond reel du nombre de clients simultanes.
+   *
+   * Independant des tickets vendus, et invisible partout ailleurs. Epuise,
+   * le DHCP ne distribue plus rien et le portail ne s'affiche meme pas,
+   * alors que le HotSpot se porte tres bien.
+   */
+  @Get('pools')
+  async pools(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getAddressPools();
+  }
+
+  /**
    * Regles de filtrage, dans leur ordre d'evaluation.
    *
    * L'ordre EST la logique : la premiere regle qui correspond decide. Le

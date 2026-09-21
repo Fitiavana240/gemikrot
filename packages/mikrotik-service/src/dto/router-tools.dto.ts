@@ -155,6 +155,36 @@ export interface DhcpServerDto {
 }
 
 /**
+ * Un bassin d'adresses — `/ip/pool`.
+ *
+ * C'est le plafond **réel** du nombre de clients simultanés, et il n'a rien à
+ * voir avec le nombre de tickets vendus. Épuisé, le DHCP ne distribue plus
+ * rien : le client voit « connecté, sans Internet » et le portail ne
+ * s'affiche même pas, alors que le HotSpot, lui, se porte très bien. C'est la
+ * panne la plus difficile à diagnostiquer de ce montage, parce qu'aucun des
+ * écrans habituels n'en dit un mot.
+ */
+export interface AddressPoolDto {
+  id: string;
+  name: string;
+  /** `192.168.88.10-192.168.88.254`, éventuellement plusieurs séparées par une virgule. */
+  ranges: string;
+  /** Capacité, adresses prises et adresses libres, telles que le routeur les compte. */
+  total: number | null;
+  used: number | null;
+  available: number | null;
+  /**
+   * Qui tient les adresses prises, et combien chacun.
+   *
+   * Non décoratif : en NAT un-pour-un, le HotSpot prend une **seconde**
+   * adresse du même bassin pour le compte de chaque client. Vingt appareils
+   * peuvent donc en consommer vingt-neuf — mesuré sur ce parc. Additionner
+   * les baux DHCP pour estimer l'occupation donne un chiffre trop bas.
+   */
+  byOwner: { owner: string; count: number }[];
+}
+
+/**
  * Une règle de pare-feu — `/ip/firewall/filter` ou `/ip/firewall/nat`.
  *
  * L'ordre est la logique : une règle de pare-feu ne vaut que par sa place dans
