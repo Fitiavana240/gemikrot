@@ -10,6 +10,7 @@ import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import { Badge, Button, FormField, Input, PageHeader, PanneDeLecture, Select, Table, TableSkeleton } from '../components/ui';
 import { Modale } from '../components/Modale';
+import { RapprochementProfils } from '../components/RapprochementProfils';
 import { Confirmation } from '../components/Edition';
 
 const EMPTY_FORM: CreatePlanInput = {
@@ -105,6 +106,10 @@ export function PlansPage() {
           connaît que le profil, et le profil reste. Rien n&apos;est effacé.
         </Confirmation>
       )}
+
+      {/* Avant la liste : ce qui diverge du routeur se lit d'abord, sinon
+          on relit des offres en croyant qu'elles sont toutes servies. */}
+      <RapprochementProfils />
 
       {canWrite && (
         <div>
