@@ -11,8 +11,19 @@ function daysFromNow(days: number): Date {
   return new Date(Date.now() + days * DAY_MS);
 }
 
+/**
+ * La fin de période du dernier abonnement fabriqué.
+ *
+ * Le simulacre du routeur en a besoin : User Manager **empile** les
+ * attributions — une nouvelle part de la fin de la précédente, pas de
+ * maintenant. Sans cela, le cas « le client paie en avance » ne serait pas
+ * éprouvé, et c'est précisément celui où l'on peut lui voler des jours.
+ */
+let finDePeriodeCourante = 0;
+
 function createFakePrisma(overrides: { periodEnd?: Date; graceEndsAt?: Date; status?: string } = {}) {
   const periodEnd = overrides.periodEnd ?? daysFromNow(10);
+  finDePeriodeCourante = periodEnd.getTime();
   const subscription = {
     id: 'sub-1',
     customerId: 'customer-1',
@@ -56,6 +67,21 @@ function createFakeMikrotik() {
   return {
     setUserManagerUserDisabled: vi.fn(async () => ({})),
     setIpBindingType: vi.fn(async () => ({})),
+    // Le routeur calcule l'échéance et la rend : c'est elle qui fait
+    // autorité, pas l'addition de jours faite en base. User Manager
+    // **empile** les attributions — une nouvelle part de la fin de la
+    // précédente, pas de maintenant — et le simulacre le reproduit, faute
+    // de quoi le cas « paie en avance » ne serait pas éprouvé.
+    assignProfile: vi.fn(async () => ({
+      id: '*9',
+      username: 'Mario',
+      profileName: '1Mois',
+      endTime: daysFromNow(
+        finDePeriodeCourante > Date.now() ? 30 + (finDePeriodeCourante - Date.now()) / DAY_MS : 30,
+      ).toISOString(),
+      state: 'running-active',
+      usernameIntrouvable: false,
+    })),
   };
 }
 
@@ -129,6 +155,52 @@ describe('SubscriptionsService', () => {
     expect(mikrotik.setIpBindingType).toHaveBeenCalledWith('*1', 'bypassed');
   });
 
+  it("repousse l'échéance sur le routeur, et pas seulement en base", async () => {
+    // Le défaut réparé : réactiver le compte le rendait acceptable de
+    // nouveau, mais sa validité restait échue côté User Manager. Le client
+    // payait, l'écran affichait « actif », et le routeur le refusait quand
+    // même.
+    prisma = createFakePrisma({ status: 'SUSPENDED', periodEnd: daysFromNow(-3) });
+    const service = buildService();
+
+    await service.renew('sub-1', undefined, 'admin-1');
+
+    expect(mikrotik.assignProfile).toHaveBeenCalledWith({
+      username: 'Mario',
+      profileName: expect.any(String),
+    });
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'RENEW_SUBSCRIPTION',
+        result: 'SUCCESS',
+        payloadDiff: expect.objectContaining({ echeancePousseeSurLeRouteur: true }),
+      }),
+    );
+  });
+
+  it("enregistre le renouvellement même si le routeur ne répond pas, et le dit", async () => {
+    // L'argent est encaissé : refuser d'enregistrer perdrait la trace du
+    // paiement. Mais un abonné payé et toujours expiré côté routeur doit se
+    // voir dans le journal, pas se deviner.
+    prisma = createFakePrisma({ periodEnd: daysFromNow(-1) });
+    mikrotik.assignProfile.mockRejectedValueOnce(new Error('routeur injoignable'));
+    const service = buildService();
+
+    const renewed = await service.renew('sub-1', undefined, 'admin-1');
+
+    expect(renewed.status).toBe('ACTIVE');
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'RENEW_SUBSCRIPTION',
+        result: 'FAILURE',
+        payloadDiff: expect.objectContaining({
+          echeancePousseeSurLeRouteur: false,
+          motif: 'routeur injoignable',
+        }),
+      }),
+    );
+  });
+
   it('prolonge depuis la fin de période en cours si le client paie en avance', async () => {
     const periodEnd = daysFromNow(10);
     prisma = createFakePrisma({ periodEnd });
@@ -139,6 +211,32 @@ describe('SubscriptionsService', () => {
     // 10 jours restants + 30 jours de période = ~40 jours, pas 30.
     const daysAdded = Math.round((renewed.currentPeriodEnd.getTime() - Date.now()) / DAY_MS);
     expect(daysAdded).toBe(40);
+  });
+
+  it("ne raccourcit jamais la période payée, même si le routeur l'annonce plus tôt", async () => {
+    // Si le routeur repartait de maintenant au lieu d'empiler, retenir son
+    // échéance volerait au client les jours qu'il lui restait. On garde la
+    // nôtre, et la divergence est dite plutôt que lissée.
+    prisma = createFakePrisma({ periodEnd: daysFromNow(10) });
+    mikrotik.assignProfile.mockResolvedValueOnce({
+      id: '*9',
+      username: 'Mario',
+      profileName: '1Mois',
+      endTime: daysFromNow(30).toISOString(),
+      state: 'running-active',
+      usernameIntrouvable: false,
+    });
+    const service = buildService();
+
+    const renewed = await service.renew('sub-1', undefined, 'admin-1');
+
+    const joursAjoutes = Math.round((renewed.currentPeriodEnd.getTime() - Date.now()) / DAY_MS);
+    expect(joursAjoutes).toBe(40);
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payloadDiff: expect.objectContaining({ motif: expect.stringContaining('plus tôt') }),
+      }),
+    );
   });
 
   it('recommande la suspension une fois la période de grâce écoulée', async () => {

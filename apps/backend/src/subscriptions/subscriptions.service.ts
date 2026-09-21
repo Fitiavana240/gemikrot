@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Payment, Prisma, Subscription, SubscriptionStatus } from '@prisma/client';
 import { MikrotikNotFoundError, type IMikrotikService } from '@wifitati/mikrotik-service';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -29,6 +29,8 @@ export interface SubscriptionRecommendation {
 
 @Injectable()
 export class SubscriptionsService {
+  private readonly logger = new Logger(SubscriptionsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -136,10 +138,63 @@ export class SubscriptionsService {
 
     const now = new Date();
     const start = subscription.currentPeriodEnd > now ? subscription.currentPeriodEnd : now;
-    const end = addDays(start, plan.subscriptionPeriodDays);
+    let end = addDays(start, plan.subscriptionPeriodDays);
 
     if (subscription.status === SubscriptionStatus.SUSPENDED) {
       await this.pushAccessState(subscription, true, adminUserId);
+    }
+
+    /**
+     * Repousser l'échéance **sur le routeur**, et pas seulement en base.
+     *
+     * C'est ce qui manquait : réactiver le compte le rendait acceptable de
+     * nouveau, mais sa validité restait échue côté User Manager. Le client
+     * payait, l'écran affichait « actif », et le routeur continuait de le
+     * refuser — la console mentait sur ce qu'elle avait fait.
+     *
+     * Une attribution de plus ouvre une nouvelle période : c'est le geste
+     * que fait déjà la création, et `end-time` en revient calculé par le
+     * routeur. Il fait alors autorité sur notre addition de jours.
+     */
+    let poussée = false;
+    let raisonNonPoussée: string | null = null;
+    try {
+      const { profileName } = await this.provisioning.reconcile(plan.id, subscription.routerId);
+      const mikrotik = await this.clients.forRouter(subscription.routerId);
+      const assignment = await mikrotik.assignProfile({
+        username: subscription.hotspotUsername,
+        profileName,
+      });
+      poussée = true;
+      // `starts-when=first-auth` laisse `end-time` vide tant que le client
+      // ne s'est pas reconnecté : la période commerciale sert alors de
+      // repli, et la réconciliation corrigera à la première connexion.
+      //
+      // Et jamais **plus tôt** que ce qui a été payé. Un client qui
+      // renouvelle en avance garde ses jours restants : si le routeur rendait
+      // une échéance antérieure — parce qu'il repart de maintenant au lieu
+      // d'empiler sur la période en cours — la retenir lui volerait ces
+      // jours-là, en silence. On garde alors la nôtre et on le signale : les
+      // deux dates qui divergent sont un fait à voir, pas à lisser.
+      if (assignment.endTime) {
+        const duRouteur = new Date(assignment.endTime);
+        if (duRouteur >= end) {
+          end = duRouteur;
+        } else {
+          raisonNonPoussée = `le routeur annonce ${duRouteur.toISOString()}, plus tôt que la période payée (${end.toISOString()})`;
+          this.logger.warn(
+            `Échéance du routeur antérieure à la période payée pour ${subscription.hotspotUsername} : ${raisonNonPoussée}`,
+          );
+        }
+      }
+    } catch (error) {
+      // L'argent est encaissé : la base doit enregistrer le renouvellement
+      // même si le routeur n'a pas pu être joint. Mais on ne le tait pas —
+      // un abonné payé et toujours expiré côté routeur doit se voir.
+      raisonNonPoussée = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Échéance non repoussée sur le routeur pour ${subscription.hotspotUsername} : ${raisonNonPoussée}`,
+      );
     }
 
     const renewed = await this.prisma.scoped.subscription.update({
@@ -159,7 +214,16 @@ export class SubscriptionsService {
       action: 'RENEW_SUBSCRIPTION',
       targetType: 'Subscription',
       targetId: subscriptionId,
-      payloadDiff: { newPeriodEnd: end.toISOString(), paymentId: payment?.id ?? null },
+      payloadDiff: {
+        newPeriodEnd: end.toISOString(),
+        paymentId: payment?.id ?? null,
+        // Dit dans le journal plutôt que deviné : sans cela, rien ne
+        // distingue un renouvellement appliqué d'un renouvellement seulement
+        // enregistré.
+        echeancePousseeSurLeRouteur: poussée,
+        ...(raisonNonPoussée ? { motif: raisonNonPoussée } : {}),
+      },
+      result: poussée ? 'SUCCESS' : 'FAILURE',
     });
     return renewed;
   }
