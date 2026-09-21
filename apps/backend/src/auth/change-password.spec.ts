@@ -17,16 +17,19 @@ async function service(motDePasseActuel = 'MotDePasseActuel1!') {
     tenantId: 'tenant-1',
     passwordHash: await bcrypt.hash(motDePasseActuel, 10),
   };
-  const update = vi.fn(async () => admin);
+  const update = vi.fn(async (_args: { data: { passwordHash: string } }) => admin);
   const log = vi.fn(async () => undefined);
   const prisma = {
     adminUser: { findUnique: vi.fn(async () => admin), update },
   };
+  // Le limiteur de connexion ne concerne pas ce chemin, mais la classe
+  // l'exige désormais : un objet inerte suffit.
+  const throttle = { verifier: vi.fn(), echec: vi.fn(), succes: vi.fn() };
   return {
     admin,
     update,
     log,
-    svc: new AuthService(prisma as never, {} as never, { log } as never),
+    svc: new AuthService(prisma as never, {} as never, { log } as never, throttle as never),
   };
 }
 
@@ -41,7 +44,7 @@ describe('AuthService.changePassword', () => {
       }),
     ).resolves.toEqual({ ok: true });
 
-    const écrit = update.mock.calls[0][0].data.passwordHash;
+    const écrit = update.mock.calls[0]![0].data.passwordHash;
     // Une empreinte, jamais le mot de passe en clair.
     expect(écrit).not.toBe('MotDePasseNouveau2!');
     await expect(bcrypt.compare('MotDePasseNouveau2!', écrit)).resolves.toBe(true);

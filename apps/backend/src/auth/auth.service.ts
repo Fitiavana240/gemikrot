@@ -10,6 +10,7 @@ import { AdminRole, TenantStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { LoginThrottleService } from './login-throttle.service.js';
 import type { LoginDto } from './dto/login.dto.js';
 import type { SignupDto } from './dto/signup.dto.js';
 import type { ChangePasswordDto } from './dto/change-password.dto.js';
@@ -29,9 +30,14 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly audit: AuditService,
+    private readonly throttle: LoginThrottleService,
   ) {}
 
   async login(dto: LoginDto, ipAddress?: string): Promise<LoginResult> {
+    // Avant toute lecture : inutile de consulter la base pour un appelant
+    // qui a déjà épuisé ses essais, et cela évite d'en faire un levier.
+    this.throttle.verifier(dto.email, ipAddress);
+
     // Client brut : l'authentification précède la résolution de l'exploitant.
     const admin = await this.prisma.adminUser.findUnique({
       where: { email: dto.email },
@@ -40,6 +46,9 @@ export class AuthService {
     const passwordValid = admin ? await bcrypt.compare(dto.password, admin.passwordHash) : false;
 
     if (!admin || !passwordValid) {
+      // Compté qu'il existe ou non : ne compter que les comptes connus dirait
+      // à l'attaquant lesquels existent.
+      this.throttle.echec(dto.email, ipAddress);
       await this.audit.log({
         action: 'LOGIN',
         targetType: 'AdminUser',
@@ -70,6 +79,9 @@ export class AuthService {
       );
     }
 
+    // L'ardoise est effacée ici et non plus haut : un compte suspendu n'a
+    // pas réussi à se connecter, ses essais doivent continuer de compter.
+    this.throttle.succes(dto.email, ipAddress);
     await this.prisma.adminUser.update({
       where: { id: admin.id },
       data: { lastLoginAt: new Date() },

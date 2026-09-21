@@ -17,6 +17,10 @@ function toNotice(error: unknown): Notice {
   if (error instanceof ApiError) {
     if (error.status === 403) return { tone: 'warning', message: error.message };
     if (error.status === 401) return { tone: 'error', message: 'Email ou mot de passe incorrect' };
+    // Un 429 n'est pas une erreur d'identifiants : le serveur dit déjà
+    // combien de temps attendre, et le peindre en rouge laisserait croire
+    // que le mot de passe est faux alors qu'il n'a pas été vérifié.
+    if (error.status === 429) return { tone: 'warning', message: error.message };
     return { tone: 'error', message: error.message };
   }
   return {
