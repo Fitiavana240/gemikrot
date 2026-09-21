@@ -13,6 +13,9 @@ export const TRANSLATIONS = {
     devices: 'appareil(s)',
     payTitle: 'Payez par Mobile Money',
     payIntro: 'Envoyez le montant exact au numéro ci-dessous, puis revenez ici.',
+    noAccountTitle: 'Le paiement en ligne n’est pas disponible',
+    noAccountBody:
+      'Aucun numéro Mobile Money n’est enregistré pour ce réseau : il n’y a donc pas d’endroit où envoyer l’argent. Demandez un ticket directement au vendeur.',
     holder: 'Titulaire',
     amountToSend: 'Montant à envoyer',
     confirmTitle: 'Confirmez votre paiement',
@@ -48,6 +51,9 @@ export const TRANSLATIONS = {
     devices: 'fitaovana',
     payTitle: 'Aloa amin\'ny Mobile Money',
     payIntro: 'Alefaso amin\'io laharana io ny vola marina, dia miverena eto.',
+    noAccountTitle: 'Tsy azo atao ny fandoavam-bola an-tserasera',
+    noAccountBody:
+      'Tsy misy laharana Mobile Money voasoratra ho an’ity tambajotra ity : tsy misy toerana handefasana ny vola. Mangataha tapakila mivantana amin’ny mpivarotra.',
     holder: 'Tompon\'ny laharana',
     amountToSend: 'Vola alefa',
     confirmTitle: 'Hamarino ny fandoavam-bola',

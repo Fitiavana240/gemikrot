@@ -340,8 +340,12 @@ function PaymentStep({
         ← {t.back}
       </button>
 
-      <h1 className="text-lg font-semibold text-slate-900">{t.payTitle}</h1>
-      <p className="mt-1 text-sm text-slate-500">{t.payIntro}</p>
+      <h1 className="text-lg font-semibold text-slate-900">
+        {accounts.length === 0 ? t.noAccountTitle : t.payTitle}
+      </h1>
+      <p className="mt-1 text-sm text-slate-500">
+        {accounts.length === 0 ? t.noAccountBody : t.payIntro}
+      </p>
 
       {accounts.length > 1 && (
         <div className="mt-4 flex flex-wrap gap-2">
@@ -389,6 +393,12 @@ function PaymentStep({
         </div>
       )}
 
+      {/* Sans numéro à qui payer, demander de « confirmer un paiement » est
+          un piège : le client n'a rien pu envoyer, et le formulaire
+          l'invitait quand même à saisir une référence. Relevé en production —
+          aucun compte Mobile Money n'était enregistré, et la page proposait
+          malgré tout le parcours d'achat complet jusqu'à cet écran. */}
+      {accounts.length === 0 ? null : (
       <form onSubmit={submit} className="mt-5 space-y-3">
         <h2 className="font-medium text-slate-900">{t.confirmTitle}</h2>
         <p className="text-sm text-slate-500">{t.confirmIntro}</p>
@@ -425,6 +435,7 @@ function PaymentStep({
           {claim.isPending ? t.submitting : t.submit}
         </button>
       </form>
+      )}
     </div>
   );
 }

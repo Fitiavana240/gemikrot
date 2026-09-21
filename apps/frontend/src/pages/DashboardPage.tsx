@@ -8,6 +8,7 @@ import { REACHABILITY_LABEL, routersApi } from '../api/routers';
 import { useRouterSelection } from '../routers/RouterContext';
 import { mikrotikApi } from '../api/mikrotik';
 import { hotspotApi } from '../api/hotspot';
+import { tenantsApi } from '../api/tenants';
 import { Stat, Gauge } from '../components/Stat';
 import {
   Badge,
@@ -40,6 +41,16 @@ export function DashboardPage() {
   });
 
   const routeurs = useQuery({ queryKey: ['routers'], queryFn: routersApi.list });
+  /**
+   * Même clé que l'écran Réglages : le cache est partagé, pas dupliqué.
+   *
+   * Sans puce Mobile Money enregistrée, la page publique n'a aucun numéro à
+   * montrer et ne peut donc rien encaisser. Réglages le disait déjà — mais il
+   * faut y aller pour le lire, et c'est le tableau de bord qu'on ouvre le
+   * matin. Relevé en production : zéro puce, quatre offres en vitrine.
+   */
+  const exploitant = useQuery({ queryKey: ['tenant-me'], queryFn: tenantsApi.mine });
+  const sansEncaissement = (exploitant.data?.mobileMoneyAccounts?.length ?? 0) === 0;
   /**
    * Lu séparément du résumé, exprès.
    *
@@ -104,6 +115,22 @@ export function DashboardPage() {
             Voir les routeurs
           </Link>
         </ErrorNote>
+      )}
+
+      {/* Placé au-dessus des recettes, parce que c'est d'elles qu'il parle :
+          la page publique montre les offres et leurs prix, et n'a aucun
+          numéro à donner. Le client va jusqu'à l'écran de paiement pour n'y
+          trouver rien. */}
+      {sansEncaissement && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <strong>La page publique ne peut encaisser aucun paiement.</strong> Aucune puce
+          Mobile Money n&apos;est enregistrée : vos clients voient les offres et leurs prix,
+          puis un écran qui n&apos;a aucun numéro à leur donner.{' '}
+          <Link to="/settings" className="font-medium underline">
+            Enregistrer une puce
+          </Link>
+          .
+        </div>
       )}
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
