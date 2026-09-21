@@ -98,6 +98,18 @@ export function PageConnexionTab() {
     onError: (e) => setErreur(e instanceof ApiError ? e.message : 'Erreur inconnue'),
   });
 
+  const telecharger = useMutation({
+    mutationFn: () => hotspotApi.telechargerPageConnexion(form?.portailUrl),
+    onSuccess: () => {
+      setErreur(null);
+      setCompteRendu(
+        'Fichier téléchargé. Il est prêt à être posé dans le routeur — la marche à suivre est en bas de cet écran.',
+      );
+    },
+    onError: (e) =>
+      setErreur(e instanceof ApiError ? e.message : 'Le téléchargement a échoué.'),
+  });
+
   const publier = useMutation({
     mutationFn: () => hotspotApi.publierPageConnexion(currentId),
     onSuccess: (r) => {
@@ -248,6 +260,16 @@ export function PageConnexionTab() {
                   >
                     {enregistrer.isPending ? 'Enregistrement…' : 'Enregistrer'}
                   </Button>
+                  {/* Le second chemin, et le seul qui marche quand la
+                      console n'atteint pas le routeur. Il ne dépend d'aucun
+                      empêchement côté routeur : on télécharge même sans lui. */}
+                  <Button
+                    variant="secondary"
+                    disabled={telecharger.isPending || apercu.isError}
+                    onClick={() => telecharger.mutate()}
+                  >
+                    {telecharger.isPending ? 'Préparation…' : 'Télécharger le fichier'}
+                  </Button>
                   <Button
                     variant="danger"
                     disabled={bloque || apercu.isError || publier.isPending}
@@ -351,6 +373,65 @@ export function PageConnexionTab() {
           </p>
         </Confirmation>
       )}
+
+      {/* Nommé, pas générique : la console connaît le dossier de CE routeur.
+          Un tutoriel qui dit « déposez dans hotspot/ » ferait installer la
+          page là où personne ne la sert — le défaut qu'on vient de corriger,
+          reproduit par la documentation. */}
+      <Card title="L’installer soi-même, sans passer par la console">
+        <ol className="max-w-3xl list-decimal space-y-2 pl-5 text-sm text-slate-700">
+          <li>
+            <strong>Télécharger le fichier</strong> avec le bouton ci-dessus. Il s’appelle{' '}
+            <span className="font-mono text-xs">login.html</span> et contient déjà vos
+            réglages : rien n’est à modifier dedans.
+          </li>
+          <li>
+            Ouvrir <strong>WinBox</strong> (ou WebFig) sur le routeur, puis le menu{' '}
+            <strong>Files</strong>.
+          </li>
+          <li>
+            Entrer dans le dossier{' '}
+            <span className="font-mono text-xs">
+              {d?.cibles[0]?.chemin.replace(/\/login\.html$/, '') ?? 'hotspot'}
+            </span>
+            {d && d.cibles.length > 1 && (
+              <>
+                {' '}
+                — et refaire l’opération dans{' '}
+                <span className="font-mono text-xs">
+                  {d.cibles
+                    .slice(1)
+                    .map((c) => c.chemin.replace(/\/login\.html$/, ''))
+                    .join(', ')}
+                </span>
+              </>
+            )}
+            . {d?.cibles[0] && (
+              <span className="text-slate-500">
+                C’est le dossier que sert {d.cibles[0].serveurs.join(', ')} sur{' '}
+                <em>ce</em> routeur — pas forcément celui d’un autre.
+              </span>
+            )}
+          </li>
+          <li>
+            <strong>Glisser le fichier</strong> dedans. WinBox demande de remplacer :
+            accepter. L’ancien <span className="font-mono text-xs">login.html</span> est
+            perdu, RouterOS n’en garde pas de copie.
+          </li>
+          <li>
+            Se connecter au Wi-Fi avec un téléphone <strong>qui n’a pas encore de code</strong>{' '}
+            et vérifier que la nouvelle page s’affiche, puis que le bouton d’achat ouvre bien
+            la page de paiement.
+          </li>
+        </ol>
+        <p className="mt-3 max-w-3xl text-xs text-slate-500">
+          Ce chemin donne le même résultat que « Publier sur le routeur ». Il existe parce que
+          la console ne peut pas toujours atteindre le routeur — c’est le cas tant qu’il n’y a
+          ni tunnel ni adresse publique — et parce qu’il laisse voir le fichier avant de
+          l’installer. En revanche, la console ne saura pas qu’il a été posé : elle ne compare
+          la taille et la date qu’à ses propres publications.
+        </p>
+      </Card>
 
       <p className="max-w-3xl text-xs text-slate-500">
         Cette page est servie <strong>par le routeur</strong>, pas par la console : elle reste

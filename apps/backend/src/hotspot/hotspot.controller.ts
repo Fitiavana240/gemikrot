@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Header,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+} from '@nestjs/common';
+import type { Response } from 'express';
 import { AdminRole } from '@prisma/client';
 import { Roles } from '../auth/roles.decorator.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
@@ -53,6 +65,31 @@ export class HotspotController {
     @Query('portailUrl') portailUrl?: string,
   ) {
     return this.pageConnexion.etat(routerId, portailUrl);
+  }
+
+  /**
+   * Le fichier, a poser soi-meme dans le routeur.
+   *
+   * L'API sait l'ecrire, et c'est le chemin court. Mais elle suppose que la
+   * console **atteigne** le routeur : tant qu'il n'y a ni tunnel ni adresse
+   * publique, la plupart des exploitants ne seront joignables que depuis leur
+   * propre reseau. Le telechargement marche dans tous les cas, et il a un
+   * second merite : l'exploitant voit ce qu'il installe avant de l'installer.
+   *
+   * En piece jointe, jamais affiche : un HTML rendu dans l'onglet donnerait
+   * une page qui ressemble a la vraie et qu'on ne peut pas enregistrer.
+   */
+  @Get('page-connexion/fichier')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  async fichierPageConnexion(
+    @Res({ passthrough: true }) res: Response,
+    @Query('portailUrl') portailUrl?: string,
+  ) {
+    res.setHeader('Content-Disposition', 'attachment; filename="login.html"');
+    const { contenu } = await this.pageConnexion.apercu(
+      portailUrl ? ({ portailUrl } as never) : undefined,
+    );
+    return contenu;
   }
 
   /** Enregistre les reglages. Rien n'est envoye au routeur ici. */

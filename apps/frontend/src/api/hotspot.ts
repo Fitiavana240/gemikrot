@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, telecharger } from './client';
 import type { Coupure } from './coupure';
 import { routerQuery } from '../routers/RouterContext';
 
@@ -162,6 +162,20 @@ export const hotspotApi = {
     api.patch<{ reglages: ReglagesPageConnexion; parDefaut: boolean }>(
       '/hotspot/page-connexion',
       reglages,
+    ),
+  /**
+   * Télécharge le fichier, à poser soi-même dans le routeur.
+   *
+   * Le second chemin, et le seul qui marche quand la console n'atteint pas le
+   * routeur — ce qui sera le cas de la plupart des exploitants tant qu'il n'y
+   * a ni tunnel ni adresse publique.
+   */
+  telechargerPageConnexion: (portailUrl?: string) =>
+    telecharger(
+      `/hotspot/page-connexion/fichier${
+        portailUrl ? `?portailUrl=${encodeURIComponent(portailUrl)}` : ''
+      }`,
+      'login.html',
     ),
   /** Écrit la page sur chaque dossier réellement servi par le routeur. */
   publierPageConnexion: (routerId?: string) =>
