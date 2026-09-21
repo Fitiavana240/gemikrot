@@ -90,6 +90,7 @@ export class VoucherReconciliationService {
       mikrotik.getHotspotUsers(),
     ]);
     const nomsHotspot = new Set(comptesHotspot.map((u) => u.username));
+    const parNomHotspot = new Map(comptesHotspot.map((u) => [u.username, u]));
 
     const byUser = new Map<string, typeof assignments>();
     for (const assignment of assignments) {
@@ -109,10 +110,58 @@ export class VoucherReconciliationService {
     };
 
     for (const voucher of candidates) {
-      // Ticket HotSpot : rien à recopier, son profil ne porte pas d'échéance.
-      // Seule son existence se vérifie — et c'est déjà beaucoup.
+      // Ticket HotSpot. Il n'a pas d'échéance à recopier — son compte n'a pas
+      // de `end-time` — mais il a un **plafond de durée**, et l'atteindre est
+      // bel et bien une expiration : RouterOS refuse le compte au-delà.
+      //
+      // C'est ce que ce contrôle ne voyait pas. Relevé sur le parc : des
+      // comptes à `uptime 2h` pour `limit-uptime 2h`, épuisés depuis des
+      // jours, qu'aucune règle ne déclarait expirés.
+      //
+      // `disabled` n'entre PAS dans le critère. Un compte bloqué l'a été
+      // exprès, et pour une raison qui n'est pas l'épuisement : certains le
+      // sont avec du temps restant. Confondre les deux ferait passer pour
+      // expiré ce que l'exploitant a coupé délibérément.
       if (voucher.target === VoucherTarget.HOTSPOT) {
-        if (!nomsHotspot.has(voucher.code)) report.sansCompte.push(voucher.code);
+        const compte = parNomHotspot.get(voucher.code);
+        if (!compte) {
+          report.sansCompte.push(voucher.code);
+          continue;
+        }
+
+        const épuisé =
+          compte.limitUptimeSeconds != null &&
+          compte.uptimeSeconds >= compte.limitUptimeSeconds;
+        if (!épuisé || voucher.status === VoucherStatus.EXPIRED) continue;
+
+        await this.prisma.scopedStrict.voucher.update({
+          where: { id: voucher.id },
+          data: {
+            status: VoucherStatus.EXPIRED,
+            expiredAt: new Date(),
+            lastReconciledAt: new Date(),
+          },
+        });
+        report.expired += 1;
+
+        // Le compte reste en place — c'est la trace de ce qui a été vendu —
+        // mais le cookie, lui, n'a plus lieu d'être : il survivrait dix heures
+        // à un forfait déjà consommé.
+        try {
+          const cut = await this.access.revoke(mikrotik, voucher.code, {
+            disableAccount: false,
+          });
+          if (cut.cookiesRemoved || cut.sessionsClosed) report.accessCut += 1;
+        } catch (error) {
+          if (!(error instanceof RouterUnreachableException)) throw error;
+          await this.operations.enqueue(
+            routerId ?? (await this.clients.getDefaultRouterId()),
+            ROUTER_OPERATIONS.COUPER_ACCES,
+            { username: voucher.code },
+            `Ticket HotSpot ${voucher.code} épuisé alors que le routeur était injoignable`,
+          );
+          report.deferred += 1;
+        }
         continue;
       }
 

@@ -19,7 +19,9 @@ function service() {
     paymentClaim: { deleteMany },
     auditLog: { deleteMany },
     routerOperation: { deleteMany },
-    voucher: { deleteMany: vi.fn(async () => ({ count: 3 })) },
+    voucher: {
+      deleteMany: vi.fn(async (_args: { where: Record<string, any> }) => ({ count: 3 })),
+    },
   };
   return { prisma, svc: new PurgeJobService(prisma as never) };
 }
