@@ -8,7 +8,7 @@ import { useRouterSelection } from '../routers/RouterContext';
 import { ApiError } from '../api/client';
 import { phrasePanne } from '../api/pannes';
 import { AccesPermanentsTab } from './AccesPermanentsTab';
-import { ConfirmationInline } from '../components/Edition';
+import { Confirmation } from '../components/Edition';
 import { PlafondsTab } from './PlafondsTab';
 import {
   Badge,
@@ -471,18 +471,22 @@ function CookiesTab() {
           {canWrite && (
             <div className="mt-3">
               {confirmerPurge ? (
-                <ConfirmationInline
+                <Confirmation
                   titre={`Effacer ${reliquats.length} cookie(s) sur le routeur`}
                   libelléConfirmer={`Effacer les ${reliquats.length} cookies`}
                   enCours={purger.isPending}
+                  erreur={purger.isError ? error : null}
                   onConfirmer={() => purger.mutate(reliquats.map((c) => c.id))}
-                  onAnnuler={() => setConfirmerPurge(false)}
+                  onAnnuler={() => {
+                    setError(null);
+                    setConfirmerPurge(false);
+                  }}
                 >
                   Ces cookies appartiennent à des comptes bloqués ou supprimés. Les effacer ne
                   coupe personne en règle — un client valide retape son code — mais{' '}
                   <strong>l&apos;effacement ne se défait pas</strong> : un cookie retiré ne se
                   recrée qu&apos;à la prochaine connexion réussie.
-                </ConfirmationInline>
+                </Confirmation>
               ) : (
                 <Button variant="danger" onClick={() => setConfirmerPurge(true)}>
                   Effacer ces {reliquats.length} cookie(s)…

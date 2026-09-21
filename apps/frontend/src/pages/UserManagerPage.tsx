@@ -20,13 +20,14 @@ import { useAuth } from '../auth/AuthContext';
 import { ETAT_COMPTE_UM, libellé } from '../api/libelles';
 import { FormulaireLimitation } from '../components/FormulaireLimitation';
 import { Modale } from '../components/Modale';
+import { BarreSelection, CaseLigne, useSelection } from '../components/Selection';
 import { phraseCoupure } from '../api/coupure';
 import { PanneDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { GenerationTickets } from '../components/GenerationTickets';
 import {
   ChampDuree,
-  ConfirmationInline,
+  Confirmation,
   EditionDuree,
   EditionUnChamp,
 } from '../components/Edition';
@@ -669,8 +670,11 @@ function AccountsTab() {
 
   const supprimer = useMutation({
     mutationFn: (username: string) => userManagerApi.deleteAccount(username, currentId),
+    // La fenêtre se referme ici, et non au clic : fermer avant de connaître
+    // la réponse du routeur faisait lire « c'est fait » sur un refus.
     onSuccess: () => {
       setError(null);
+      setÀSupprimer(null);
       refresh();
     },
     onError,
@@ -685,6 +689,91 @@ function AccountsTab() {
   }
 
   const visible = accounts.data?.filter((a) => !sourceFilter || a.source === sourceFilter);
+
+  // ==================== Agir sur un lot ====================
+
+  const lignes = visible ?? [];
+  const selection = useSelection(lignes.map((a) => a.username));
+  const choisis = lignes.filter((a) => selection.estChoisie(a.username));
+  /** Le geste demandé sur le lot, tant qu'il n'est pas confirmé. */
+  const [enLot, setEnLot] = useState<'suspendre' | 'reactiver' | 'supprimer' | null>(null);
+
+  /**
+   * Un compte à la fois, et on continue après un échec.
+   *
+   * RouterOS n'a pas d'écriture en lot : ce sont N appels. S'arrêter au
+   * premier refus laisserait la moitié du lot traité sans qu'on sache
+   * laquelle — on va donc au bout et on rend le compte rendu.
+   */
+  const lot = useMutation({
+    mutationFn: async (geste: 'suspendre' | 'reactiver' | 'supprimer') => {
+      const échecs: string[] = [];
+      for (const compte of choisis) {
+        try {
+          if (geste === 'supprimer') {
+            await userManagerApi.deleteAccount(compte.username, currentId);
+          } else {
+            await userManagerApi.setAccountDisabled(
+              compte.username,
+              geste === 'suspendre',
+              currentId,
+            );
+          }
+        } catch {
+          échecs.push(compte.username);
+        }
+      }
+      return échecs;
+    },
+    onSuccess: (échecs) => {
+      setError(
+        échecs.length === 0
+          ? null
+          : `${échecs.length} compte(s) n’ont pas abouti : ${échecs.slice(0, 8).join(', ')}${échecs.length > 8 ? '…' : ''}`,
+      );
+      setEnLot(null);
+      selection.vider();
+      refresh();
+    },
+    onError,
+  });
+
+  /** Ce que chaque geste écrit, dit avant de le faire. */
+  const LIBELLÉ_LOT = {
+    suspendre: { verbe: 'Suspendre', bouton: 'Suspendre' },
+    reactiver: { verbe: 'Réactiver', bouton: 'Réactiver' },
+    supprimer: { verbe: 'Supprimer', bouton: 'Supprimer quand même' },
+  } as const;
+
+  // Les sélections groupées. Chacune dit son nombre avant qu'on clique.
+  const parProfil = [...new Set(lignes.map((a) => a.profileName).filter(Boolean))].map(
+    (nom) => ({
+      libellé: nom as string,
+      clés: lignes.filter((a) => a.profileName === nom).map((a) => a.username),
+    }),
+  );
+  const parEtat = [
+    {
+      libellé: 'expirés ou consommés',
+      clés: lignes.filter((a) => a.state === 'used').map((a) => a.username),
+    },
+    {
+      libellé: 'pas encore commencés',
+      clés: lignes.filter((a) => a.state === 'waiting').map((a) => a.username),
+    },
+    {
+      libellé: 'en cours',
+      clés: lignes.filter((a) => a.state === 'running-active').map((a) => a.username),
+    },
+    {
+      libellé: 'suspendus',
+      clés: lignes.filter((a) => a.disabled).map((a) => a.username),
+    },
+    {
+      libellé: 'sans profil',
+      clés: lignes.filter((a) => !a.profileName).map((a) => a.username),
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -718,19 +807,21 @@ function AccountsTab() {
       )}
 
       {àSupprimer && (
-        <ConfirmationInline
+        <Confirmation
           titre={`Supprimer définitivement « ${àSupprimer} » ?`}
           libelléConfirmer="Supprimer quand même"
           enCours={supprimer.isPending}
-          onAnnuler={() => setÀSupprimer(null)}
-          onConfirmer={() => {
-            supprimer.mutate(àSupprimer);
+          erreur={supprimer.isError ? error : null}
+          onAnnuler={() => {
+            setError(null);
             setÀSupprimer(null);
           }}
+          onConfirmer={() => supprimer.mutate(àSupprimer)}
         >
-          Son historique de sessions part avec, et rien ne le rendra. Pour couper l'accès sans
-          rien perdre, <strong>Suspendre</strong> suffit — le compte reste, il ne répond plus.
-        </ConfirmationInline>
+          Son historique de sessions part avec, et rien ne le rendra. Pour couper l&apos;accès
+          sans rien perdre, <strong>Suspendre</strong> suffit — le compte reste, il ne répond
+          plus.
+        </Confirmation>
       )}
 
       {canWrite && (
@@ -822,14 +913,124 @@ function AccountsTab() {
         />
       </div>
 
+      {canWrite && !accounts.isLoading && !accounts.isError && lignes.length > 0 && (
+        <BarreSelection
+          nombre={selection.nombre}
+          total={lignes.length}
+          onTout={() => selection.poser(lignes.map((a) => a.username))}
+          onRien={selection.vider}
+          onChoisir={selection.poser}
+          groupes={[
+            { titre: 'Par profil', entrées: parProfil },
+            { titre: 'Par état', entrées: parEtat },
+          ]}
+          actions={
+            <>
+              <Button variant="secondary" onClick={() => setEnLot('suspendre')}>
+                Suspendre{selection.nombre > 1 ? ` les ${selection.nombre}` : ''}
+              </Button>
+              <Button variant="secondary" onClick={() => setEnLot('reactiver')}>
+                Réactiver{selection.nombre > 1 ? ` les ${selection.nombre}` : ''}
+              </Button>
+              <Button variant="danger" onClick={() => setEnLot('supprimer')}>
+                Supprimer{selection.nombre > 1 ? ` les ${selection.nombre}` : ''}
+              </Button>
+            </>
+          }
+        />
+      )}
+
+      {enLot && (
+        <Confirmation
+          titre={`${LIBELLÉ_LOT[enLot].verbe} ${selection.nombre} compte${selection.nombre > 1 ? 's' : ''} sur le routeur`}
+          libelléConfirmer={
+            selection.nombre > 1
+              ? `${LIBELLÉ_LOT[enLot].bouton} les ${selection.nombre}`
+              : LIBELLÉ_LOT[enLot].bouton
+          }
+          enCours={lot.isPending}
+          erreur={lot.isError ? error : null}
+          onAnnuler={() => {
+            setError(null);
+            setEnLot(null);
+          }}
+          onConfirmer={() => lot.mutate(enLot)}
+        >
+          {/* Le nombre, et la liste tant qu'elle tient : « 40 comptes » ne se
+              vérifie pas, « H872973, H869384… » si. */}
+          <p>
+            {choisis
+              .slice(0, 12)
+              .map((a) => a.username)
+              .join(', ')}
+            {choisis.length > 12 && ` … et ${choisis.length - 12} autres`}
+          </p>
+          <p className="mt-2">
+            {enLot === 'supprimer' ? (
+              <>
+                Leur historique de sessions part avec, et rien ne le rendra.{' '}
+                <strong>Il n&apos;y a pas de retour en arrière.</strong> Pour couper
+                l&apos;accès sans rien perdre, <strong>Suspendre</strong> suffit — les comptes
+                restent, ils ne répondent plus.
+              </>
+            ) : enLot === 'suspendre' ? (
+              <>
+                Les comptes restent et gardent tout ; ils cessent simplement de répondre. La
+                session en cours d&apos;un client déjà connecté ne se ferme pas d&apos;elle-même.
+              </>
+            ) : (
+              <>
+                Les comptes répondront de nouveau, avec la validité qu&apos;il leur restait —
+                la suspension ne l&apos;a pas arrêtée.
+              </>
+            )}
+          </p>
+          {selection.nombre > 1 && (
+            <p className="mt-2 text-slate-500">
+              Le routeur ne sait pas écrire en lot : ce sont {selection.nombre} écritures qui
+              partent l&apos;une après l&apos;autre. En cas de refus sur l&apos;une, les autres
+              se font quand même et le compte rendu nomme celles qui ont échoué.
+            </p>
+          )}
+        </Confirmation>
+      )}
+
       {accounts.isLoading ? (
         <p className="text-slate-500">Chargement…</p>
       ) : accounts.isError ? (
         <PanneDuRouteur requête={accounts} />
       ) : (
-        <Table head={['Compte', 'Origine', 'Client', 'Profil', 'Début', 'Fin', 'État', '']}>
+        <Table
+          head={[
+            ...(canWrite ? [''] : []),
+            'Compte',
+            'Origine',
+            'Client',
+            'Profil',
+            'Début',
+            'Fin',
+            'État',
+            '',
+          ]}
+        >
           {visible?.map((account) => (
-            <tr key={account.username} className={account.disabled ? 'bg-red-50/50' : undefined}>
+            <tr
+              key={account.username}
+              className={
+                selection.estChoisie(account.username)
+                  ? 'bg-sky-50'
+                  : account.disabled
+                    ? 'bg-red-50/50'
+                    : undefined
+              }
+            >
+              {canWrite && (
+                <CaseLigne
+                  cochée={selection.estChoisie(account.username)}
+                  libellé={account.username}
+                  onBasculer={(avecMaj) => selection.basculer(account.username, avecMaj)}
+                />
+              )}
               <td className="px-3 py-2 font-mono">{account.username}</td>
               <td className="px-3 py-2">
                 <Badge tone={SOURCE_LABEL[account.source].tone}>
@@ -915,7 +1116,7 @@ function AccountsTab() {
             </tr>
           ))}
           {visible?.length === 0 && (
-            <EmptyRow colSpan={8}>Aucun compte pour ce filtre.</EmptyRow>
+            <EmptyRow colSpan={canWrite ? 9 : 8}>Aucun compte pour ce filtre.</EmptyRow>
           )}
         </Table>
       )}

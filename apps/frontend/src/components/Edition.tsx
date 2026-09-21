@@ -20,14 +20,26 @@ import { Modale } from './Modale';
  *
  * Elle **nomme ce qu'on perd** plutôt que de demander « êtes-vous sûr ». La
  * question n'apprend rien ; la conséquence, si.
+ *
+ * En fenêtre, comme tous les formulaires : posée dans le flux de la page,
+ * elle apparaissait quelque part au-dessus de la liste, parfois hors de
+ * l'écran sur une table longue — on cliquait « Supprimer » et il ne se
+ * passait rien de visible.
+ *
+ * `erreur` compte autant que le reste. Un refus du routeur s'affichait
+ * jusqu'ici dans un bandeau en haut de page, **derrière** la fenêtre, et
+ * l'appelant refermait souvent avant de savoir si le geste avait abouti :
+ * on lisait « c'est fait » pour une opération qui avait échoué. La fenêtre
+ * reste donc ouverte tant que le geste n'a pas réussi, et porte le refus.
  */
-export function ConfirmationInline({
+export function Confirmation({
   titre,
   children,
   libelléConfirmer = 'Confirmer',
   onConfirmer,
   onAnnuler,
   enCours = false,
+  erreur,
 }: {
   titre: string;
   children: ReactNode;
@@ -35,22 +47,33 @@ export function ConfirmationInline({
   onConfirmer: () => void;
   onAnnuler: () => void;
   enCours?: boolean;
+  /** Le refus du routeur, montré ici plutôt que derrière la fenêtre. */
+  erreur?: ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-      <p className="text-sm font-semibold text-red-900">{titre}</p>
-      <div className="mt-1 max-w-3xl text-sm text-red-900">{children}</div>
-      <div className="mt-3 flex flex-wrap gap-2">
+    <Modale
+      titre={titre}
+      onFermer={onAnnuler}
+      actions={
         <Button variant="danger" onClick={onConfirmer} disabled={enCours}>
           {enCours ? 'En cours…' : libelléConfirmer}
         </Button>
-        <Button variant="secondary" onClick={onAnnuler}>
-          Annuler
-        </Button>
-      </div>
-    </div>
+      }
+      note={
+        erreur ? (
+          <span className="text-red-700">
+            <strong>Le routeur a refusé.</strong> Rien n&apos;a été changé. {erreur}
+          </span>
+        ) : (
+          <>Rien n&apos;est envoyé au routeur tant que vous n&apos;avez pas confirmé.</>
+        )
+      }
+    >
+      <div className="max-w-3xl text-sm text-slate-700">{children}</div>
+    </Modale>
   );
 }
+
 
 /** Les unités d'une durée, de la plus fine à la plus grosse. */
 const UNITÉS = [

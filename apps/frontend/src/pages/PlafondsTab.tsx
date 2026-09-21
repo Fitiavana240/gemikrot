@@ -5,7 +5,7 @@ import { ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useRouterSelection } from '../routers/RouterContext';
 import { Badge, Button, Card, Table } from '../components/ui';
-import { ConfirmationInline } from '../components/Edition';
+import { Confirmation } from '../components/Edition';
 
 /** `7200` → « 2 h ». Les plafonds de tickets se comptent en heures. */
 function heures(secondes: number): string {
@@ -84,12 +84,16 @@ export function PlafondsTab() {
 
         {confirmation && (
           <div className="mt-3">
-            <ConfirmationInline
+            <Confirmation
               titre={`Écrire sur ${aCorriger.length} comptes du routeur`}
               libelléConfirmer={`Poser les ${aCorriger.length} plafonds`}
               enCours={lancer.isPending}
+              erreur={lancer.isError ? erreur : null}
               onConfirmer={() => lancer.mutate(true)}
-              onAnnuler={() => setConfirmation(false)}
+              onAnnuler={() => {
+                setErreur(null);
+                setConfirmation(false);
+              }}
             >
               Chacun recevra la durée de son offre en plafond. Ce sont des tickets{' '}
               <strong>en vente</strong> : après cette écriture, chacun s&apos;arrêtera pour de
@@ -97,7 +101,7 @@ export function PlafondsTab() {
               entamé, bloqué, ou rattaché à un abonnement au mois n&apos;est touché.{' '}
               <strong>Il n&apos;y a pas de retour en arrière automatique</strong> : défaire
               supposerait de retirer le plafond compte par compte.
-            </ConfirmationInline>
+            </Confirmation>
           </div>
         )}
 

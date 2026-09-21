@@ -7,7 +7,7 @@ import { formatBits } from '../api/router-tools';
 import { ListeDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { TabBar, type TabDef } from '../components/TabBar';
-import { ConfirmationInline } from '../components/Edition';
+import { Confirmation } from '../components/Edition';
 import { Modale } from '../components/Modale';
 import {
   Badge,
@@ -223,7 +223,12 @@ function ComptesTab() {
 
   const supprimer = useMutation({
     mutationFn: (username: string) => pppApi.remove(routerId!, username),
-    onSuccess: rafraîchir,
+    // La fenêtre se referme ici, et non au clic : fermer avant la réponse du
+    // routeur faisait lire « c'est fait » sur un refus.
+    onSuccess: () => {
+      setÀSupprimer(null);
+      rafraîchir();
+    },
     onError: échouer,
   });
 
@@ -238,19 +243,20 @@ function ComptesTab() {
       )}
 
       {àSupprimer && (
-        <ConfirmationInline
+        <Confirmation
           titre={`Supprimer définitivement « ${àSupprimer} » ?`}
           libelléConfirmer="Supprimer quand même"
           enCours={supprimer.isPending}
-          onAnnuler={() => setÀSupprimer(null)}
-          onConfirmer={() => {
-            supprimer.mutate(àSupprimer);
+          erreur={supprimer.isError ? erreur : null}
+          onAnnuler={() => {
+            setErreur(null);
             setÀSupprimer(null);
           }}
+          onConfirmer={() => supprimer.mutate(àSupprimer)}
         >
           Son historique de connexions part avec, et le routeur ne le rejoue pas. Pour couper
-          l'accès d'un abonné sans rien perdre, <strong>Suspendre</strong> suffit.
-        </ConfirmationInline>
+          l&apos;accès d&apos;un abonné sans rien perdre, <strong>Suspendre</strong> suffit.
+        </Confirmation>
       )}
 
       {/* L'en-tête reste : c'est la fenêtre qui recouvre la liste, plus le
