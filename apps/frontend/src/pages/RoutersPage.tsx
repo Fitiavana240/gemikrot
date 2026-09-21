@@ -12,6 +12,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, FormField, Input, PageHeader, Table } from '../components/ui';
+import { Modale } from '../components/Modale';
 
 export function RoutersPage() {
   const { canWrite } = useAuth();
@@ -20,6 +21,8 @@ export function RoutersPage() {
   const [report, setReport] = useState<ImportReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [newRouterLabel, setNewRouterLabel] = useState('');
+  /** Le formulaire de raccordement, ouvert ou non. */
+  const [raccorder, setRaccorder] = useState(false);
   const [invitation, setInvitation] = useState<EnrollmentInvitation | null>(null);
 
   const routers = useQuery({ queryKey: ['routers'], queryFn: routersApi.list });
@@ -94,6 +97,7 @@ export function RoutersPage() {
       setError(null);
       setInvitation(result);
       setNewRouterLabel('');
+      setRaccorder(false);
       queryClient.invalidateQueries({ queryKey: ['router-enrollments'] });
     },
     onError,
@@ -176,30 +180,48 @@ export function RoutersPage() {
       )}
 
       {canWrite && (
-        <Card title="Raccorder un routeur">
-          <p className="mb-3 text-sm text-slate-600">
-            Le serveur ne touche jamais à votre routeur. Il prépare un script que vous collez
-            dans Winbox, dans <span className="font-medium">New Terminal</span>. Le routeur
-            ouvre alors lui-même le tunnel : rien à ouvrir chez votre fournisseur d'accès.
-          </p>
-          <div className="flex items-end gap-3">
-            <div className="w-64">
-              <FormField label="Nom du routeur">
-                <Input
-                  value={newRouterLabel}
-                  onChange={(event) => setNewRouterLabel(event.target.value)}
-                  placeholder="Routeur Sanfily"
-                />
-              </FormField>
-            </div>
+        <div>
+          <Button onClick={() => setRaccorder(true)}>Raccorder un routeur</Button>
+        </div>
+      )}
+
+      {raccorder && (
+        <Modale
+          titre="Raccorder un routeur"
+          onFermer={() => setRaccorder(false)}
+          actions={
             <Button
               onClick={() => invite.mutate(newRouterLabel.trim())}
               disabled={newRouterLabel.trim().length < 2 || invite.isPending}
             >
-              Préparer le script
+              {invite.isPending ? 'Préparation…' : 'Préparer le script'}
             </Button>
-          </div>
-        </Card>
+          }
+          note={
+            <>
+              Le serveur ne touche <strong>jamais</strong> à votre routeur. Il prépare un
+              script que vous collez dans Winbox, dans{' '}
+              <span className="font-medium">New Terminal</span>. Le routeur ouvre alors
+              lui-même le tunnel : rien à ouvrir chez votre fournisseur d&apos;accès.
+            </>
+          }
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (newRouterLabel.trim().length >= 2) invite.mutate(newRouterLabel.trim());
+            }}
+          >
+            <FormField label="Nom du routeur">
+              <Input
+                value={newRouterLabel}
+                onChange={(event) => setNewRouterLabel(event.target.value)}
+                placeholder="Routeur Sanfily"
+              />
+            </FormField>
+            <button type="submit" className="hidden" aria-hidden />
+          </form>
+        </Modale>
       )}
 
       {(enrollments.data ?? []).length > 0 && (

@@ -19,6 +19,7 @@ export function Modale({
   actions,
   onFermer,
   large = false,
+  libelléAnnuler = 'Annuler',
 }: {
   titre: string;
   children: ReactNode;
@@ -29,6 +30,8 @@ export function Modale({
   onFermer: () => void;
   /** Pour les formulaires à plus d'une dizaine de champs. */
   large?: boolean;
+  /** « Annuler » pour un formulaire, « Non » pour une question fermée. */
+  libelléAnnuler?: string;
 }) {
   const panneau = useRef<HTMLDivElement>(null);
 
@@ -139,7 +142,7 @@ export function Modale({
               onClick={onFermer}
               className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              Annuler
+              {libelléAnnuler}
             </button>
           </div>
           {note && <div className="mt-3 max-w-3xl text-xs text-slate-500">{note}</div>}

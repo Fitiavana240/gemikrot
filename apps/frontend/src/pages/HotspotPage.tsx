@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatUptime, formatVolume, hotspotApi } from '../api/hotspot';
@@ -9,7 +9,7 @@ import { ApiError } from '../api/client';
 import { phrasePanne } from '../api/pannes';
 import { AccesPermanentsTab } from './AccesPermanentsTab';
 import { Confirmation } from '../components/Edition';
-import { MenuAction } from '../components/MenuAction';
+import { Modale } from '../components/Modale';
 import { PlafondsTab } from './PlafondsTab';
 import {
   Badge,
@@ -223,6 +223,8 @@ function WalledGardenTab() {
   const [àRetirer, setÀRetirer] = useState<{ id: string; quoi: string; ip: boolean } | null>(
     null,
   );
+  /** Quel formulaire d'ouverture est en cours, ou aucun. */
+  const [ouvrir, setOuvrir] = useState<'domaine' | 'adresse' | null>(null);
 
   const { currentId } = useRouterSelection();
   const walledGarden = useQuery({
@@ -238,6 +240,7 @@ function WalledGardenTab() {
     onSuccess: () => {
       setError(null);
       setHost('');
+      setOuvrir(null);
       refresh();
     },
     onError,
@@ -247,6 +250,7 @@ function WalledGardenTab() {
     onSuccess: () => {
       setError(null);
       setAddress('');
+      setOuvrir(null);
       refresh();
     },
     onError,
@@ -268,14 +272,12 @@ function WalledGardenTab() {
     onError,
   });
 
-  function submitHost(e: FormEvent) {
-    e.preventDefault();
+  function submitHost() {
     if (!host.trim()) return setError('Indiquez un domaine');
     addHost.mutate({ dstHost: host.trim() });
   }
 
-  function submitIp(e: FormEvent) {
-    e.preventDefault();
+  function submitIp() {
     if (!address.trim()) return setError('Indiquez une adresse');
     addIp.mutate({ dstAddress: address.trim() });
   }
@@ -319,37 +321,80 @@ function WalledGardenTab() {
       </div>
 
       {canWrite && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Card title="Ouvrir un domaine">
-            <form onSubmit={submitHost} className="flex items-end gap-3">
-              <FormField label="Domaine (joker accepté)">
-                <Input
-                  value={host}
-                  placeholder="*.mvola.mg"
-                  onChange={(e) => setHost(e.target.value)}
-                />
-              </FormField>
-              <Button type="submit" disabled={addHost.isPending}>
-                Ouvrir
-              </Button>
-            </form>
-          </Card>
-
-          <Card title="Ouvrir une adresse">
-            <form onSubmit={submitIp} className="flex items-end gap-3">
-              <FormField label="Adresse ou réseau">
-                <Input
-                  value={address}
-                  placeholder="192.168.88.10 ou 192.0.2.0/24"
-                  onChange={(e) => setAddress(e.target.value)}
-                />
-              </FormField>
-              <Button type="submit" disabled={addIp.isPending}>
-                Ouvrir
-              </Button>
-            </form>
-          </Card>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setOuvrir('domaine')}>Ouvrir un domaine</Button>
+          <Button onClick={() => setOuvrir('adresse')}>Ouvrir une adresse</Button>
         </div>
+      )}
+
+      {ouvrir === 'domaine' && (
+        <Modale
+          titre="Ouvrir un domaine"
+          onFermer={() => setOuvrir(null)}
+          actions={
+            <Button disabled={addHost.isPending} onClick={() => submitHost()}>
+              {addHost.isPending ? 'Ouverture…' : 'Ouvrir'}
+            </Button>
+          }
+          note={
+            <>
+              Le joker est accepté : <span className="font-mono">*.mvola.mg</span> couvre les
+              sous-domaines, ce qu&apos;un nom exact ne fait pas. Un service de paiement en
+              répartit souvent ses pages sur plusieurs.
+            </>
+          }
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitHost();
+            }}
+          >
+            <FormField label="Domaine (joker accepté)">
+              <Input
+                value={host}
+                placeholder="*.mvola.mg"
+                onChange={(e) => setHost(e.target.value)}
+              />
+            </FormField>
+            <button type="submit" className="hidden" aria-hidden />
+          </form>
+        </Modale>
+      )}
+
+      {ouvrir === 'adresse' && (
+        <Modale
+          titre="Ouvrir une adresse"
+          onFermer={() => setOuvrir(null)}
+          actions={
+            <Button disabled={addIp.isPending} onClick={() => submitIp()}>
+              {addIp.isPending ? 'Ouverture…' : 'Ouvrir'}
+            </Button>
+          }
+          note={
+            <>
+              Une adresse seule, ou un réseau entier en notation{' '}
+              <span className="font-mono">/24</span>. À préférer au domaine quand le service
+              n&apos;a pas de nom stable — le routeur n&apos;a alors rien à résoudre.
+            </>
+          }
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitIp();
+            }}
+          >
+            <FormField label="Adresse ou réseau">
+              <Input
+                value={address}
+                placeholder="192.168.88.10 ou 192.0.2.0/24"
+                onChange={(e) => setAddress(e.target.value)}
+              />
+            </FormField>
+            <button type="submit" className="hidden" aria-hidden />
+          </form>
+        </Modale>
       )}
 
       <Card title="Domaines ouverts">
@@ -421,10 +466,12 @@ function CookiesTab() {
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  /** Le cookie sur lequel on agit : les deux gestes sont exclusifs. */
-  const [actionCookie, setActionCookie] = useState<{ id: string; username: string } | null>(
-    null,
-  );
+  /** Le geste demandé sur une ligne, tant qu'il n'est pas confirmé. */
+  const [àConfirmer, setÀConfirmer] = useState<{
+    geste: 'effacer' | 'couper';
+    id: string;
+    username: string;
+  } | null>(null);
 
   const { currentId } = useRouterSelection();
   const cookies = useQuery({
@@ -441,7 +488,7 @@ function CookiesTab() {
   const remove = useMutation({
     mutationFn: (id: string) => hotspotApi.deleteCookie(id, currentId),
     onSuccess: () => {
-      setActionCookie(null);
+      setÀConfirmer(null);
       refresh();
     },
     onError,
@@ -475,42 +522,44 @@ function CookiesTab() {
   const cut = useMutation({
     mutationFn: (username: string) => hotspotApi.cutAccess(username, currentId),
     onSuccess: () => {
-      setActionCookie(null);
+      setÀConfirmer(null);
       refresh();
     },
     onError,
   });
 
-  const fenetreCookie = actionCookie ? (
-    <MenuAction
-      titre={`Cookie de « ${actionCookie.username} »`}
+  const fenetreCookie = àConfirmer ? (
+    <Confirmation
+      titre={
+        àConfirmer.geste === 'couper'
+          ? `Voulez-vous vraiment couper l’accès de « ${àConfirmer.username} » ?`
+          : `Voulez-vous vraiment effacer ce cookie de « ${àConfirmer.username} » ?`
+      }
       enCours={remove.isPending || cut.isPending}
       erreur={remove.isError || cut.isError ? error : null}
-      onFermer={() => {
+      onAnnuler={() => {
         setError(null);
-        setActionCookie(null);
+        setÀConfirmer(null);
       }}
-      options={[
-        {
-          clé: 'effacer',
-          libellé: 'Effacer ce cookie',
-          aide: "Ne porte que sur cet appareil. Le compte garde ses autres cookies, et la session en cours n'est pas fermée : le client reste connecté.",
-          libelléBouton: 'Effacer ce cookie',
-        },
-        {
-          clé: 'couper',
-          libellé: "Couper l'accès du compte",
-          aide: "Efface TOUS les cookies du compte et ferme sa session. C'est la coupure qui tient — sans cela le client revient seul en quelques secondes.",
-          danger: true,
-          libelléBouton: "Couper l'accès",
-        },
-      ]}
-      onAppliquer={(clé) => {
+      onConfirmer={() => {
         setError(null);
-        if (clé === 'couper') cut.mutate(actionCookie.username);
-        else remove.mutate(actionCookie.id);
+        if (àConfirmer.geste === 'couper') cut.mutate(àConfirmer.username);
+        else remove.mutate(àConfirmer.id);
       }}
-    />
+    >
+      {àConfirmer.geste === 'couper' ? (
+        <>
+          <strong>Tous</strong> les cookies du compte sont effacés et sa session fermée.
+          C&apos;est la coupure qui tient — sans cela le client revient seul en quelques
+          secondes.
+        </>
+      ) : (
+        <>
+          Ne porte que sur cet appareil. Le compte garde ses autres cookies, et la session en
+          cours n&apos;est pas fermée : le client reste connecté.
+        </>
+      )}
+    </Confirmation>
   ) : null;
 
   /** Un compte peut porter plusieurs cookies : un par appareil. */
@@ -529,7 +578,7 @@ function CookiesTab() {
   return (
     <div className="space-y-4">
       {fenetreCookie}
-      {error && !actionCookie && <ErrorBanner>{error}</ErrorBanner>}
+      {error && !àConfirmer && <ErrorBanner>{error}</ErrorBanner>}
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
         Un cookie laisse un client se reconnecter <strong>sans repasser par RADIUS</strong> : sa
@@ -605,14 +654,32 @@ function CookiesTab() {
                   efface tous ceux du compte et ferme sa session. Deux boutons
                   voisins ne disaient pas cet écart. */}
               {canWrite && (
-                <Button
-                  variant="secondary"
-                  onClick={() =>
-                    setActionCookie({ id: cookie.id, username: cookie.username })
-                  }
-                >
-                  Action…
-                </Button>
+                <span className="space-x-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      setÀConfirmer({
+                        geste: 'effacer',
+                        id: cookie.id,
+                        username: cookie.username,
+                      })
+                    }
+                  >
+                    Effacer
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={() =>
+                      setÀConfirmer({
+                        geste: 'couper',
+                        id: cookie.id,
+                        username: cookie.username,
+                      })
+                    }
+                  >
+                    Couper l&apos;accès
+                  </Button>
+                </span>
               )}
             </td>
           </tr>

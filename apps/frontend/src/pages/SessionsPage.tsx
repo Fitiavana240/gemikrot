@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MenuAction } from '../components/MenuAction';
+import { Confirmation } from '../components/Edition';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { mikrotikApi } from '../api/mikrotik';
@@ -60,14 +60,18 @@ export function SessionsPage() {
   });
 
   const [compteRendu, setCompteRendu] = useState<string | null>(null);
-  /** La session sur laquelle on agit : les deux gestes sont exclusifs. */
-  const [actionSur, setActionSur] = useState<{ id: string; username: string } | null>(null);
+  /** Le geste demandé sur une ligne, tant qu'il n'est pas confirmé. */
+  const [àConfirmer, setÀConfirmer] = useState<{
+    geste: 'deconnecter' | 'couper';
+    id: string;
+    username: string;
+  } | null>(null);
 
   const disconnectMutation = useMutation({
     mutationFn: (sessionId: string) => mikrotikApi.disconnect(routerId!, sessionId),
     onSuccess: () => {
       setCompteRendu(null);
-      setActionSur(null);
+      setÀConfirmer(null);
       queryClient.invalidateQueries({ queryKey: ['mikrotik-active-sessions'] });
     },
   });
@@ -84,37 +88,40 @@ export function SessionsPage() {
     mutationFn: (username: string) => hotspotApi.cutAccess(username, routerId),
     onSuccess: (coupure) => {
       setCompteRendu(phraseCoupure(coupure));
-      setActionSur(null);
+      setÀConfirmer(null);
       queryClient.invalidateQueries({ queryKey: ['mikrotik-active-sessions'] });
     },
   });
 
   return (
     <div className="space-y-6">
-      {actionSur && (
-        <MenuAction
-          titre={`Session de « ${actionSur.username} »`}
+      {àConfirmer && (
+        <Confirmation
+          titre={
+            àConfirmer.geste === 'couper'
+              ? `Voulez-vous vraiment couper l’accès de « ${àConfirmer.username} » ?`
+              : `Voulez-vous vraiment déconnecter « ${àConfirmer.username} » ?`
+          }
           enCours={disconnectMutation.isPending || couperMutation.isPending}
-          onFermer={() => setActionSur(null)}
-          options={[
-            {
-              clé: 'deconnecter',
-              libellé: 'Déconnecter',
-              aide: "Ferme la session en cours et libère la place. Le client garde son accès : s'il est entré par cookie, il revient seul en quelques secondes.",
-            },
-            {
-              clé: 'couper',
-              libellé: "Couper l'accès",
-              aide: "Ferme la session ET efface les cookies du compte, qui le ramèneraient tout seul. C'est la coupure qui tient — un client en règle devra retaper son code.",
-              danger: true,
-              libelléBouton: "Couper l'accès",
-            },
-          ]}
-          onAppliquer={(clé) => {
-            if (clé === 'couper') couperMutation.mutate(actionSur.username);
-            else disconnectMutation.mutate(actionSur.id);
+          onAnnuler={() => setÀConfirmer(null)}
+          onConfirmer={() => {
+            if (àConfirmer.geste === 'couper') couperMutation.mutate(àConfirmer.username);
+            else disconnectMutation.mutate(àConfirmer.id);
           }}
-        />
+        >
+          {àConfirmer.geste === 'couper' ? (
+            <>
+              La session se ferme <strong>et</strong> les cookies du compte sont effacés — ce
+              sont eux qui le ramèneraient tout seul. C&apos;est la coupure qui tient : un
+              client en règle devra retaper son code.
+            </>
+          ) : (
+            <>
+              La session se ferme et la place est libérée, mais le client garde son accès :
+              s&apos;il est entré par cookie, il revient seul en quelques secondes.
+            </>
+          )}
+        </Confirmation>
       )}
 
       <PageHeader
@@ -214,14 +221,34 @@ export function SessionsPage() {
                       et que deux boutons voisins ne distinguaient pas. La
                       fenêtre dit lequel fait quoi avant qu'on choisisse. */}
                   {canWrite && (
-                    <Button
-                      variant="secondary"
-                      onClick={() =>
-                        setActionSur({ id: session.id, username: session.username })
-                      }
-                    >
-                      Action…
-                    </Button>
+                    <span className="space-x-2">
+                      <Button
+                        variant="secondary"
+                        disabled={disconnectMutation.isPending}
+                        onClick={() =>
+                          setÀConfirmer({
+                            geste: 'deconnecter',
+                            id: session.id,
+                            username: session.username,
+                          })
+                        }
+                      >
+                        Déconnecter
+                      </Button>
+                      <Button
+                        variant="danger"
+                        disabled={couperMutation.isPending}
+                        onClick={() =>
+                          setÀConfirmer({
+                            geste: 'couper',
+                            id: session.id,
+                            username: session.username,
+                          })
+                        }
+                      >
+                        Couper l&apos;accès
+                      </Button>
+                    </span>
                   )}
                 </td>
               </tr>

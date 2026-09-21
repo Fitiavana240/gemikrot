@@ -35,7 +35,7 @@ import { Modale } from './Modale';
 export function Confirmation({
   titre,
   children,
-  libelléConfirmer = 'Confirmer',
+  libelléConfirmer = 'Oui',
   onConfirmer,
   onAnnuler,
   enCours = false,
@@ -43,6 +43,7 @@ export function Confirmation({
 }: {
   titre: string;
   children: ReactNode;
+  /** « Oui » par défaut : la question est fermée, la réponse aussi. */
   libelléConfirmer?: string;
   onConfirmer: () => void;
   onAnnuler: () => void;
@@ -54,6 +55,9 @@ export function Confirmation({
     <Modale
       titre={titre}
       onFermer={onAnnuler}
+      // « Non » et non « Annuler » : à une question fermée, on répond par
+      // oui ou par non — c'est ce que la main cherche.
+      libelléAnnuler="Non"
       actions={
         <Button variant="danger" onClick={onConfirmer} disabled={enCours}>
           {enCours ? 'En cours…' : libelléConfirmer}

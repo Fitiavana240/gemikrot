@@ -31,7 +31,6 @@ import {
   TableSkeleton,
 } from '../components/ui';
 import { Modale } from '../components/Modale';
-import { MenuAction } from '../components/MenuAction';
 import { Confirmation } from '../components/Edition';
 
 /**
@@ -378,10 +377,13 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Erreur inconnue'),
   });
-  /** Le ticket sur lequel on agit : les deux gestes sont exclusifs. */
-  const [actionSur, setActionSur] = useState<Voucher | null>(null);
+  /** Le geste demandé sur une ligne, tant qu'il n'est pas confirmé. */
+  const [àConfirmer, setÀConfirmer] = useState<{
+    geste: 'annuler' | 'couper';
+    ticket: Voucher;
+  } | null>(null);
   const fermerEtRafraichir = () => {
-    setActionSur(null);
+    setÀConfirmer(null);
     refresh();
   };
   const disable = useMutation({
@@ -511,39 +513,41 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
           vouchers={vouchers.data ?? []}
           format={format}
           canWrite={canWrite}
-          onAction={setActionSur}
+          onAnnuler={(v) => setÀConfirmer({ geste: 'annuler', ticket: v })}
+          onCouper={(v) => setÀConfirmer({ geste: 'couper', ticket: v })}
         />
       )}
 
-      {actionSur && (
-        <MenuAction
-          titre={`Ticket « ${actionSur.code} »`}
+      {àConfirmer && (
+        <Confirmation
+          titre={
+            àConfirmer.geste === 'annuler'
+              ? `Voulez-vous vraiment annuler le ticket « ${àConfirmer.ticket.code} » ?`
+              : `Voulez-vous vraiment couper l’accès du ticket « ${àConfirmer.ticket.code} » ?`
+          }
           enCours={disable.isPending || cancel.isPending}
-          onFermer={() => setActionSur(null)}
-          options={[
-            ...(actionSur.status === 'CREATED'
-              ? [
-                  {
-                    clé: 'annuler',
-                    libellé: 'Annuler le ticket',
-                    aide: "Pour un ticket jamais vendu : il sort du stock et ne pourra plus être attribué. À réserver aux planches imprimées perdues ou mal générées.",
-                  },
-                ]
-              : []),
-            {
-              clé: 'couper',
-              libellé: "Couper l'accès",
-              aide: "Le compte est bloqué sur le routeur et ses cookies effacés : le client est dehors tout de suite, même s'il lui restait de la validité. Le ticket reste dans l'historique, avec son paiement.",
-              danger: true,
-              libelléBouton: "Couper l'accès",
-            },
-          ]}
-          onAppliquer={(clé) => {
-            if (clé === 'annuler') cancel.mutate(actionSur.id);
-            else disable.mutate(actionSur.id);
+          onAnnuler={() => setÀConfirmer(null)}
+          onConfirmer={() => {
+            if (àConfirmer.geste === 'annuler') cancel.mutate(àConfirmer.ticket.id);
+            else disable.mutate(àConfirmer.ticket.id);
           }}
-        />
+        >
+          {àConfirmer.geste === 'annuler' ? (
+            <>
+              Il sort du stock et ne pourra plus être attribué. À réserver aux planches
+              imprimées perdues ou mal générées — un ticket déjà vendu ne s&apos;annule pas,
+              il se coupe.
+            </>
+          ) : (
+            <>
+              Le compte est bloqué sur le routeur et ses cookies effacés : le client est dehors
+              tout de suite, même s&apos;il lui restait de la validité. Le ticket reste dans
+              l&apos;historique, avec son paiement.
+            </>
+          )}
+        </Confirmation>
       )}
+
     </div>
   );
 }
@@ -583,7 +587,7 @@ function ExpiredTab() {
         vouchers={expired.data ?? []}
         format={format}
         canWrite={canWrite}
-        onAction={setÀCouper}
+        onCouper={setÀCouper}
         emptyLabel="Aucun ticket expiré."
       />
 
@@ -609,14 +613,16 @@ function VoucherTable({
   vouchers,
   format,
   canWrite,
-  onAction,
+  onAnnuler,
+  onCouper,
   emptyLabel = 'Aucun ticket.',
 }: {
   vouchers: Voucher[];
   format: (value: string | number) => string;
   canWrite: boolean;
-  /** Ouvre la fenêtre d'action de l'appelant. Sans elle, la colonne est vide. */
-  onAction?: (voucher: Voucher) => void;
+  /** Ouvrent la question de l'appelant. Sans elles, la colonne reste vide. */
+  onAnnuler?: (voucher: Voucher) => void;
+  onCouper?: (voucher: Voucher) => void;
   emptyLabel?: string;
 }) {
   return (
@@ -634,13 +640,18 @@ function VoucherTable({
           <td className="px-3 py-2 text-slate-500">
             {new Date(voucher.createdAt).toLocaleDateString('fr-FR')}
           </td>
-          <td className="px-3 py-2 text-right">
-            {/* « Annuler » et « Couper l'accès » étaient voisins et se
-                ressemblaient : c'est la fenêtre qui dit maintenant lequel
-                fait quoi, et aucun des deux ne part sur un clic. */}
-            {canWrite && onAction && voucher.status !== 'DISABLED' && (
-              <Button variant="secondary" onClick={() => onAction(voucher)}>
-                Action…
+          <td className="space-x-2 px-3 py-2 text-right">
+            {/* Aucun des deux ne part sur un clic : chacun pose sa question,
+                et ils ne veulent pas dire la même chose — annuler retire du
+                stock un ticket jamais vendu, couper met dehors un client. */}
+            {canWrite && onAnnuler && voucher.status === 'CREATED' && (
+              <Button variant="secondary" onClick={() => onAnnuler(voucher)}>
+                Annuler
+              </Button>
+            )}
+            {canWrite && onCouper && voucher.status !== 'DISABLED' && (
+              <Button variant="danger" onClick={() => onCouper(voucher)}>
+                Couper l&apos;accès
               </Button>
             )}
           </td>

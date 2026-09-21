@@ -6,7 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { libellé, STATUT_ABONNEMENT } from '../api/libelles';
 import { ApiError } from '../api/client';
 import { useState } from 'react';
-import { MenuAction } from '../components/MenuAction';
+import { Confirmation } from '../components/Edition';
 import {
   Badge,
   Button,
@@ -32,8 +32,11 @@ export function SubscriptionsPage() {
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  /** L'abonnement sur lequel on agit : les gestes sont exclusifs. */
-  const [actionSur, setActionSur] = useState<string | null>(null);
+  /** Le geste demandé sur une ligne, tant qu'il n'est pas confirmé. */
+  const [àConfirmer, setÀConfirmer] = useState<{
+    geste: 'suspendre' | 'reactiver';
+    id: string;
+  } | null>(null);
 
   const subscriptions = useQuery({
     queryKey: ['subscriptions'],
@@ -58,14 +61,14 @@ export function SubscriptionsPage() {
     mutationFn: subscriptionsApi.suspend,
     // La fenêtre se referme ici : fermer au clic ferait lire « c'est fait »
     // sur un refus.
-    onSuccess: () => { setError(null); setActionSur(null); refresh(); },
+    onSuccess: () => { setError(null); setÀConfirmer(null); refresh(); },
     onError,
   });
   const resume = useMutation({
     mutationFn: subscriptionsApi.resume,
     // La fenêtre se referme ici : fermer au clic ferait lire « c'est fait »
     // sur un refus.
-    onSuccess: () => { setError(null); setActionSur(null); refresh(); },
+    onSuccess: () => { setError(null); setÀConfirmer(null); refresh(); },
     onError,
   });
   /**
@@ -75,15 +78,12 @@ export function SubscriptionsPage() {
    */
   const reconcile = useMutation({
     mutationFn: subscriptionsApi.reconcile,
-    onSuccess: () => {
-      setActionSur(null);
-      queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['subscriptions'] }),
   });
 
   const renew = useMutation({
     mutationFn: subscriptionsApi.renew,
-    onSuccess: () => { setError(null); setActionSur(null); refresh(); },
+    onSuccess: () => { setError(null); refresh(); },
     onError,
   });
 
@@ -97,58 +97,37 @@ export function SubscriptionsPage() {
         description="Les accès au mois. L'échéance vient du routeur, qui l'applique même cette console fermée."
       />
 
-      {actionSur &&
-        (() => {
-          const abo = subscriptions.data?.find((a) => a.id === actionSur);
-          if (!abo) return null;
-          const suspendu = abo.status === 'SUSPENDED';
-          return (
-            <MenuAction
-              titre={`Abonnement de ${customerName(abo.customerId)}`}
-              enCours={suspend.isPending || resume.isPending || renew.isPending}
-              erreur={suspend.isError || resume.isError || renew.isError ? error : null}
-              onFermer={() => {
-                setError(null);
-                setActionSur(null);
-              }}
-              options={[
-                {
-                  clé: 'relire',
-                  libellé: 'Relire le routeur',
-                  aide: "Ne change rien : va chercher l'échéance sur le routeur, qui fait autorité. À faire avant de décider, car la base a pu prendre du retard si quelqu'un a prolongé le compte depuis WinBox.",
-                  libelléBouton: 'Relire maintenant',
-                },
-                {
-                  clé: 'renouveler',
-                  libellé: 'Renouveler',
-                  aide: "Repousse l'échéance d'une période. À faire quand le client a payé — l'encaissement, lui, se déclare dans l'écran Paiements.",
-                },
-                suspendu
-                  ? {
-                      clé: 'reactiver',
-                      libellé: 'Réactiver',
-                      aide: "L'abonné retrouve son accès, avec l'échéance qu'il lui restait.",
-                    }
-                  : {
-                      clé: 'suspendre',
-                      libellé: 'Suspendre',
-                      aide: "Coupe l'accès de l'abonné. L'abonnement et son historique restent : c'est réversible, contrairement à une suppression.",
-                      danger: true,
-                      libelléBouton: "Suspendre l'accès",
-                    },
-              ]}
-              onAppliquer={(clé) => {
-                setError(null);
-                if (clé === 'relire') reconcile.mutate(actionSur);
-                else if (clé === 'renouveler') renew.mutate(actionSur);
-                else if (clé === 'suspendre') suspend.mutate(actionSur);
-                else resume.mutate(actionSur);
-              }}
-            />
-          );
-        })()}
+      {àConfirmer && (
+        <Confirmation
+          titre={
+            àConfirmer.geste === 'suspendre'
+              ? 'Voulez-vous vraiment suspendre cet abonnement ?'
+              : 'Voulez-vous vraiment réactiver cet abonnement ?'
+          }
+          enCours={suspend.isPending || resume.isPending}
+          erreur={suspend.isError || resume.isError ? error : null}
+          onAnnuler={() => {
+            setError(null);
+            setÀConfirmer(null);
+          }}
+          onConfirmer={() => {
+            setError(null);
+            if (àConfirmer.geste === 'suspendre') suspend.mutate(àConfirmer.id);
+            else resume.mutate(àConfirmer.id);
+          }}
+        >
+          {àConfirmer.geste === 'suspendre' ? (
+            <>
+              L&apos;accès du client est coupé. L&apos;abonnement et son historique restent :
+              c&apos;est réversible, contrairement à une suppression.
+            </>
+          ) : (
+            <>L&apos;abonné retrouve son accès, avec l&apos;échéance qu&apos;il lui restait.</>
+          )}
+        </Confirmation>
+      )}
 
-      {error && !actionSur && (
+      {error && !àConfirmer && (
         <Card>
           <p className="text-sm text-red-600">{error}</p>
         </Card>
@@ -171,16 +150,16 @@ export function SubscriptionsPage() {
                   {recommendedAction === 'SUSPEND' ? 'Suspendre' : 'Prévenir le client'}
                 </td>
                 <td className="px-3 py-2 text-right">
-                  {/* Le bouton coupait l'accès d'un client payant sur un
-                      seul clic, sans rien demander. Il ouvre maintenant la
-                      même fenêtre que la liste : on y lit ce que le geste
-                      fait avant de le faire. */}
+                  {/* Le bouton coupait l'accès d'un client payant sur un seul
+                      clic, sans rien demander. */}
                   {canWrite && recommendedAction === 'SUSPEND' && (
                     <Button
-                      variant="secondary"
-                      onClick={() => setActionSur(subscription.id)}
+                      variant="danger"
+                      onClick={() =>
+                        setÀConfirmer({ geste: 'suspendre', id: subscription.id })
+                      }
                     >
-                      Action…
+                      Suspendre
                     </Button>
                   )}
                 </td>
@@ -207,13 +186,40 @@ export function SubscriptionsPage() {
                 </Badge>
               </td>
               <td className="px-3 py-2">{formatDate(subscription.currentPeriodEnd)}</td>
-              <td className="px-3 py-2 text-right">
-                {/* Un seul bouton : c'est la fenêtre qui porte le choix, et
-                    « Suspendre » n'y est plus à un pixel de « Renouveler ». */}
+              <td className="space-x-2 px-3 py-2 text-right">
                 {canWrite && (
-                  <Button variant="secondary" onClick={() => setActionSur(subscription.id)}>
-                    Action…
-                  </Button>
+                  <>
+                    {/* Relire ne change rien sur le routeur : pas de question
+                        à poser pour une lecture. */}
+                    <Button
+                      variant="secondary"
+                      disabled={reconcile.isPending}
+                      onClick={() => reconcile.mutate(subscription.id)}
+                    >
+                      {reconcile.isPending ? 'Lecture…' : 'Relire le routeur'}
+                    </Button>
+                    <Button variant="secondary" onClick={() => renew.mutate(subscription.id)}>
+                      Renouveler
+                    </Button>
+                    {subscription.status === 'SUSPENDED' ? (
+                      <Button
+                        onClick={() =>
+                          setÀConfirmer({ geste: 'reactiver', id: subscription.id })
+                        }
+                      >
+                        Réactiver
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="danger"
+                        onClick={() =>
+                          setÀConfirmer({ geste: 'suspendre', id: subscription.id })
+                        }
+                      >
+                        Suspendre
+                      </Button>
+                    )}
+                  </>
                 )}
               </td>
             </tr>

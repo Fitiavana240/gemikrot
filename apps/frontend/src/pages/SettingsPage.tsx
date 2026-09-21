@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Confirmation } from '../components/Edition';
+import { Modale } from '../components/Modale';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tenantsApi, type UpdateTenantInput } from '../api/tenants';
 import type { PaymentMethod } from '../api/types';
@@ -26,6 +27,8 @@ export function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   /** La puce qu'on s'apprête à supprimer, tant que ce n'est pas confirmé. */
   const [àSupprimer, setÀSupprimer] = useState<{ id: string; nom: string } | null>(null);
+  /** Le formulaire d'ajout d'une puce, ouvert ou non. */
+  const [ajouter, setAjouter] = useState(false);
   const [form, setForm] = useState<UpdateTenantInput>({});
   const [account, setAccount] = useState({
     provider: 'MVOLA' as PaymentMethod,
@@ -63,6 +66,7 @@ export function SettingsPage() {
     onSuccess: () => {
       setError(null);
       setAccount({ provider: 'MVOLA', phoneNumber: '', accountName: '' });
+      setAjouter(false);
       refresh();
     },
     onError,
@@ -232,11 +236,46 @@ export function SettingsPage() {
         </Table>
 
         {canWrite && (
-          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="mt-4">
+            <Button onClick={() => setAjouter(true)}>Ajouter une puce</Button>
+          </div>
+        )}
+      </Card>
+
+      {ajouter && (
+        <Modale
+          titre="Ajouter une puce Mobile Money"
+          onFermer={() => setAjouter(false)}
+          actions={
+            <Button
+              onClick={() => addAccount.mutate(account)}
+              disabled={!account.phoneNumber || !account.accountName || addAccount.isPending}
+            >
+              {addAccount.isPending ? 'Ajout…' : 'Ajouter'}
+            </Button>
+          }
+          note={
+            <>
+              Ce numéro s&apos;affichera sur la page de paiement de vos clients, avec le nom du
+              titulaire. <strong>Relisez-le</strong> : un chiffre de travers envoie l&apos;argent
+              de vos clients chez quelqu&apos;un d&apos;autre, et rien dans la console ne peut
+              le rattraper.
+            </>
+          }
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (account.phoneNumber && account.accountName) addAccount.mutate(account);
+            }}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          >
             <FormField label="Opérateur">
               <Select
                 value={account.provider}
-                onChange={(e) => setAccount({ ...account, provider: e.target.value as PaymentMethod })}
+                onChange={(e) =>
+                  setAccount({ ...account, provider: e.target.value as PaymentMethod })
+                }
               >
                 {PROVIDERS.map((p) => (
                   <option key={p.value} value={p.value}>
@@ -257,18 +296,10 @@ export function SettingsPage() {
                 onChange={(e) => setAccount({ ...account, accountName: e.target.value })}
               />
             </FormField>
-            <div className="flex items-end">
-              <Button
-                onClick={() => addAccount.mutate(account)}
-                disabled={!account.phoneNumber || !account.accountName}
-                className="w-full"
-              >
-                Ajouter
-              </Button>
-            </div>
-          </div>
-        )}
-      </Card>
+            <button type="submit" className="hidden" aria-hidden />
+          </form>
+        </Modale>
+      )}
 
       <MotDePasseCard />
     </div>

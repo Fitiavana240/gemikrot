@@ -21,7 +21,6 @@ import { ListeDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { GenerationTickets } from '../components/GenerationTickets';
 import { ChampDuree } from '../components/Edition';
-import { MenuAction } from '../components/MenuAction';
 import { Confirmation } from '../components/Edition';
 import {
   Badge,
@@ -253,8 +252,11 @@ export function HotspotUsersTab() {
   const queryClient = useQueryClient();
   const [erreur, setErreur] = useState<string | null>(null);
   const [compteRendu, setCompteRendu] = useState<string | null>(null);
-  /** Le compte sur lequel on agit : les gestes sont exclusifs, l'état l'est aussi. */
-  const [actionSur, setActionSur] = useState<string | null>(null);
+  /** Le geste demandé sur une ligne, tant qu'il n'est pas confirmé. */
+  const [àConfirmer, setÀConfirmer] = useState<{
+    geste: 'bloquer' | 'debloquer' | 'supprimer';
+    compte: string;
+  } | null>(null);
   /**
    * La pose en masse des plafonds, tant qu'elle n'est pas confirmée.
    *
@@ -363,7 +365,7 @@ export function HotspotUsersTab() {
     mutationFn: ({ username, disabled }: { username: string; disabled: boolean }) =>
       hotspotTabsApi.setUserDisabled(username, disabled, currentId),
     onSuccess: (compte) => {
-      setActionSur(null);
+      setÀConfirmer(null);
       rafraîchir();
       setCompteRendu(phraseCoupure(compte.coupure));
     },
@@ -372,7 +374,7 @@ export function HotspotUsersTab() {
   const supprimer = useMutation({
     mutationFn: (username: string) => hotspotTabsApi.deleteUser(username, currentId),
     onSuccess: () => {
-      setActionSur(null);
+      setÀConfirmer(null);
       rafraîchir();
     },
     onError,
@@ -534,59 +536,50 @@ export function HotspotUsersTab() {
         </Confirmation>
       )}
 
-      {actionSur &&
-        (() => {
-          const compte = (filtrés ?? []).find((u) => u.username === actionSur);
-          if (!compte) return null;
-          return (
-            <MenuAction
-              titre={`Compte HotSpot « ${actionSur} »`}
-              enCours={bloquer.isPending || supprimer.isPending}
-              erreur={bloquer.isError || supprimer.isError ? erreur : null}
-              onFermer={() => {
-                setErreur(null);
-                setActionSur(null);
-              }}
-              options={[
-                compte.disabled
-                  ? {
-                      clé: 'debloquer',
-                      libellé: 'Débloquer',
-                      aide: 'Le compte répond de nouveau. Son plafond de temps cumulé, lui, a continué de compter ce qui avait déjà été consommé.',
-                    }
-                  : {
-                      clé: 'bloquer',
-                      libellé: 'Bloquer',
-                      aide: "Le compte reste et garde son trafic consommé ; il cesse d'être accepté. C'est ce que montre la croix dans WinBox : un geste délibéré, pas une expiration.",
-                    },
-                {
-                  clé: 'modifier',
-                  libellé: 'Modifier',
-                  aide: 'Profil, plafonds, commentaire. Le nom du compte est le code que tape le client : il ne se change pas ici.',
-                  libelléBouton: 'Ouvrir le formulaire',
-                },
-                {
-                  clé: 'supprimer',
-                  libellé: 'Supprimer',
-                  aide: 'Son trafic consommé et son commentaire partent avec, sans retour possible. Le bloquer suffit le plus souvent.',
-                  danger: true,
-                  libelléBouton: 'Supprimer définitivement',
-                },
-              ]}
-              onAppliquer={(clé) => {
-                setErreur(null);
-                if (clé === 'modifier') {
-                  setActionSur(null);
-                  setFormulaire(compte);
-                } else if (clé === 'supprimer') {
-                  supprimer.mutate(actionSur);
-                } else {
-                  bloquer.mutate({ username: actionSur, disabled: clé === 'bloquer' });
-                }
-              }}
-            />
-          );
-        })()}
+      {àConfirmer && (
+        <Confirmation
+          titre={
+            àConfirmer.geste === 'supprimer'
+              ? `Voulez-vous vraiment supprimer « ${àConfirmer.compte} » ?`
+              : àConfirmer.geste === 'bloquer'
+                ? `Voulez-vous vraiment bloquer « ${àConfirmer.compte} » ?`
+                : `Voulez-vous vraiment débloquer « ${àConfirmer.compte} » ?`
+          }
+          enCours={bloquer.isPending || supprimer.isPending}
+          erreur={bloquer.isError || supprimer.isError ? erreur : null}
+          onAnnuler={() => {
+            setErreur(null);
+            setÀConfirmer(null);
+          }}
+          onConfirmer={() => {
+            setErreur(null);
+            if (àConfirmer.geste === 'supprimer') supprimer.mutate(àConfirmer.compte);
+            else
+              bloquer.mutate({
+                username: àConfirmer.compte,
+                disabled: àConfirmer.geste === 'bloquer',
+              });
+          }}
+        >
+          {àConfirmer.geste === 'supprimer' ? (
+            <>
+              Son trafic consommé et son commentaire partent avec, sans retour possible. Le
+              bloquer suffit le plus souvent.
+            </>
+          ) : àConfirmer.geste === 'bloquer' ? (
+            <>
+              Le compte reste et garde son trafic consommé ; il cesse d&apos;être accepté.
+              C&apos;est ce que montre la croix dans WinBox : un geste délibéré, pas une
+              expiration.
+            </>
+          ) : (
+            <>
+              Le compte répondra de nouveau. Son plafond de temps cumulé, lui, a gardé ce qui
+              avait déjà été consommé.
+            </>
+          )}
+        </Confirmation>
+      )}
 
       <ListeDuRouteur
         requête={{ ...requête, data: filtrés }}
@@ -629,11 +622,31 @@ export function HotspotUsersTab() {
               </Badge>
             </td>
             <td className="space-x-2 whitespace-nowrap px-3 py-2 text-right">
-              {/* Un seul bouton : c'est la fenêtre qui porte le choix. */}
+              {/* Les boutons restent sur la ligne ; aucun n'écrit au clic. */}
               {canWrite && (
-                <Button variant="secondary" onClick={() => setActionSur(u.username)}>
-                  Action…
-                </Button>
+                <>
+                  <Button variant="secondary" onClick={() => setFormulaire(u)}>
+                    Modifier
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    disabled={bloquer.isPending}
+                    onClick={() =>
+                      setÀConfirmer({
+                        geste: u.disabled ? 'debloquer' : 'bloquer',
+                        compte: u.username,
+                      })
+                    }
+                  >
+                    {u.disabled ? 'Débloquer' : 'Bloquer'}
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={() => setÀConfirmer({ geste: 'supprimer', compte: u.username })}
+                  >
+                    Supprimer
+                  </Button>
+                </>
               )}
             </td>
           </tr>

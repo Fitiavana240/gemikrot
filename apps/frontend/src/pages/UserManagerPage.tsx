@@ -21,7 +21,6 @@ import { ETAT_COMPTE_UM, libellé } from '../api/libelles';
 import { FormulaireLimitation } from '../components/FormulaireLimitation';
 import { Modale } from '../components/Modale';
 import { BarreSelection, CaseLigne, useSelection } from '../components/Selection';
-import { MenuAction } from '../components/MenuAction';
 import { phraseCoupure } from '../api/coupure';
 import { PanneDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
@@ -30,6 +29,7 @@ import {
   ChampDuree,
   Confirmation,
   EditionDuree,
+  EditionUnChamp,
 } from '../components/Edition';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
@@ -652,13 +652,18 @@ function AccountsTab() {
   const [form, setForm] = useState<CreateAccountInput>(EMPTY_ACCOUNT);
   const [sourceFilter, setSourceFilter] = useState<AccountSource | ''>('');
   /**
-   * Le compte sur lequel on agit, quand la fenêtre d'action est ouverte.
+   * Le geste demandé sur une ligne, tant qu'il n'est pas confirmé.
    *
-   * Un seul état pour les trois gestes : ils sont exclusifs, et c'est tout le
-   * propos du choix par boutons radio. Trois états séparés autorisaient trois
-   * fenêtres à la fois, ce que rien n'empêchait.
+   * Les boutons restent sur la ligne — c'est là qu'on les cherche — mais
+   * aucun n'écrit sur le routeur au clic : chacun pose une question, et
+   * c'est la réponse qui écrit.
    */
-  const [actionSur, setActionSur] = useState<string | null>(null);
+  const [àConfirmer, setÀConfirmer] = useState<{
+    geste: 'suspendre' | 'reactiver' | 'supprimer';
+    compte: string;
+  } | null>(null);
+  /** Le compte dont on change le code : le seul geste qui demande une saisie. */
+  const [àRecoder, setÀRecoder] = useState<string | null>(null);
   const [créer, setCréer] = useState(false);
 
   const { currentId } = useRouterSelection();
@@ -698,7 +703,7 @@ function AccountsTab() {
     onSuccess: (compte) => {
       setError(null);
       setCoupure(phraseCoupure(compte.coupure));
-      setActionSur(null);
+      setÀConfirmer(null);
       refresh();
     },
     onError,
@@ -716,7 +721,7 @@ function AccountsTab() {
       userManagerApi.updateAccount(username, { password }, currentId),
     onSuccess: () => {
       setError(null);
-      setActionSur(null);
+      setÀRecoder(null);
       refresh();
     },
     onError,
@@ -728,7 +733,7 @@ function AccountsTab() {
     // la réponse du routeur faisait lire « c'est fait » sur un refus.
     onSuccess: () => {
       setError(null);
-      setActionSur(null);
+      setÀConfirmer(null);
       refresh();
     },
     onError,
@@ -838,71 +843,73 @@ function AccountsTab() {
         </p>
       )}
 
-      {actionSur &&
-        (() => {
-          // L'état du compte décide de ce qu'on peut lui faire : proposer
-          // « Suspendre » sur un compte déjà suspendu ferait un choix sans
-          // effet, qu'on ne comprendrait qu'après l'avoir tenté.
-          const compte = lignes.find((a) => a.username === actionSur);
-          const suspendu = compte?.disabled === true;
-          const enCours =
-            toggle.isPending || changerCode.isPending || supprimer.isPending;
-          const refus =
-            toggle.isError || changerCode.isError || supprimer.isError ? error : null;
+      {àConfirmer && (
+        <Confirmation
+          titre={
+            àConfirmer.geste === 'supprimer'
+              ? `Voulez-vous vraiment supprimer « ${àConfirmer.compte} » ?`
+              : àConfirmer.geste === 'suspendre'
+                ? `Voulez-vous vraiment suspendre « ${àConfirmer.compte} » ?`
+                : `Voulez-vous vraiment réactiver « ${àConfirmer.compte} » ?`
+          }
+          enCours={supprimer.isPending || toggle.isPending}
+          erreur={supprimer.isError || toggle.isError ? error : null}
+          onAnnuler={() => {
+            setError(null);
+            setÀConfirmer(null);
+          }}
+          onConfirmer={() => {
+            setError(null);
+            if (àConfirmer.geste === 'supprimer') supprimer.mutate(àConfirmer.compte);
+            else
+              toggle.mutate({
+                username: àConfirmer.compte,
+                disabled: àConfirmer.geste === 'suspendre',
+              });
+          }}
+        >
+          {/* La question dit ce qu'on perd, pas seulement ce qu'on fait :
+              « êtes-vous sûr » n'apprend rien, la conséquence si. */}
+          {àConfirmer.geste === 'supprimer' ? (
+            <>
+              Son historique de sessions part avec, et rien ne le rendra. Pour couper
+              l&apos;accès sans rien perdre, <strong>Suspendre</strong> suffit — le compte
+              reste, il ne répond plus.
+            </>
+          ) : àConfirmer.geste === 'suspendre' ? (
+            <>
+              Le compte reste et garde tout ; il cesse de répondre. La session d&apos;un client
+              déjà connecté ne se ferme pas d&apos;elle-même.
+            </>
+          ) : (
+            <>
+              Le compte répondra de nouveau, avec la validité qu&apos;il lui restait — la
+              suspension ne l&apos;a pas arrêtée.
+            </>
+          )}
+        </Confirmation>
+      )}
 
-          return (
-            <MenuAction
-              titre={`Compte « ${actionSur} »`}
-              enCours={enCours}
-              erreur={refus}
-              onFermer={() => {
-                setError(null);
-                setActionSur(null);
-              }}
-              options={[
-                suspendu
-                  ? {
-                      clé: 'reactiver',
-                      libellé: 'Réactiver',
-                      aide: "Le compte répond de nouveau, avec la validité qu'il lui restait — la suspension ne l'a pas arrêtée.",
-                    }
-                  : {
-                      clé: 'suspendre',
-                      libellé: 'Suspendre',
-                      aide: "Le compte reste et garde tout ; il cesse de répondre. La session d'un client déjà connecté ne se ferme pas d'elle-même.",
-                    },
-                {
-                  clé: 'code',
-                  libellé: 'Changer le code',
-                  aide: "Le compte garde son nom, ses attributions et sa validité déjà courue : seul le code à saisir change. C'est ce qu'il faut quand un ticket a été lu à voix haute.",
-                  libelléBouton: 'Changer le code',
-                  champ: {
-                    libellé: 'Nouveau code',
-                    placeholder: 'celui que le client saisira',
-                    valider: (v) => (v.trim() === '' ? 'Indiquez le nouveau code.' : null),
-                  },
-                },
-                {
-                  clé: 'supprimer',
-                  libellé: 'Supprimer',
-                  aide: "Son historique de sessions part avec, et rien ne le rendra. Pour couper l'accès sans rien perdre, Suspendre suffit.",
-                  danger: true,
-                  libelléBouton: 'Supprimer définitivement',
-                },
-              ]}
-              onAppliquer={(clé, valeur) => {
-                setError(null);
-                if (clé === 'code') {
-                  changerCode.mutate({ username: actionSur, password: valeur });
-                } else if (clé === 'supprimer') {
-                  supprimer.mutate(actionSur);
-                } else {
-                  toggle.mutate({ username: actionSur, disabled: clé === 'suspendre' });
-                }
-              }}
-            />
-          );
-        })()}
+      {àRecoder && (
+        <EditionUnChamp
+          titre={`Nouveau code pour « ${àRecoder} »`}
+          description={
+            <>
+              Le compte garde son nom, ses attributions et sa validité déjà courue : seul le
+              code à saisir change. C&apos;est ce qu&apos;il faut quand un ticket a été lu à
+              voix haute ou recopié par quelqu&apos;un d&apos;autre.
+            </>
+          }
+          libellé="Nouveau code"
+          placeholder="celui que le client saisira"
+          enCours={changerCode.isPending}
+          onAnnuler={() => setÀRecoder(null)}
+          onValider={(code) => {
+            if (!code.trim()) return 'Indiquez le nouveau code.';
+            changerCode.mutate({ username: àRecoder, password: code.trim() });
+          }}
+        />
+      )}
 
       {canWrite && (
         <div>
@@ -1171,14 +1178,32 @@ function AccountsTab() {
                 )}
               </td>
               <td className="px-3 py-2">
-                {/* Un seul bouton, et il ne fait rien par lui-même : c'est la
-                    fenêtre qui porte le choix. Trois boutons côte à côte
-                    mettaient « Supprimer » à quelques pixels de « Suspendre »,
-                    alors que l'un se défait et l'autre non. */}
+                {/* Les boutons restent sur la ligne, là où on les cherche.
+                    Aucun n'écrit au clic : chacun pose sa question, et c'est
+                    la réponse qui écrit. */}
                 {canWrite && (
-                  <div className="flex justify-end">
-                    <Button variant="secondary" onClick={() => setActionSur(account.username)}>
-                      Action…
+                  <div className="flex justify-end gap-1">
+                    <Button variant="secondary" onClick={() => setÀRecoder(account.username)}>
+                      Changer le code
+                    </Button>
+                    <Button
+                      variant={account.disabled ? 'secondary' : 'danger'}
+                      onClick={() =>
+                        setÀConfirmer({
+                          geste: account.disabled ? 'reactiver' : 'suspendre',
+                          compte: account.username,
+                        })
+                      }
+                    >
+                      {account.disabled ? 'Réactiver' : 'Suspendre'}
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={() =>
+                        setÀConfirmer({ geste: 'supprimer', compte: account.username })
+                      }
+                    >
+                      Supprimer
                     </Button>
                   </div>
                 )}
