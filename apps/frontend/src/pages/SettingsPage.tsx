@@ -6,7 +6,12 @@ import { tenantsApi, type UpdateTenantInput } from '../api/tenants';
 import type { PaymentMethod } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
+import { useParams } from 'react-router-dom';
+import { TabBar, type TabDef } from '../components/TabBar';
 import { MotDePasseCard } from '../components/MotDePasseCard';
+import { ApparenceTab } from './ApparenceTab';
+import { TicketTemplatesTab } from './TicketTemplatesPage';
+import { PageConnexionTab } from './PageConnexionTab';
 import {
   Badge,
   Button,
@@ -21,7 +26,7 @@ import {
 } from '../components/ui';
 import { CURRENCIES, PROVIDERS } from '../lib/options';
 
-export function SettingsPage() {
+function ExploitantTab() {
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -104,10 +109,6 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Paramètres"
-        description="Votre marque, vos puces Mobile Money et vos comptes. Ce que le client voit sur la page de paiement vient d'ici."
-      />
 
       {àSupprimer && (
         <Confirmation
@@ -352,7 +353,49 @@ export function SettingsPage() {
         </Modale>
       )}
 
-      <MotDePasseCard />
+    </div>
+  );
+}
+
+
+/**
+ * Tous les réglages au même endroit.
+ *
+ * Ils étaient éparpillés : la marque ici, le modèle de ticket dans son propre
+ * écran du menu, la page du portail captif au fond des onglets HotSpot, le
+ * mot de passe au bas d'une longue page. On ne cherche pas un réglage dans le
+ * menu où on l'a rangé — on le cherche dans « Paramètres », parce que c'est
+ * là qu'on range les réglages.
+ *
+ * Le portail captif reste **aussi** atteignable depuis HotSpot : c'est de la
+ * configuration du routeur, et quelqu'un qui travaille sur le HotSpot ne doit
+ * pas avoir à changer d'écran. Deux chemins vers la même chose valent mieux
+ * qu'un chemin que la moitié des gens ne prend jamais.
+ */
+const ONGLETS: TabDef[] = [
+  { to: 'exploitant', label: 'Exploitant', défaut: true },
+  { to: 'apparence', label: 'Apparence' },
+  { to: 'tickets', label: 'Modèle de ticket' },
+  { to: 'portail', label: 'Portail captif' },
+  { to: 'compte', label: 'Mon compte' },
+];
+
+export function SettingsPage() {
+  const { tab } = useParams();
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title="Paramètres"
+        description="Votre marque, vos moyens de paiement, ce que vos clients voient, et votre compte."
+      />
+      <TabBar base="/settings" tabs={ONGLETS} />
+
+      {(!tab || tab === 'exploitant') && <ExploitantTab />}
+      {tab === 'apparence' && <ApparenceTab />}
+      {tab === 'tickets' && <TicketTemplatesTab />}
+      {tab === 'portail' && <PageConnexionTab />}
+      {tab === 'compte' && <MotDePasseCard />}
     </div>
   );
 }

@@ -1,5 +1,69 @@
 @import "tailwindcss";
 
+/**
+ * Le thème sombre, par les variables plutôt que par les classes.
+ *
+ * Tailwind v4 compile `bg-white` en `background-color: var(--color-white)` et
+ * `text-slate-600` en `color: var(--color-slate-600)`. Redéfinir ces variables
+ * sous `.sombre` retourne donc toute l'application **sans toucher une seule
+ * page** — l'autre chemin, ajouter `dark:` à la main, aurait demandé 838
+ * retouches sur 62 fichiers, et il en serait resté.
+ *
+ * L'échelle des gris est renversée : `slate-50`, qui sert de fond clair,
+ * devient le plus sombre ; `slate-900`, qui sert de texte, devient le plus
+ * clair. Les nuances du milieu se croisent, donc les hiérarchies tiennent.
+ *
+ * Les teintes pâles des couleurs d'état — `red-50`, `amber-50` — sont les
+ * seules à demander un traitement à part : elles servent de fond de bandeau,
+ * et laissées telles quelles elles feraient des pavés lumineux sur une page
+ * sombre. Elles deviennent des fonds profonds, et leur texte s'éclaircit.
+ */
+.sombre {
+  --color-white: oklch(0.21 0.014 258);
+  --color-black: oklch(0.99 0 0);
+
+  --color-slate-50: oklch(0.17 0.012 258);
+  --color-slate-100: oklch(0.23 0.014 258);
+  --color-slate-200: oklch(0.30 0.016 258);
+  --color-slate-300: oklch(0.42 0.018 258);
+  --color-slate-400: oklch(0.58 0.018 258);
+  --color-slate-500: oklch(0.68 0.016 258);
+  --color-slate-600: oklch(0.78 0.014 258);
+  --color-slate-700: oklch(0.87 0.011 258);
+  --color-slate-800: oklch(0.93 0.008 258);
+  --color-slate-900: oklch(0.97 0.005 258);
+  --color-slate-950: oklch(0.99 0.002 258);
+
+  /* Les fonds de bandeau : pâles en clair, profonds en sombre. */
+  --color-red-50: oklch(0.26 0.06 25);
+  --color-red-100: oklch(0.32 0.08 25);
+  --color-red-200: oklch(0.40 0.09 25);
+  --color-red-700: oklch(0.80 0.13 25);
+  --color-red-800: oklch(0.86 0.11 25);
+  --color-red-900: oklch(0.90 0.09 25);
+
+  --color-amber-50: oklch(0.26 0.05 80);
+  --color-amber-100: oklch(0.32 0.07 80);
+  --color-amber-200: oklch(0.40 0.08 80);
+  --color-amber-700: oklch(0.83 0.13 80);
+  --color-amber-800: oklch(0.88 0.11 80);
+  --color-amber-900: oklch(0.92 0.09 80);
+
+  --color-emerald-50: oklch(0.25 0.05 160);
+  --color-emerald-100: oklch(0.31 0.07 160);
+  --color-emerald-200: oklch(0.39 0.08 160);
+  --color-emerald-700: oklch(0.82 0.13 160);
+  --color-emerald-800: oklch(0.87 0.11 160);
+  --color-emerald-900: oklch(0.91 0.09 160);
+
+  --color-sky-50: oklch(0.25 0.05 240);
+  --color-sky-100: oklch(0.31 0.07 240);
+  --color-sky-200: oklch(0.39 0.08 240);
+  --color-sky-700: oklch(0.82 0.12 240);
+  --color-sky-800: oklch(0.87 0.10 240);
+  --color-sky-900: oklch(0.91 0.08 240);
+}
+
 body {
   @apply bg-slate-50 text-slate-900;
 }
@@ -7,7 +71,10 @@ body {
 /* À l'impression, seule la feuille de tickets doit rester : la navigation et
    l'en-tête de la console n'ont rien à faire sur une planche à découper. */
 @media print {
-  body { background: #ffffff; }
+  /* On n'imprime jamais un fond sombre : trente tickets sur une planche A4
+     videraient une cartouche pour rien, et se découperaient moins bien. */
+  html.sombre { color-scheme: light; }
+  body { background: #ffffff !important; color: #0f172a !important; }
   aside, header { display: none !important; }
   main { padding: 0 !important; }
   iframe { width: 100% !important; height: auto !important; min-height: 100vh; border: 0 !important; }

@@ -95,8 +95,13 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Réglages',
     items: [
       { to: '/plans', label: 'Offres', hint: 'Durées, prix, débits' },
-      { to: '/ticket-templates', label: 'Modèle de ticket', hint: "Mise en page de l'impression" },
-      { to: '/settings', label: 'Paramètres', hint: 'Marque, Mobile Money, comptes' },
+      // Le modele de ticket a rejoint Parametres : on n'y touche qu'une fois,
+      // c'est un reglage, et il se cherche la ou on range les reglages.
+      {
+        to: '/settings',
+        label: 'Paramètres',
+        hint: 'Marque, paiement, tickets, portail, apparence',
+      },
       { to: '/audit', label: 'Journal', roles: ADMIN, hint: 'Qui a fait quoi, et quand' },
       { to: '/tenants', label: 'Exploitants', roles: ['SUPER_ADMIN'], hint: 'Comptes de la plateforme' },
     ],

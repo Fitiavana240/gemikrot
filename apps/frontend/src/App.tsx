@@ -63,6 +63,9 @@ export function App() {
             <Route path="/ticket-print" element={<TicketPrintPage />} />
             <Route path="/audit" element={<AuditPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            {/* Les reglages sont regroupes en onglets : la marque, le modele
+                de ticket, le portail captif, le compte et l'apparence. */}
+            <Route path="/settings/:tab" element={<SettingsPage />} />
             <Route path="/tenants" element={<TenantsPage />} />
             <Route path="/plans" element={<PlansPage />} />
             <Route path="/customers" element={<CustomersPage />} />

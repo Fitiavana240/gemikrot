@@ -26,6 +26,29 @@ const TOKEN_KEY = 'gemikrot_claim_token';
 
 export function PublicPaymentPage() {
   const { slug = '' } = useParams();
+
+  /**
+   * La page du client reste claire, quel que soit le reglage de son telephone.
+   *
+   * Elle se lit **au soleil**, par quelqu'un qui n'a rien choisi et qui est
+   * sur le point d'engager son argent. Le sombre y est moins lisible en
+   * plein jour, et c'est la meme raison qui a fait remonter le contraste de
+   * la page captive du routeur.
+   *
+   * Le reglage de l'exploitant est rendu en quittant la page : il a choisi le
+   * sombre pour sa console, pas pour la vitrine de ses clients.
+   */
+  useEffect(() => {
+    const racine = document.documentElement;
+    const etait = racine.classList.contains('sombre');
+    if (!etait) return;
+    racine.classList.remove('sombre');
+    racine.style.colorScheme = 'light';
+    return () => {
+      racine.classList.add('sombre');
+      racine.style.colorScheme = 'dark';
+    };
+  }, []);
   const [lang, setLang] = useState<Lang>('fr');
   const t = TRANSLATIONS[lang];
 

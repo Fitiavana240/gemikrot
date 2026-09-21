@@ -49,7 +49,17 @@ const EN_TETE = (
   </div>
 );
 
-export function TicketTemplatesPage() {
+/**
+ * Le modèle de ticket, désormais un onglet de Paramètres.
+ *
+ * Il avait sa propre entrée dans le menu de gauche, entre les écrans de
+ * travail quotidien. Or on n'y touche qu'une fois — c'est un réglage, et il
+ * se cherche là où on range les réglages.
+ *
+ * L'ancien nom reste exporté : l'adresse `/ticket-templates` continue de
+ * répondre, et un lien mis en favori ne casse pas.
+ */
+export function TicketTemplatesTab() {
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -414,3 +424,6 @@ export function TicketPrintPage() {
     </div>
   );
 }
+
+/** L'ancienne adresse, conservée : un favori ne doit pas casser. */
+export const TicketTemplatesPage = TicketTemplatesTab;
