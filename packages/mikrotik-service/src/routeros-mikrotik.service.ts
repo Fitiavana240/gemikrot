@@ -133,6 +133,11 @@ function duréeOuRien(secondes: number | null | undefined): string | undefined {
   return secondes === null ? '0s' : `${secondes}s`;
 }
 
+/** RouterOS rend ses booléens en chaînes ; tout le reste vaut faux. */
+function flagRouteur(valeur: unknown): boolean {
+  return valeur === true || valeur === 'true' || valeur === 'yes';
+}
+
 export class RouterOSMikrotikService implements IMikrotikService {
   constructor(private readonly client: RouterOSRestClient, private readonly logger: ILogger) {}
 
@@ -1330,6 +1335,68 @@ export class RouterOSMikrotikService implements IMikrotikService {
       this.client.get<any>('/system/resource').catch(() => ({})),
     ]);
     return ToolsMapper.mapHorlogeRouteur(clock, ntp, resource);
+  }
+
+  /**
+   * Qui tient le plus de connexions ouvertes.
+   *
+   * Répond à « pourquoi c'est lent » avec un nom, là où le débit par client
+   * ne dit que « beaucoup de trafic ». Les deux ne se recoupent pas : un
+   * appareil peut consommer peu et tenir des centaines de connexions.
+   *
+   * La table est lue en entier — plus de deux mille lignes sur ce parc — puis
+   * agrégée ici plutôt que dans l'écran : le détail d'une connexion n'aide
+   * personne, seul le compte par client compte.
+   */
+  async getSuiviConnexions() {
+    const [connexions, reglages, baux, hotes, sessions] = await Promise.all([
+      this.client.get<any[]>('/ip/firewall/connection'),
+      this.client.get<any>('/ip/firewall/connection/tracking').catch(() => ({})),
+      this.client.get<any[]>('/ip/dhcp-server/lease').catch(() => []),
+      this.client.get<any[]>('/ip/hotspot/host').catch(() => []),
+      // Le nom du compte n'est PAS dans `/host` — sondé, ce menu n'a pas de
+      // champ `user` du tout. Il vit dans `/active`, et les lire tous deux
+      // est le seul moyen de distinguer « autorisé sans session ouverte » de
+      // « pas authentifié ».
+      this.client.get<any[]>('/ip/hotspot/active').catch(() => []),
+    ]);
+
+    const parAdresse = new Map<string, number>();
+    for (const c of connexions) {
+      // `src-address` porte « 192.168.88.30:51234 » : le port ne nous
+      // intéresse pas, c'est l'appareil qu'on compte.
+      const source = String(c?.['src-address'] ?? '').split(':')[0];
+      if (!source) continue;
+      parAdresse.set(source, (parAdresse.get(source) ?? 0) + 1);
+    }
+
+    const parBail = new Map(baux.map((b) => [b?.address, b]));
+    const parHote = new Map(hotes.map((h) => [h?.address, h]));
+    const parSession = new Map(sessions.map((a) => [a?.address, a]));
+
+    const clients = [...parAdresse.entries()]
+      .map(([address, nombre]) => {
+        const bail = parBail.get(address);
+        const hote = parHote.get(address);
+        return {
+          address,
+          connexions: nombre,
+          hostname: bail?.['host-name'] || null,
+          macAddress: bail?.['mac-address'] || hote?.['mac-address'] || null,
+          username: parSession.get(address)?.user || null,
+          autorise: hote != null ? flagRouteur(hote.authorized) : null,
+          bytesOut: hote?.['bytes-out'] != null ? Number(hote['bytes-out']) : null,
+          bytesIn: hote?.['bytes-in'] != null ? Number(hote['bytes-in']) : null,
+        };
+      })
+      .sort((a, b) => b.connexions - a.connexions);
+
+    return {
+      total: connexions.length,
+      maxEntries: Number(reglages?.['max-entries'] ?? 0),
+      tcpEstablishedTimeout: reglages?.['tcp-established-timeout'] ?? '',
+      clients,
+    };
   }
 
   /**

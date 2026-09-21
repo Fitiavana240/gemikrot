@@ -20,6 +20,7 @@ import { PortsTab } from './PortsTab';
 import { CertificatsTab } from './CertificatsTab';
 import { HorlogeTab } from './HorlogeTab';
 import { AccesRouteurTab } from './AccesRouteurTab';
+import { ConnexionsTab } from './ConnexionsTab';
 import { TabBar, type TabDef } from '../components/TabBar';
 import {
   Badge,
@@ -1083,6 +1084,7 @@ function FichiersTab() {
 const ONGLETS = {
   debit: { titre: 'Débit par client', rendu: () => <QueuesTab /> },
   liens: { titre: 'Interfaces', rendu: () => <InterfacesTab /> },
+  connexions: { titre: 'Connexions par client', rendu: () => <ConnexionsTab /> },
   ports: { titre: 'Ports cuivre', rendu: () => <PortsTab /> },
   structure: { titre: 'Structure du réseau', rendu: () => <StructureTab /> },
   wifi: { titre: 'Wi-Fi et RADIUS', rendu: () => <WifiTab /> },

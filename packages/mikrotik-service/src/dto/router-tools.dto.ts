@@ -596,3 +596,54 @@ export interface RouterExpositionDto {
   upnpEnabled: boolean;
   snmpEnabled: boolean;
 }
+
+/**
+ * Ce qu'un client tient ouvert sur le routeur.
+ *
+ * Le nombre de connexions suivies dit autre chose que le débit : un appareil
+ * peut consommer peu et tenir des centaines de connexions — c'est la
+ * signature d'un gestionnaire de téléchargement, d'un partage pair à pair, ou
+ * d'un appareil qui réessaie en boucle. Relevé sur ce parc : un client tenait
+ * 933 connexions sur 2 237, soit 42 % à lui seul.
+ */
+export interface ClientConnexionsDto {
+  address: string;
+  connexions: number;
+  /** Nom d'hôte du bail DHCP, quand il y en a un. */
+  hostname: string | null;
+  macAddress: string | null;
+  /**
+   * Compte HotSpot de la session ouverte à cette adresse.
+   *
+   * Lu dans `/ip/hotspot/active` et non dans `/host` : sondé, ce dernier n'a
+   * aucun champ `user`. Le premier essai le cherchait là et affichait donc
+   * « non connecté » pour tout le monde, y compris les autorisés.
+   */
+  username: string | null;
+  /**
+   * Vrai quand le routeur tient cet appareil pour authentifié.
+   *
+   * Distinct de `username` : un hôte peut être autorisé — par cookie, par
+   * exemple — sans qu'une session porte son nom. `null` si l'appareil n'est
+   * pas connu du HotSpot.
+   */
+  autorise: boolean | null;
+  /** Octets descendus vers ce client depuis le début de sa session. */
+  bytesOut: number | null;
+  bytesIn: number | null;
+}
+
+/** L'état du suivi de connexions, et qui l'occupe. */
+export interface SuiviConnexionsDto {
+  /** Entrées occupées en ce moment. */
+  total: number;
+  /** Plafond du routeur. Au-delà, plus aucune connexion ne passe. */
+  maxEntries: number;
+  /**
+   * Durée pendant laquelle une connexion TCP établie reste comptée après
+   * être devenue inactive. Longue, elle gonfle la table sans que personne
+   * ne transmette quoi que ce soit.
+   */
+  tcpEstablishedTimeout: string;
+  clients: ClientConnexionsDto[];
+}

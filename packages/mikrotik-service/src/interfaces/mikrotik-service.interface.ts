@@ -87,6 +87,7 @@ import {
   RouterAccountDto,
   RouterAccountGroupDto,
   RouterExpositionDto,
+  SuiviConnexionsDto,
   SimpleQueueDto,
   WirelessInterfaceDto,
   WirelessClientDto,
@@ -297,6 +298,9 @@ export interface IMikrotikService {
 
   /** L'heure du routeur, son fuseau, et l'état du recalage NTP. */
   getHorloge(): Promise<HorlogeRouteurDto>;
+
+  /** Qui tient le plus de connexions ouvertes sur le routeur. */
+  getSuiviConnexions(): Promise<SuiviConnexionsDto>;
 
   /** Qui peut entrer dans le routeur, et par où. */
   getAcces(): Promise<{

@@ -166,6 +166,12 @@ export class RouterToolsController {
     return (await this.clients.forRouter(routerId)).getHorloge();
   }
 
+  /** Qui tient le plus de connexions ouvertes. */
+  @Get('connexions')
+  async connexions(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getSuiviConnexions();
+  }
+
   /** Qui peut entrer dans le routeur, et par où. */
   @Get('acces')
   async acces(@Param('routerId') routerId: string) {

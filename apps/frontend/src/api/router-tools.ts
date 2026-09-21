@@ -312,6 +312,8 @@ export const routerToolsApi = {
   certificats: (routerId: string) => api.get<Certificat[]>(`${base(routerId)}/certificates`),
   horloge: (routerId: string) => api.get<HorlogeRouteur>(`${base(routerId)}/horloge`),
   acces: (routerId: string) => api.get<AccesRouteur>(`${base(routerId)}/acces`),
+  connexions: (routerId: string) =>
+    api.get<SuiviConnexions>(`${base(routerId)}/connexions`),
   services: (routerId: string) => api.get<IpService[]>(`${base(routerId)}/services`),
   cloud: (routerId: string) => api.get<IpCloud>(`${base(routerId)}/cloud`),
   arp: (routerId: string) => api.get<ArpEntry[]>(`${base(routerId)}/arp`),
@@ -617,4 +619,29 @@ export interface AccesRouteur {
   comptes: CompteRouteur[];
   groupes: GroupeRouteur[];
   exposition: ExpositionRouteur;
+}
+
+/**
+ * Ce qu'un appareil tient ouvert. `connexions` ne mesure PAS le débit : un
+ * appareil peut consommer peu et tenir des centaines de connexions.
+ */
+export interface ClientConnexions {
+  address: string;
+  connexions: number;
+  hostname: string | null;
+  macAddress: string | null;
+  /** Compte de la session ouverte. Lu dans `/active`, pas dans `/host`. */
+  username: string | null;
+  /** Le routeur tient-il cet appareil pour authentifié ? `null` s'il l'ignore. */
+  autorise: boolean | null;
+  bytesOut: number | null;
+  bytesIn: number | null;
+}
+
+export interface SuiviConnexions {
+  total: number;
+  /** Plafond du routeur : atteint, plus aucune connexion ne passe. */
+  maxEntries: number;
+  tcpEstablishedTimeout: string;
+  clients: ClientConnexions[];
 }
