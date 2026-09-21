@@ -24,6 +24,7 @@ import {
 import { Occupation } from '../components/Occupation';
 import { MiseEnRoute } from '../components/MiseEnRoute';
 import { AbonnementPlateforme } from '../components/AbonnementPlateforme';
+import { ParcoursAchat } from '../components/ParcoursAchat';
 
 const VOUCHER_LABEL: Record<string, string> = {
   CREATED: 'disponibles',
@@ -141,6 +142,11 @@ export function DashboardPage() {
           n'apprennent rien à qui n'a pas encore branché son routeur. La carte
           s'efface d'elle-même une fois les quatre étapes franchies. */}
       <MiseEnRoute />
+
+      {/* Un bouton d'achat mort ne se signale pas : le client conclut que le
+          réseau ne marche pas et s'en va. C'est donc ici, sur l'écran qu'on
+          ouvre le matin, que la rupture doit se voir. */}
+      <ParcoursAchat />
 
       {/* Un routeur injoignable passe avant les chiffres : ils sont peut-être
           faux, et surtout plus rien ne s'écrit sur le matériel. */}

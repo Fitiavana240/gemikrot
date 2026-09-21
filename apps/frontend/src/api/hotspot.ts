@@ -147,11 +147,23 @@ export interface CiblePublication {
   motDePasseEnClairAccepte: boolean;
   publie: { octets: number; publieLe: string } | null;
   surLeRouteur: { octets: number | null; modifieLe: string | null } | null;
+  /** Le fichier s'écarte des autres fichiers d'usine : il a été remplacé. */
+  modifieeHorsConsole: boolean;
+}
+
+/** Ce qui décide, à cet instant, si un client peut acheter. */
+export interface SanteParcoursAchat {
+  operationnel: boolean;
+  /** Ce qui l'empêche, dit dans l'ordre où cela se corrige. */
+  ruptures: string[];
+  adressePubliee: string | null;
+  adresseActuelle: string | null;
 }
 
 export interface EtatPageConnexion {
   reglages: ReglagesPageConnexion;
   parDefaut: boolean;
+  sante: SanteParcoursAchat;
   tarifs: LigneTarif[];
   adresses: AdresseCandidate[];
   cibles: CiblePublication[];
@@ -201,6 +213,16 @@ export const hotspotApi = {
    */
   telechargerPageConnexion: (reglages: Partial<ReglagesPageConnexion>) =>
     telecharger('/hotspot/page-connexion/fichier', 'login.html', reglages),
+  /**
+   * Remet d'accord l'adresse de la console, le Walled Garden et la page.
+   *
+   * **Écrit sur le routeur** : règle du Walled Garden, et page remplacée.
+   */
+  reparerPageConnexion: (routerId?: string) =>
+    api.post<{ gestes: string[] }>(
+      `/hotspot/page-connexion/reparer${routerId ? `?routerId=${routerId}` : ''}`,
+      {},
+    ),
   /** Écrit la page sur chaque dossier réellement servi par le routeur. */
   publierPageConnexion: (routerId?: string) =>
     api.post<{ ecrits: { chemin: string; octets: number }[] }>(

@@ -189,6 +189,14 @@ model HotspotLoginPublication {
   /// Chemin ecrit, derive du `html-directory` du profil qui sert reellement.
   chemin   String
   octets   Int
+  /// L'adresse de paiement **gravee dans la page** au moment de la publier.
+  ///
+  /// Le fichier vit sur le routeur : il ne peut pas reagir. Si la console
+  /// change d'adresse -- un bail DHCP suffit -- la page continue d'envoyer
+  /// les clients a l'ancienne, et leur navigateur affiche une connexion
+  /// refusee. Garder ce qui a ete grave est le seul moyen de s'en apercevoir
+  /// avant eux.
+  portailUrl String? @map("portail_url")
   publieLe DateTime @default(now()) @map("publie_le")
   publiePar String? @map("publie_par")
 

@@ -114,6 +114,22 @@ export class HotspotController {
     return this.pageConnexion.enregistrer(body as never, user.id);
   }
 
+  /**
+   * Remet d'accord l'adresse de la console, le Walled Garden et la page.
+   *
+   * Un seul geste, parce qu'il n'y a aucun cas ou l'on veut n'en faire que
+   * deux sur trois : une page republiee vers une adresse non autorisee est
+   * aussi morte qu'une page non republiee.
+   */
+  @Roles(AdminRole.SUPER_ADMIN, AdminRole.ADMIN)
+  @Post('page-connexion/reparer')
+  reparerPageConnexion(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('routerId') routerId?: string,
+  ) {
+    return this.pageConnexion.reparer(user.id, routerId);
+  }
+
   /** Ecrit la page sur chaque dossier reellement servi par le routeur. */
   @Roles(AdminRole.SUPER_ADMIN, AdminRole.ADMIN)
   @Post('page-connexion')

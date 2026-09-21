@@ -53,6 +53,8 @@ function service(options: {
   profils?: any[];
   fichiers?: any[];
   wgAdresses?: any[];
+  publications?: any[];
+  puces?: number;
   reglages?: Record<string, unknown> | null;
 }) {
   const mikrotik = {
@@ -83,10 +85,13 @@ function service(options: {
       upsert: vi.fn(async () => ({})),
     },
     hotspotLoginPublication: {
-      findMany: vi.fn(async () => []),
+      findMany: vi.fn(async () => options.publications ?? []),
       upsert: vi.fn(async () => ({})),
     },
-    scopedStrict: { plan: { findMany: vi.fn(async () => OFFRES) } },
+    scopedStrict: {
+      plan: { findMany: vi.fn(async () => OFFRES) },
+      mobileMoneyAccount: { count: vi.fn(async () => options.puces ?? 1) },
+    },
   };
 
   const s = new PageConnexionService(
@@ -388,6 +393,155 @@ describe('les emoji', () => {
     expect(contenu).toContain('&#128246;');
     expect(contenu).not.toContain('&#55357;');
     expect([...contenu].find((c) => (c.codePointAt(0) ?? 0) > 127)).toBeUndefined();
+  });
+});
+
+describe('la santé du parcours d’achat', () => {
+  /** Un routeur normal : un serveur actif, un profil qui accepte le PAP. */
+  const parc = {
+    serveurs: [{ name: 'hotspot-tati', profileName: 'p', disabled: false }],
+    // `hotspotAddress` porte l'adresse du portail : c'est elle qui dit sur
+    // quel reseau chercher la console. Sans elle, aucune adresse n'est
+    // deduite -- le profil `default` de ce routeur, qui annonce `0.0.0.0`,
+    // est dans ce cas.
+    profils: [profil('p', 'flash/hotspot', { hotspotAddress: '192.168.88.1' })],
+  };
+
+  it('dit que tout va bien quand tout va bien', async () => {
+    const { service: s } = service({
+      ...parc,
+      reglages: { portailUrl: 'http://192.168.88.135:5173' },
+      publications: [
+        {
+          chemin: 'flash/hotspot/login.html',
+          octets: 9404,
+          portailUrl: 'http://192.168.88.135:5173',
+          publieLe: new Date(),
+        },
+      ],
+    });
+
+    const { sante } = await s.etat('r1');
+
+    expect(sante.operationnel).toBe(true);
+    expect(sante.ruptures).toEqual([]);
+  });
+
+  it('voit la page qui envoie les clients à une ancienne adresse', async () => {
+    // Le cas qui coûte le plus cher, parce qu'il survient tout seul : un bail
+    // DHCP renouvelé suffit. Le fichier vit sur le routeur et ne peut pas
+    // réagir ; le client tape sur un bouton mort au matin.
+    const { service: s } = service({
+      ...parc,
+      reglages: { portailUrl: 'http://192.168.88.135:5173' },
+      publications: [
+        {
+          chemin: 'flash/hotspot/login.html',
+          octets: 9404,
+          portailUrl: 'http://192.168.88.250:5173',
+          publieLe: new Date(),
+        },
+      ],
+    });
+
+    const { sante } = await s.etat('r1');
+
+    expect(sante.operationnel).toBe(false);
+    expect(sante.ruptures.join(' ')).toMatch(/192\.168\.88\.250.*192\.168\.88\.135/);
+    expect(sante.adressePubliee).toBe('http://192.168.88.250:5173');
+  });
+
+  it('ne déduit aucune adresse quand le profil n’annonce pas la sienne', async () => {
+    // Le profil `default` de ce routeur annonce `0.0.0.0`. Sans reseau de
+    // reference, proposer une adresse reviendrait a proposer les cartes
+    // virtuelles du poste de travail, injoignables depuis le Wi-Fi. Mieux
+    // vaut ne rien proposer que proposer faux.
+    const { service: s } = service({
+      serveurs: [{ name: 'hs1', profileName: 'p', disabled: false }],
+      profils: [profil('p', 'hotspot')],
+      reglages: { portailUrl: 'http://192.168.88.135:5173' },
+    });
+
+    const { adresses, sante } = await s.etat('r1');
+
+    expect(adresses.filter((a) => a.source === 'reseau-local')).toEqual([]);
+    expect(sante.adresseActuelle).toBeNull();
+  });
+
+  it('voit la page d’origine, jamais remplacée', async () => {
+    // Les fichiers d'usine portent tous la seconde d'installation du HotSpot.
+    const { service: s } = service({
+      ...parc,
+      fichiers: [
+        { name: 'flash/hotspot/login.html', sizeBytes: 4360, lastModified: '2026-07-02 14:04:23' },
+        { name: 'flash/hotspot/logout.html', sizeBytes: 2629, lastModified: '2026-07-02 14:04:23' },
+      ],
+      reglages: { portailUrl: 'http://192.168.88.135:5173' },
+    });
+
+    expect((await s.etat('r1')).sante.ruptures.join(' ')).toMatch(/jamais été publiée/);
+  });
+
+  it('ne crie pas au loup sur une page posée à la main', async () => {
+    // Le cas de ce parc : la page a été glissée dans WinBox, seul chemin
+    // praticable pour une page riche -- l'API du routeur refuse tout octet
+    // au-dessus de 127. Annoncer « vos clients n'ont pas de bouton » serait
+    // faux, en rouge, sur l'écran du matin.
+    const { service: s } = service({
+      ...parc,
+      fichiers: [
+        { name: 'flash/hotspot/login.html', sizeBytes: 18308, lastModified: '2026-09-21 20:14:01' },
+        { name: 'flash/hotspot/logout.html', sizeBytes: 2629, lastModified: '2026-07-02 14:04:23' },
+      ],
+      reglages: { portailUrl: 'http://192.168.88.135:5173' },
+    });
+
+    const { sante, avertissements } = await s.etat('r1');
+
+    expect(sante.ruptures.join(' ')).not.toMatch(/jamais/);
+    expect(avertissements.join(' ')).toMatch(/en dehors de la console/);
+  });
+
+  it('voit l’absence de puce Mobile Money', async () => {
+    // La page de paiement montrerait les prix, puis un écran sans numéro : le
+    // client a traversé deux pages pour rien.
+    const { service: s } = service({
+      ...parc,
+      puces: 0,
+      reglages: { portailUrl: 'http://192.168.88.135:5173' },
+      publications: [
+        {
+          chemin: 'flash/hotspot/login.html',
+          octets: 9404,
+          portailUrl: 'http://192.168.88.135:5173',
+          publieLe: new Date(),
+        },
+      ],
+    });
+
+    expect((await s.etat('r1')).sante.ruptures.join(' ')).toMatch(/aucun numéro/i);
+  });
+
+  it('voit l’adresse refusée par le Walled Garden', async () => {
+    // RouterOS rejette avec un TCP reset : le navigateur du client affiche
+    // « connexion refusée », un message qui ne parle jamais du Walled Garden.
+    const { service: s } = service({
+      ...parc,
+      wgAdresses: [
+        { dstAddress: '192.168.88.250', dstPort: '5173', action: 'accept', disabled: false },
+      ],
+      reglages: { portailUrl: 'http://192.168.88.135:5173' },
+      publications: [
+        {
+          chemin: 'flash/hotspot/login.html',
+          octets: 9404,
+          portailUrl: 'http://192.168.88.135:5173',
+          publieLe: new Date(),
+        },
+      ],
+    });
+
+    expect((await s.etat('r1')).sante.ruptures.join(' ')).toMatch(/Walled Garden/);
   });
 });
 

@@ -136,6 +136,38 @@ export interface CiblePublication {
   publie: { octets: number; publieLe: Date } | null;
   /** Ce que le routeur porte aujourd'hui, ou `null` si le fichier manque. */
   surLeRouteur: { octets: number | null; modifieLe: string | null } | null;
+  /**
+   * Le fichier s'écarte-t-il des autres fichiers d'usine du même dossier ?
+   *
+   * Ils portent tous la seconde où le HotSpot a été installé. Un `login.html`
+   * daté autrement a été remplacé — par la console, ou à la main dans WinBox.
+   * C'est le seul moyen de le savoir sans lire le fichier, que RouterOS ne
+   * rend que sous 4 096 octets.
+   */
+  modifieeHorsConsole: boolean;
+}
+
+/**
+ * Ce qui décide, à cet instant, si un client peut acheter.
+ *
+ * Quatre choses doivent être d'accord, et elles bougent séparément :
+ * l'adresse gravée dans la page du routeur, l'adresse où la console répond
+ * vraiment, ce que le Walled Garden laisse passer, et l'existence d'une offre
+ * et d'une puce. Aucune n'est vérifiée par les trois autres.
+ *
+ * Le jour où elles divergent, personne ne l'apprend : le client tape sur un
+ * bouton mort, conclut que le réseau ne marche pas, et s'en va. Il ne
+ * téléphone pas pour signaler un bouton.
+ */
+export interface SanteParcoursAchat {
+  /** Vrai quand un client peut acheter maintenant. */
+  operationnel: boolean;
+  /** Ce qui l'empêche, dit dans l'ordre où cela se corrige. */
+  ruptures: string[];
+  /** L'adresse gravée dans la page publiée, ou `null` si jamais publiée. */
+  adressePubliee: string | null;
+  /** Celle où la console répond aujourd'hui, si elle a pu être déduite. */
+  adresseActuelle: string | null;
 }
 
 export interface EtatPageConnexion {
@@ -151,6 +183,7 @@ export interface EtatPageConnexion {
   empechements: string[];
   /** Ce qui mérite d'être lu avant de publier, sans l'empêcher. */
   avertissements: string[];
+  sante: SanteParcoursAchat;
 }
 
 @Injectable()
@@ -387,8 +420,17 @@ export class PageConnexionService {
       ? await this.clients.forRouter(routerId)
       : await this.clients.forDefaultRouter();
 
-    const [serveurs, profils, fichiers, wgHotes, wgAdresses, publications, offres, exploitant] =
-      await Promise.all([
+    const [
+      serveurs,
+      profils,
+      fichiers,
+      wgHotes,
+      wgAdresses,
+      publications,
+      offres,
+      exploitant,
+      puces,
+    ] = await Promise.all([
       mikrotik.getHotspotServers(),
       mikrotik.getHotspotServerProfiles(),
       mikrotik.getRouterFiles(),
@@ -415,6 +457,10 @@ export class PageConnexionService {
         where: { id: tenantId },
         select: { currency: true, domains: true },
       }),
+      // Sans puce enregistree, la page de paiement montre les prix puis un
+      // ecran qui n'a aucun numero a donner : le parcours s'arrete la, et le
+      // client a deja traverse deux pages pour rien.
+      this.prisma.scopedStrict.mobileMoneyAccount.count({ where: { isActive: true } }),
     ]);
 
     const profilPar = new Map(profils.map((p) => [p.name, p]));
@@ -438,9 +484,17 @@ export class PageConnexionService {
       const chemin = `${dossier}/login.html`;
       const surLeRouteur = fichiers.find((f) => f.name === chemin) ?? null;
       const publie = publications.find((p) => p.chemin === chemin) ?? null;
+      // `logout.html` sert de témoin : personne ne le remplace, et il porte
+      // donc la seconde d'installation du HotSpot.
+      const temoin = fichiers.find((f) => f.name === `${dossier}/logout.html`) ?? null;
       return {
         chemin,
         serveurs: e.serveurs,
+        modifieeHorsConsole: Boolean(
+          surLeRouteur?.lastModified &&
+            temoin?.lastModified &&
+            surLeRouteur.lastModified !== temoin.lastModified,
+        ),
         motDePasseEnClairAccepte: e.pap,
         publie: publie ? { octets: publie.octets, publieLe: publie.publieLe } : null,
         surLeRouteur: surLeRouteur
@@ -549,12 +603,91 @@ export class PageConnexionService {
       autorisee: autoriseParLeWalledGarden(c.url, wgHotes, wgAdresses).autorise,
     }));
 
+    /**
+     * Le diagnostic du parcours d'achat, dans l'ordre où il se corrige.
+     *
+     * Chaque rupture est une phrase qui dit **ce que le client voit**, pas
+     * l'état d'un champ : « le bouton ne mène nulle part » se comprend et se
+     * corrige, « portailUrl ne correspond pas » ne se comprend pas.
+     */
+    const publiee = publications.find((p) => p.portailUrl) ?? null;
+    const adressePubliee = publiee?.portailUrl ?? null;
+    const adresseActuelle = adresses.find((a) => a.source === 'reseau-local')?.url ?? null;
+
+    const ruptures: string[] = [];
+    if (cibles.length === 0) {
+      ruptures.push("Aucun serveur HotSpot actif : vos clients ne voient aucune page.");
+    } else if (publications.length === 0) {
+      /**
+       * Rien n'a été publié **depuis la console** — ce qui ne veut pas dire
+       * qu'il n'y a pas de page.
+       *
+       * Le fichier a pu être déposé à la main dans WinBox, et c'est même le
+       * seul chemin praticable pour une page riche : l'API du routeur refuse
+       * tout octet au-dessus de 127. Annoncer « vos clients n'ont pas de
+       * bouton » serait alors faux, en rouge, sur l'écran du matin — et une
+       * fausse alerte s'apprend à s'ignorer.
+       *
+       * On peut trancher sans lire le fichier : RouterOS n'en rend le contenu
+       * que sous 4 096 octets, mais les fichiers d'usine portent **tous la
+       * même seconde**, celle de l'installation du HotSpot. Si `login.html`
+       * s'en écarte, quelqu'un l'a remplacé.
+       */
+      const posees = cibles.filter((c) => c.surLeRouteur && c.modifieeHorsConsole);
+      if (posees.length === cibles.length && posees.length > 0) {
+        avertissements.push(
+          "La page du routeur a été remplacée en dehors de la console. Son contenu n'est pas lisible — RouterOS ne rend un fichier que sous 4 096 octets : vérifiez vous-même qu'elle porte le bouton d'achat et qu'il vise la bonne adresse.",
+        );
+      } else {
+        ruptures.push(
+          "La page de connexion n'a jamais été publiée : vos clients voient celle d'origine du routeur, qui n'a pas de bouton d'achat.",
+        );
+      }
+    } else if (
+      adressePubliee &&
+      adresseActuelle &&
+      // Les **hotes** sont compares, pas les adresses entieres. Ce qu'on
+      // traque est un demenagement de la machine -- un bail DHCP renouvele --
+      // et le port, lui, ne bouge pas tout seul. Comparer l'adresse entiere
+      // ferait crier au loup des que l'appelant omet le port, et une fausse
+      // alerte est pire que pas d'alerte : on apprend a l'ignorer.
+      hoteDe(adressePubliee) !== hoteDe(adresseActuelle)
+    ) {
+      // Le cas qui coûte le plus cher, parce qu'il survient tout seul : un
+      // bail DHCP renouvelé suffit. Le fichier, lui, vit sur le routeur et ne
+      // peut pas réagir.
+      ruptures.push(
+        `La page publiée envoie vos clients sur ${adressePubliee}, mais la console répond sur ${adresseActuelle}. Leur navigateur affiche « connexion refusée ». Republiez la page.`,
+      );
+    }
+
+    const aVerifier = adressePubliee ?? reglages.portailUrl;
+    if (aVerifier && !autoriseParLeWalledGarden(aVerifier, wgHotes, wgAdresses).autorise) {
+      ruptures.push(
+        `${aVerifier} n'est pas autorisée dans le Walled Garden : le routeur refuse la connexion de vos clients avant qu'elle n'arrive.`,
+      );
+    }
+    if (offres.length === 0) {
+      ruptures.push("Aucune offre à ticket active : la page de paiement n'a rien à vendre.");
+    }
+    if (puces === 0) {
+      ruptures.push(
+        "Aucune puce Mobile Money enregistrée : la page de paiement n'a aucun numéro à donner.",
+      );
+    }
+
     return {
       reglages,
       parDefaut,
       cibles,
       empechements,
       avertissements,
+      sante: {
+        operationnel: ruptures.length === 0,
+        ruptures,
+        adressePubliee,
+        adresseActuelle,
+      },
       adresses,
       tarifs: offres.map((o) => ({
         id: o.id,
@@ -567,6 +700,76 @@ export class PageConnexionService {
         visible: !reglages.tarifsMasques.includes(o.id),
       })),
     };
+  }
+
+  /**
+   * Remet d'accord les trois choses qui décident si un client peut acheter.
+   *
+   * L'adresse où la console répond, ce que le Walled Garden laisse passer, et
+   * l'adresse gravée dans la page du routeur. Elles bougent séparément, et
+   * rien ne les vérifie l'une par l'autre : un bail DHCP renouvelé pendant la
+   * nuit suffit à les faire diverger. Le client, lui, tape sur un bouton mort
+   * au matin, conclut que le réseau ne marche pas, et s'en va — il ne
+   * téléphone pas pour signaler un bouton.
+   *
+   * Trois gestes, dans cet ordre, chacun sauté s'il n'a rien à faire : retenir
+   * l'adresse où la console répond, l'ouvrir dans le Walled Garden, republier
+   * la page pour qu'elle la porte.
+   *
+   * **Ce n'est pas automatique, et ce serait une erreur que ça le soit** :
+   * republier écrase la page que voient les clients, et ouvrir le Walled
+   * Garden perce un passage vers une machine. L'application constate et
+   * propose ; l'exploitant décide.
+   */
+  async reparer(adminUserId: string, routerId?: string): Promise<{ gestes: string[] }> {
+    const avant = await this.etat(routerId);
+    const gestes: string[] = [];
+
+    const cible = avant.sante.adresseActuelle;
+    if (!cible) {
+      throw new BadRequestException(
+        "Aucune adresse n'a pu être déduite : la console ne répond sur aucune carte réseau du réseau de ce portail. Saisissez l'adresse à la main.",
+      );
+    }
+
+    if (avant.reglages.portailUrl !== cible) {
+      await this.enregistrer({ ...avant.reglages, portailUrl: cible }, adminUserId);
+      gestes.push(`Adresse de paiement réglée sur ${cible}`);
+    }
+
+    // L'autorisation est lue dans l'état déjà calculé : la recalculer sur des
+    // listes vides répondrait « non » à tous les coups, et ajouterait une
+    // règle de plus à chaque réparation.
+    const dejaOuverte = avant.adresses.find((a) => a.url === cible)?.autorisee ?? false;
+    if (!dejaOuverte) {
+      const mikrotik = routerId
+        ? await this.clients.forRouter(routerId)
+        : await this.clients.forDefaultRouter();
+      const u = new URL(cible);
+      await mikrotik.createWalledGardenIpEntry({
+        dstAddress: u.hostname,
+        // Le port de l'adresse, et lui seul : ouvrir toute la machine pour
+        // servir une page ouvrirait bien plus large que nécessaire.
+        dstPort: u.port || undefined,
+        action: 'accept',
+        comment: 'Page de paiement GeMikrot',
+      });
+      gestes.push(`${cible} autorisée dans le Walled Garden`);
+    }
+
+    const { ecrits } = await this.publier(adminUserId, routerId);
+    gestes.push(`Page republiée dans ${ecrits.map((e) => e.chemin).join(', ')}`);
+
+    await this.audit.log({
+      adminUserId,
+      routerId,
+      action: 'REPAIR_PURCHASE_PATH',
+      targetType: 'Router',
+      targetId: routerId ?? 'defaut',
+      payloadDiff: { gestes },
+    });
+
+    return { gestes };
   }
 
   /**
@@ -599,8 +802,20 @@ export class PageConnexionService {
       if (routerId) {
         await this.prisma.hotspotLoginPublication.upsert({
           where: { routerId_chemin: { routerId, chemin: cible.chemin } },
-          create: { tenantId, routerId, chemin: cible.chemin, octets, publiePar: adminUserId },
-          update: { octets, publieLe: new Date(), publiePar: adminUserId },
+          create: {
+            tenantId,
+            routerId,
+            chemin: cible.chemin,
+            octets,
+            portailUrl: etat.reglages.portailUrl,
+            publiePar: adminUserId,
+          },
+          update: {
+            octets,
+            portailUrl: etat.reglages.portailUrl,
+            publieLe: new Date(),
+            publiePar: adminUserId,
+          },
         });
       }
     }
