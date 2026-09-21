@@ -153,9 +153,21 @@ export class VoucherReconciliationService {
       const changed = status !== voucher.status || endTime?.getTime() !== voucher.expiresAt?.getTime();
       if (!changed) continue;
 
+      // Posé au premier constat seulement : une réconciliation qui repasse
+      // sur un ticket déjà expiré ne doit pas repousser sa purge de trente
+      // jours à chaque tour.
+      const premierConstat =
+        status === VoucherStatus.EXPIRED && voucher.status !== VoucherStatus.EXPIRED;
+
       await this.prisma.scopedStrict.voucher.update({
         where: { id: voucher.id },
-        data: { status, expiresAt: endTime, umState: state, lastReconciledAt: new Date() },
+        data: {
+          status,
+          expiresAt: endTime,
+          umState: state,
+          lastReconciledAt: new Date(),
+          ...(premierConstat ? { expiredAt: new Date() } : {}),
+        },
       });
 
       if (status === VoucherStatus.EXPIRED && voucher.status !== VoucherStatus.EXPIRED) {

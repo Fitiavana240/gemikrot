@@ -499,9 +499,17 @@ function ExpiredTab() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-500">
+      <p className="max-w-3xl text-sm text-slate-500">
         Statut expiré, ou échéance dépassée mais pas encore relue. Le routeur a déjà cessé de
         servir ces tickets.
+      </p>
+      {/* La rétention est une suppression : elle mérite d'être annoncée avant,
+          pas constatée après. Le paiement, lui, survit au ticket. */}
+      <p className="max-w-3xl rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+        <strong>Ces tickets sont effacés trente jours après leur expiration</strong>, à compter
+        du jour où elle a été constatée et non de l&apos;échéance. Le paiement correspondant
+        n&apos;est pas touché : il reste dans les recettes, sans son ticket. Le journal
+        conserve la trace deux ans.
       </p>
       <VoucherTable
         vouchers={expired.data ?? []}

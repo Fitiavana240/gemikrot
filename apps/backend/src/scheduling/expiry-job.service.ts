@@ -169,7 +169,10 @@ export class ExpiryJobService {
     for (const ticket of échus) {
       await this.prisma.scopedStrict.voucher.update({
         where: { id: ticket.id },
-        data: { status: VoucherStatus.EXPIRED },
+        // `expiredAt` est l'horodatage du CONSTAT, pas de l'échéance : c'est
+        // de lui que court la rétention de trente jours. Les deux diffèrent
+        // dès que ce travail n'a pas tourné pendant un moment.
+        data: { status: VoucherStatus.EXPIRED, expiredAt: now },
       });
       report.vouchersExpired += 1;
 

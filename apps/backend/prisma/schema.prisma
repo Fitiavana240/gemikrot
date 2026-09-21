@@ -451,6 +451,14 @@ model Voucher {
   /// validité n'a pas démarré : un ticket vendu mais jamais utilisé ne s'use
   /// pas, puisqu'elle ne court qu'à la première connexion.
   expiresAt   DateTime?     @map("expires_at")
+  /// Quand la console a constaté l'expiration — distinct de `expiresAt`.
+  ///
+  /// C'est de cette date que court la rétention de trente jours, et non de
+  /// l'échéance : si l'ordonnanceur est arrêté une semaine, les tickets échus
+  /// pendant ce temps sont tous marqués au redémarrage, et il serait absurde
+  /// d'en effacer aussitôt une partie parce que leur échéance était plus
+  /// ancienne. `null` sur tout ticket qui n'est pas expiré.
+  expiredAt   DateTime?     @map("expired_at")
   /// Compte `/user-manager/user` correspondant. `null` = ticket historique,
   /// servi par le HotSpot local : c'est le discriminant entre les deux
   /// générations, et aucune ligne existante n'en porte.
@@ -489,8 +497,11 @@ model Payment {
   reference          String
   status             PaymentStatus @default(PENDING)
   /// Un paiement solde soit un voucher (ticket), soit une période d'abonnement.
+  /// Vidé quand le ticket est purgé au bout de trente jours : le paiement
+  /// survit à ce qu'il a soldé. Sans `SetNull`, la purge échouerait sur toute
+  /// ligne payée — c'est-à-dire précisément celles qui comptent.
   voucherId          String?       @unique @map("voucher_id")
-  voucher            Voucher?      @relation(fields: [tenantId, voucherId], references: [tenantId, id])
+  voucher            Voucher?      @relation(fields: [tenantId, voucherId], references: [tenantId, id], onDelete: SetNull)
   subscriptionId     String?       @map("subscription_id")
   subscription       Subscription? @relation(fields: [tenantId, subscriptionId], references: [tenantId, id])
   verifiedByAdminId  String?       @map("verified_by_admin_id")

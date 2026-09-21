@@ -14,12 +14,28 @@ const CLAIM_RETENTION_DAYS = 30;
  * et la raccourcir reviendrait à effacer la preuve de ce qui a été vendu.
  */
 const AUDIT_RETENTION_DAYS = 730;
+/**
+ * Tickets expirés. Trente jours, décidés par l'exploitant.
+ *
+ * Comptés depuis le **constat** d'expiration (`expiredAt`) et non depuis
+ * l'échéance : si l'ordonnanceur s'arrête une semaine, tout ce qui a expiré
+ * pendant ce temps est marqué d'un coup au redémarrage, et il serait absurde
+ * d'en effacer aussitôt une partie sous prétexte que son échéance était plus
+ * ancienne. Trente jours de délai veut dire trente jours pour aller regarder.
+ *
+ * Le ticket part même s'il a été payé ; le paiement, lui, reste. C'est ce que
+ * permet le `onDelete: SetNull` du lien : la ligne comptable survit à ce
+ * qu'elle a soldé, et le journal d'audit garde la trace deux ans.
+ */
+const VOUCHER_RETENTION_DAYS = 30;
 
 export interface PurgeReport {
   caches: number;
   claims: number;
   auditLogs: number;
   operations: number;
+  /** Tickets expirés effacés au terme de leur rétention. */
+  vouchers: number;
 }
 
 /**
@@ -72,17 +88,36 @@ export class PurgeJobService {
       },
     });
 
+    // Les tickets expirés depuis assez longtemps. `expiredAt` nul exclut
+    // d'office tout ce qui n'a jamais été constaté expiré, et le statut est
+    // vérifié en plus : un ticket repassé en vente ne doit pas disparaître
+    // parce qu'il porte encore la date d'un ancien constat.
+    const vouchers = await this.prisma.voucher.deleteMany({
+      where: {
+        status: 'EXPIRED',
+        expiredAt: { not: null, lt: avant(VOUCHER_RETENTION_DAYS) },
+      },
+    });
+
     const report: PurgeReport = {
       caches: users.count + sessions.count + stats.count,
       claims: claims.count,
       auditLogs: auditLogs.count,
       operations: operations.count,
+      vouchers: vouchers.count,
     };
 
-    if (report.caches || report.claims || report.auditLogs || report.operations) {
+    if (
+      report.caches ||
+      report.claims ||
+      report.auditLogs ||
+      report.operations ||
+      report.vouchers
+    ) {
       this.logger.log(
         `Purge : ${report.caches} entrée(s) de cache, ${report.claims} demande(s), ` +
-          `${report.auditLogs} ligne(s) d'audit, ${report.operations} opération(s)`,
+          `${report.auditLogs} ligne(s) d'audit, ${report.operations} opération(s), ` +
+          `${report.vouchers} ticket(s) expiré(s)`,
       );
     }
     return report;

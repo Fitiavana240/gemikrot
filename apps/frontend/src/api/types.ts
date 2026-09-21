@@ -78,6 +78,11 @@ export interface Voucher {
   activatedAt: string | null;
   /** Échéance calculée par le routeur. `null` = validité pas encore démarrée. */
   expiresAt: string | null;
+  /**
+   * Quand la console a constaté l'expiration. C'est de cette date que court
+   * la rétention de trente jours, et non de l'échéance.
+   */
+  expiredAt: string | null;
   /** Compte User Manager. `null` = ticket historique, servi par le HotSpot. */
   umUsername: string | null;
   umState: string | null;
