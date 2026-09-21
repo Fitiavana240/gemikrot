@@ -4,6 +4,18 @@ export class ClaimPaymentDto {
   @IsString()
   planId!: string;
 
+  /**
+   * Le nom du client, qui deviendra son identifiant de connexion.
+   *
+   * Normalise cote service : accents retires, espaces recolles. La borne
+   * haute est large parce qu'un nom complet est plus long que
+   * l'identifiant qu'on en tire.
+   */
+  @IsString()
+  @MinLength(3)
+  @MaxLength(60)
+  holderName!: string;
+
   @IsString()
   accountId!: string;
 

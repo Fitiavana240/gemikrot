@@ -132,6 +132,15 @@ export class VouchersService {
   }
 
   /** Un voucher CREATED déjà généré et pas encore attribué à un client. */
+  /**
+   * Un ticket du stock, pour une vente au comptoir.
+   *
+   * `customerId: null` porte plus qu'il n'y paraît depuis l'achat en ligne :
+   * une déclaration de paiement **réserve** son ticket au nom du client, et
+   * il reste `CREATED` jusqu'à la vérification. Sans cette condition, une
+   * vente au comptoir le tirerait du stock et remettrait à un passant
+   * l'identifiant que quelqu'un d'autre vient de choisir.
+   */
   findAvailableForPlan(planId: string): Promise<Voucher | null> {
     return this.prisma.scoped.voucher.findFirst({
       where: { planId, status: VoucherStatus.CREATED, customerId: null },
@@ -272,6 +281,18 @@ export class VouchersService {
       const current = assignments.find((a) => a.profileName === plan.umProfileName) ?? assignments[0];
       expiresAt = parseRouterTime(current?.endTime, clock.gmtOffset);
       umState = current?.state ?? umState;
+    } else if (voucher.target === VoucherTarget.USER_MANAGER) {
+      // Acheté en ligne : le compte n'existe pas encore, puisqu'on ne
+      // l'ouvre qu'une fois l'argent constaté. Il part sur User Manager,
+      // seul à tenir une validité calendaire — celle qui continue de courir
+      // même client déconnecté, et que le client a payée.
+      const [provisionné] = await this.provisionOnUserManager(
+        [voucher],
+        plan,
+        await this.getDefaultRouterId(),
+      );
+      expiresAt = provisionné.expiresAt;
+      umState = provisionné.umState;
     } else if (voucher.target !== VoucherTarget.HOTSPOT) {
       // Ticket historique : aucun compte n'existe tant qu'il n'est pas
       // vendu, il est créé maintenant. Un ticket HotSpot **pré-créé** au
@@ -296,7 +317,12 @@ export class VouchersService {
         activatedAt: new Date(),
         expiresAt,
         umState,
-        lastReconciledAt: voucher.umUsername ? new Date() : null,
+        // Relu à l'instant quand le compte vient d'être poussé : sans cela
+        // un ticket acheté en ligne paraîtrait n'avoir jamais été rapproché.
+        lastReconciledAt:
+          voucher.umUsername || voucher.target === VoucherTarget.USER_MANAGER
+            ? new Date()
+            : null,
       },
     });
 
@@ -549,7 +575,10 @@ export class VouchersService {
     await mikrotik.createUserManagerUsers(
       vouchers.map((voucher) => ({
         username: voucher.code,
-        password: voucher.code,
+        // Le code des deux côtés sur un ticket imprimé : le client n'a
+        // qu'une chose à recopier. Sur un achat en ligne, `accessPassword`
+        // porte la référence du transfert, que le client connaît déjà.
+        password: voucher.accessPassword ?? voucher.code,
         comment: `gemikrot:t:${tenantId.slice(0, 8)}:v:${voucher.code}`,
       })),
     );

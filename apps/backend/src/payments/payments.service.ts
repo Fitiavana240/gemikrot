@@ -116,9 +116,14 @@ export class PaymentsService {
       return this.verifySubscriptionPayment(payment, adminUserId);
     }
 
-    const voucher =
-      (await this.vouchers.findAvailableForPlan(payment.planId)) ??
-      (await this.vouchers.generateSingle(payment.planId));
+    // Le ticket peut avoir été **réservé à la déclaration** : un achat en
+    // ligne crée le sien, au nom du client et avec sa référence pour mot de
+    // passe. Tirer alors un ticket du stock rendrait un code aléatoire à la
+    // place du nom, et laisserait le ticket réservé orphelin.
+    const voucher = payment.voucherId
+      ? await this.vouchers.findOne(payment.voucherId)
+      : ((await this.vouchers.findAvailableForPlan(payment.planId)) ??
+        (await this.vouchers.generateSingle(payment.planId)));
 
     const activated = await this.vouchers.activate(voucher.id, {
       customerId: payment.customerId,

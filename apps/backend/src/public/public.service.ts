@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { PaymentStatus, PlanKind, PlanStatus, TenantStatus } from '@prisma/client';
+import { PaymentStatus, PlanKind, PlanStatus, TenantStatus, VoucherTarget } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { identifiantDepuisNom, identifiantUtilisable } from './identifiant.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import {
   isUsablePhone,
@@ -39,6 +40,14 @@ export interface ClaimView {
   state: ClaimState;
   /** Rendu seulement une fois le paiement vérifié. */
   accessCode: string | null;
+  /**
+   * Le mot de passe, quand il diffère du code.
+   *
+   * `null` sur un ticket imprimé, où le code sert des deux côtés. Sur un
+   * achat en ligne, il porte la référence du transfert : le client ne l'a
+   * pas à retenir, il l'a déjà.
+   */
+  accessPassword: string | null;
   planName: string;
   amount: string;
   currency: string;
@@ -114,8 +123,14 @@ export class PublicService {
    */
   async claim(
     slug: string,
-    input: { planId: string; accountId: string; phone: string; reference: string },
-  ): Promise<{ token: string; state: ClaimState }> {
+    input: {
+      planId: string;
+      accountId: string;
+      phone: string;
+      reference: string;
+      holderName: string;
+    },
+  ): Promise<{ token: string; state: ClaimState; identifiant: string }> {
     const tenant = await this.requireActiveTenant(slug);
 
     const phone = normalizePhone(input.phone);
@@ -126,6 +141,16 @@ export class PublicService {
     if (!isUsableReference(reference)) {
       throw new BadRequestException(
         'Référence invalide — entre 4 et 32 lettres ou chiffres, telle qu\'elle figure dans votre SMS',
+      );
+    }
+
+    // L'identifiant se décide **ici**, avant le paiement. Un nom impossible
+    // découvert à la vérification laisserait un client qui a payé sans accès
+    // et sans recours.
+    const identifiant = identifiantDepuisNom(input.holderName);
+    if (!identifiantUtilisable(identifiant)) {
+      throw new BadRequestException(
+        'Nom inutilisable comme identifiant — au moins trois lettres, sans caractères spéciaux',
       );
     }
 
@@ -146,10 +171,17 @@ export class PublicService {
       // qui recharge la page retrouve simplement son suivi.
       const existing = await this.prisma.scopedStrict.payment.findFirst({
         where: { reference, method: account.provider },
-        include: { claim: true },
+        include: { claim: true, voucher: { select: { code: true } } },
       });
       if (existing?.claim) {
-        return { token: existing.claim.token, state: this.stateOf(existing.status) };
+        // Le client qui recharge la page retrouve **l'identifiant qui lui a
+        // été réservé**, et non celui que son nom donnerait aujourd'hui : il
+        // a pu le retaper autrement, et c'est l'ancien qui existe.
+        return {
+          token: existing.claim.token,
+          state: this.stateOf(existing.status),
+          identifiant: existing.voucher?.code ?? identifiant,
+        };
       }
       if (existing) {
         throw new BadRequestException(
@@ -157,11 +189,50 @@ export class PublicService {
         );
       }
 
+      // L'identifiant est unique sur toute la plateforme : `code` l'est déjà
+      // pour les tickets imprimés, et le routeur ne saurait pas distinguer
+      // deux comptes du même nom. On refuse donc **avant** le paiement, avec
+      // de quoi s'en sortir, plutôt que de laisser le client payer pour rien.
+      const déjàPris = await this.prisma.voucher.findFirst({
+        // **Insensible à la casse**, et c'est un vrai piège : l'index unique
+        // de Postgres, lui, distingue `Naivo-Doublon` de `naivo-doublon`. La
+        // base accepterait donc les deux, et deux clients croiraient chacun
+        // posséder le même identifiant. Trouvé par le test qui rejoue le même
+        // nom en minuscules.
+        where: { code: { equals: identifiant, mode: 'insensitive' } },
+        select: { id: true, code: true },
+      });
+      if (déjàPris) {
+        throw new BadRequestException(
+          `« ${déjàPris.code} » est déjà utilisé. Ajoutez votre initiale ou un chiffre, par exemple « ${identifiant}2 ».`,
+        );
+      }
+
       const customer = await this.prisma.scopedStrict.customer.upsert({
         where: { tenantId_phone: { tenantId: tenant.id, phone } },
-        update: {},
-        // Le nom viendra du SMS de l'opérateur, qui porte celui du payeur.
-        create: { tenantId: tenant.id, name: phone, phone },
+        // Le nom saisi remplace le numéro posé par une déclaration
+        // précédente : le client vient de se nommer lui-même, c'est plus sûr
+        // que ce que le SMS de l'opérateur rapportera.
+        update: { name: input.holderName.trim() },
+        create: { tenantId: tenant.id, name: input.holderName.trim(), phone },
+      });
+
+      // Le ticket est créé **maintenant**, au nom choisi et avec la référence
+      // pour mot de passe. Il n'est poussé sur le routeur qu'à la
+      // vérification du paiement : rien ne s'ouvre avant que l'argent soit
+      // constaté. Le créer ici est ce qui réserve l'identifiant.
+      const voucher = await this.prisma.scopedStrict.voucher.create({
+        data: {
+          tenantId: tenant.id,
+          code: identifiant,
+          accessPassword: reference,
+          planId: plan.id,
+          price: plan.price,
+          customerId: customer.id,
+          // User Manager, seul à tenir une validité calendaire : elle court
+          // même client déconnecté, et c'est celle qu'il a payée.
+          target: VoucherTarget.USER_MANAGER,
+        },
       });
 
       const payment = await this.prisma.scopedStrict.payment.create({
@@ -173,6 +244,10 @@ export class PublicService {
           currency: tenant.currency,
           method: account.provider,
           reference,
+          // Rattaché dès la déclaration : c'est ce ticket-là que la
+          // vérification ouvrira, et non un tiré du stock. Sans ce lien, le
+          // client recevrait un code aléatoire à la place de son nom.
+          voucherId: voucher.id,
         },
       });
 
@@ -186,8 +261,10 @@ export class PublicService {
         },
       });
 
-      this.logger.log(`Paiement déclaré : ${plan.name} par ${phone} (${account.provider})`);
-      return { token: claim.token, state: 'EN_ATTENTE' as const };
+      this.logger.log(
+        `Paiement déclaré : ${plan.name} par ${phone} (${account.provider}), identifiant ${identifiant}`,
+      );
+      return { token: claim.token, state: 'EN_ATTENTE' as const, identifiant };
     });
   }
 
@@ -252,7 +329,7 @@ export class PublicService {
       amount: unknown;
       currency: string;
       plan: { name: string };
-      voucher: { code: string } | null;
+      voucher: { code: string; accessPassword: string | null } | null;
     };
   }): ClaimView {
     const state = this.stateOf(claim.payment.status);
@@ -261,6 +338,7 @@ export class PublicService {
       // Le code n'est rendu qu'après vérification : un jeton de suivi peut
       // être partagé, il ne doit pas donner d'accès à lui seul.
       accessCode: state === 'VALIDE' ? (claim.payment.voucher?.code ?? null) : null,
+      accessPassword: state === 'VALIDE' ? (claim.payment.voucher?.accessPassword ?? null) : null,
       planName: claim.payment.plan.name,
       amount: String(claim.payment.amount),
       currency: claim.payment.currency,

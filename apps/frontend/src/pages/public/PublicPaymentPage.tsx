@@ -10,6 +10,7 @@ import {
 } from '../../api/public';
 import { BrandMark } from '../../components/Brand';
 import { formatValidity, TRANSLATIONS, type Lang } from './translations';
+import { identifiantDepuisNom, identifiantUtilisable } from './identifiant';
 
 const PROVIDER_LABEL: Record<string, string> = {
   MVOLA: 'MVola',
@@ -325,9 +326,15 @@ function PaymentStep({
   onError: (message: string) => void;
 }) {
   const t = TRANSLATIONS[lang];
+  const [holderName, setHolderName] = useState('');
   const [phone, setPhone] = useState('');
   const [reference, setReference] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Montré pendant la saisie, pas après. Transformer le nom en silence et le
+  // révéler une fois le paiement fait serait une mauvaise surprise au moment
+  // précis où le client attend son accès.
+  const identifiant = identifiantDepuisNom(holderName);
 
   const claim = useMutation({
     mutationFn: () =>
@@ -336,6 +343,7 @@ function PaymentStep({
         accountId: account!.id,
         phone,
         reference,
+        holderName,
       }),
     onSuccess: (result) => onClaimed(result.token),
     onError: (err) =>
@@ -429,6 +437,26 @@ function PaymentStep({
         <p className="text-sm text-slate-500">{t.confirmIntro}</p>
 
         <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-600">{t.yourName}</span>
+          <input
+            value={holderName}
+            onChange={(e) => setHolderName(e.target.value)}
+            placeholder="Rakoto Jean"
+            autoComplete="name"
+            required
+            className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-base focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+          />
+          <span className="mt-1 block text-xs text-slate-500">{t.yourNameHint}</span>
+          {/* Le résultat, tout de suite : « Rakoto Jean » devient
+              « Rakoto-Jean », et c'est cela qu'il devra taper au portail. */}
+          {identifiant && (
+            <span className="mt-1 block text-xs text-slate-600">
+              {t.willBe} <strong className="font-mono">{identifiant}</strong>
+            </span>
+          )}
+        </label>
+
+        <label className="block">
           <span className="mb-1 block text-xs font-medium text-slate-600">{t.yourPhone}</span>
           <input
             value={phone}
@@ -448,13 +476,23 @@ function PaymentStep({
             autoCapitalize="characters"
             spellCheck={false}
             required
+            placeholder="6CK4L2M9PQ"
             className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 font-mono text-base uppercase focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
           />
+          <span className="mt-1 block text-xs text-slate-500">{t.referenceHint}</span>
         </label>
+
+        {/* L'avertissement juste au-dessus du bouton, là où le doigt se
+            pose. Plus haut, il serait lu avant d'avoir rempli quoi que ce
+            soit, donc oublié au moment d'envoyer. */}
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <div className="text-sm font-medium text-amber-900">⚠ {t.checkTwice}</div>
+          <p className="mt-0.5 text-xs text-amber-900">{t.checkTwiceBody}</p>
+        </div>
 
         <button
           type="submit"
-          disabled={claim.isPending || !account}
+          disabled={claim.isPending || !account || !identifiantUtilisable(identifiant)}
           className="w-full rounded-lg bg-sky-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-sky-700 disabled:bg-slate-300"
         >
           {claim.isPending ? t.submitting : t.submit}
@@ -483,13 +521,42 @@ function ClaimStep({
           ✓
         </div>
         <h1 className="mt-4 text-lg font-semibold text-slate-900">{t.doneTitle}</h1>
-        <p className="mt-1 text-sm text-slate-600">{t.doneBody}</p>
-        <div className="mt-4 rounded-xl bg-slate-900 px-4 py-5">
-          <div className="font-mono text-2xl font-bold tracking-[0.2em] text-white">
-            {claim.accessCode}
+        {/* Un ticket imprimé n'a qu'un code, un achat en ligne en a deux :
+            la phrase doit suivre, sinon elle parle d'un nom et d'une
+            référence à quelqu'un qui tient un code tiré au sort. */}
+        <p className="mt-1 text-sm text-slate-600">
+          {claim.accessPassword ? t.doneBody : t.doneBodySingle}
+        </p>
+        {/* Deux champs quand l'accès en a deux, un seul quand le code
+            sert des deux côtés. Montrer « identifiant » et « mot de passe »
+            avec la même valeur ferait chercher une différence qui n'existe
+            pas ; ne montrer qu'un champ quand ils diffèrent laisserait le
+            client sans son mot de passe. */}
+        <div className="mt-4 space-y-2">
+          <div className="rounded-xl bg-slate-900 px-4 py-4 text-left">
+            {claim.accessPassword && (
+              <div className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">
+                {t.loginLabel}
+              </div>
+            )}
+            <div className="break-all text-center font-mono text-2xl font-bold tracking-[0.15em] text-white">
+              {claim.accessCode}
+            </div>
           </div>
+          {claim.accessPassword && (
+            <div className="rounded-xl bg-slate-900 px-4 py-4 text-left">
+              <div className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">
+                {t.passwordLabel}
+              </div>
+              <div className="break-all text-center font-mono text-2xl font-bold tracking-[0.15em] text-white">
+                {claim.accessPassword}
+              </div>
+            </div>
+          )}
         </div>
-        <p className="mt-3 text-xs text-slate-500">{t.doneHint}</p>
+        <p className="mt-3 text-xs text-slate-500">
+          {claim.accessPassword ? t.doneHint : t.doneHintSingle}
+        </p>
         <p className="mt-4 border-t border-slate-100 pt-3 text-sm text-slate-500">
           {claim.planName} · {money.format(Number(claim.amount))}
         </p>

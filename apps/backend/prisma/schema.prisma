@@ -431,14 +431,27 @@ model VoucherJob {
   @@map("voucher_jobs")
 }
 
-/// Voucher individuel (Section 17). `code` sert à la fois de nom
-/// d'utilisateur et de mot de passe côté HotSpot/User Manager, pour que le
-/// client n'ait qu'un seul champ à saisir (Section 6).
+/// Voucher individuel (Section 17).
+///
+/// Sur un ticket imprimé, `code` sert à la fois de nom d'utilisateur et de
+/// mot de passe : le client n'a qu'une chose à recopier, et il n'a rien
+/// choisi.
+///
+/// Sur un achat en ligne, c'est différent. Le client donne son **nom**, qui
+/// devient l'identifiant, et la **référence de son transfert** devient le mot
+/// de passe — deux choses qu'il connaît déjà et n'a pas à noter. `code` porte
+/// alors le nom normalisé, et `accessPassword` la référence.
 model Voucher {
   id          String        @id @default(uuid())
   tenantId    String   @map("tenant_id")
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   code        String        @unique
+  /// Mot de passe du compte, **quand il diffère du code**.
+  ///
+  /// `null` sur un ticket imprimé, où le code sert des deux côtés. Renseigné
+  /// sur un achat en ligne, où il porte la référence du transfert. Le
+  /// distinguer évite de deviner à la lecture quel ticket suit quelle règle.
+  accessPassword String?    @map("access_password")
   batchId     String?       @map("batch_id")
   batch       VoucherBatch? @relation(fields: [tenantId, batchId], references: [tenantId, id])
   planId      String        @map("plan_id")

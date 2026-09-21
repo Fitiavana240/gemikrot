@@ -42,6 +42,12 @@ export type ClaimState = 'EN_ATTENTE' | 'VALIDE' | 'REFUSE';
 export interface ClaimView {
   state: ClaimState;
   accessCode: string | null;
+  /**
+   * Le mot de passe, quand il diffère du code.
+   *
+   * `null` sur un ticket imprimé, où le code sert des deux côtés.
+   */
+  accessPassword: string | null;
   planName: string;
   amount: string;
   currency: string;
@@ -77,9 +83,18 @@ export const publicApi = {
   tenant: (slug: string) => request<PublicTenant>(`/${slug}`),
   claim: (
     slug: string,
-    input: { planId: string; accountId: string; phone: string; reference: string },
+    input: {
+      planId: string;
+      accountId: string;
+      phone: string;
+      reference: string;
+      /** Le nom du client : il deviendra son identifiant de connexion. */
+      holderName: string;
+    },
   ) =>
-    request<{ token: string; state: ClaimState }>(`/${slug}/claim`, {
+    // `identifiant` est celui que le serveur a **réservé** : sur un rejeu, il
+    // peut différer de ce que le nom donnerait aujourd'hui.
+    request<{ token: string; state: ClaimState; identifiant: string }>(`/${slug}/claim`, {
       method: 'POST',
       body: JSON.stringify(input),
     }),

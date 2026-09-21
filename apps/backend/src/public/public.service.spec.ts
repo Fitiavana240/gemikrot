@@ -87,6 +87,12 @@ describe('PublicService', () => {
     const ids = [tenantA, tenantB, `pub-pending-${suffix}`];
     await prisma.paymentClaim.deleteMany({ where: { tenantId: { in: ids } } });
     await prisma.payment.deleteMany({ where: { tenantId: { in: ids } } });
+    // Les tickets AVANT les offres et les clients : une déclaration de
+    // paiement en réserve un désormais, et il référence les deux. Sans cette
+    // ligne, la suppression des offres échoue, tout reste en base, et le
+    // prochain passage bute sur la puce Mobile Money déjà présente — c'est
+    // exactement ce qui est arrivé.
+    await prisma.voucher.deleteMany({ where: { tenantId: { in: ids } } });
     await prisma.customer.deleteMany({ where: { tenantId: { in: ids } } });
     await prisma.mobileMoneyAccount.deleteMany({ where: { tenantId: { in: ids } } });
     await prisma.plan.deleteMany({ where: { tenantId: { in: ids } } });
@@ -142,6 +148,7 @@ describe('PublicService', () => {
           accountId: accountA,
           phone: '0340394188',
           reference: 'REF12345',
+          holderName: 'Rakoto Jean',
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
@@ -152,6 +159,7 @@ describe('PublicService', () => {
         accountId: accountA,
         phone: '+261 34 03 941 88',
         reference: 'ab12-cd34',
+        holderName: 'Rasoa Hery',
       });
 
       expect(result.state).toBe('EN_ATTENTE');
@@ -163,6 +171,65 @@ describe('PublicService', () => {
       expect(claim.accessCode).toBeNull();
     });
 
+    it("réserve un ticket au nom du client, hors d'atteinte du stock", async () => {
+      // Le ticket est créé dès la déclaration pour retenir l'identifiant,
+      // mais il porte un client : c'est ce qui l'écarte du tirage au
+      // comptoir, qui ne prend que des tickets sans client. Sans cela, une
+      // vente au comptoir remettrait à un passant l'identifiant que
+      // quelqu'un vient de choisir et de payer.
+      const planId = (await service.getTenantView(tenantA)).plans[0].id;
+      const r = await service.claim(tenantA, {
+        planId,
+        accountId: accountA,
+        phone: '0330000009',
+        reference: 'RESERVE01',
+        holderName: 'Hervé Razafy',
+      });
+
+      expect(r.identifiant).toBe('Herve-Razafy');
+
+      const ticket = await prisma.voucher.findUnique({ where: { code: 'Herve-Razafy' } });
+      expect(ticket?.customerId).not.toBeNull();
+      expect(ticket?.accessPassword).toBe('RESERVE01');
+      expect(ticket?.status).toBe('CREATED');
+    });
+
+    it('refuse un identifiant déjà pris, avant le paiement', async () => {
+      // Découvrir le conflit à la vérification laisserait un client qui a
+      // payé sans accès et sans recours.
+      const planId = (await service.getTenantView(tenantA)).plans[0].id;
+      await service.claim(tenantA, {
+        planId,
+        accountId: accountA,
+        phone: '0330000010',
+        reference: 'DOUBLON01',
+        holderName: 'Naivo Doublon',
+      });
+
+      await expect(
+        service.claim(tenantA, {
+          planId,
+          accountId: accountA,
+          phone: '0330000011',
+          reference: 'DOUBLON02',
+          holderName: 'naivo doublon',
+        }),
+      ).rejects.toThrow(/déjà utilisé/);
+    });
+
+    it('refuse un nom qui ne donne aucun identifiant utilisable', async () => {
+      const planId = (await service.getTenantView(tenantA)).plans[0].id;
+      await expect(
+        service.claim(tenantA, {
+          planId,
+          accountId: accountA,
+          phone: '0330000012',
+          reference: 'NOMVIDE01',
+          holderName: '???',
+        }),
+      ).rejects.toThrow(/identifiant/);
+    });
+
     it('rejoue la même déclaration sans créer un second paiement', async () => {
       const planId = (await service.getTenantView(tenantA)).plans[0].id;
       const first = await service.claim(tenantA, {
@@ -170,12 +237,14 @@ describe('PublicService', () => {
         accountId: accountA,
         phone: '0330000001',
         reference: 'REPLAY99',
+        holderName: 'Naivo Rejoue',
       });
       const second = await service.claim(tenantA, {
         planId,
         accountId: accountA,
         phone: '0330000001',
         reference: 'replay 99',
+        holderName: 'Naivo Rejoue',
       });
 
       expect(second.token).toBe(first.token);
@@ -189,6 +258,7 @@ describe('PublicService', () => {
           accountId: accountA,
           phone: '0330000002',
           reference: '@@@',
+          holderName: 'Soa Tiana',
         }),
       ).rejects.toThrow(/Référence invalide/);
     });
@@ -202,6 +272,7 @@ describe('PublicService', () => {
         accountId: accountA,
         phone: '0341111111',
         reference: 'XY-99-ZW',
+        holderName: 'Mamy Retrouve',
       });
 
       // Le client retape son numéro autrement et sa référence en minuscules.
