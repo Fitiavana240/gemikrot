@@ -30,6 +30,19 @@ const VOUCHER_LABEL: Record<string, string> = {
   CANCELLED: 'annulés',
 };
 
+/**
+ * « depuis aujourd'hui », « depuis hier », « depuis 3 jours ».
+ *
+ * Un paiement en attente est un client qui a payé et n'a rien reçu : ce qui
+ * compte n'est pas combien il y en a, mais depuis quand le premier attend.
+ */
+function anciennete(iso: string): string {
+  const jours = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (jours <= 0) return "depuis aujourd'hui";
+  if (jours === 1) return 'depuis hier';
+  return `depuis ${jours} jours`;
+}
+
 export function DashboardPage() {
   const { format } = useCurrency();
   const { current, currentId } = useRouterSelection();
@@ -141,7 +154,13 @@ export function DashboardPage() {
           label="En attente de validation"
           value={d.paiementsEnAttente}
           tone={d.paiementsEnAttente > 0 ? 'alerte' : 'neutre'}
-          hint={d.paiementsEnAttente > 0 ? 'à vérifier' : undefined}
+          hint={
+            d.paiementsEnAttente > 0
+              ? d.paiementEnAttenteDepuis
+                ? `le plus ancien ${anciennete(d.paiementEnAttenteDepuis)}`
+                : 'à vérifier'
+              : undefined
+          }
           to="/payments"
         />
       </section>

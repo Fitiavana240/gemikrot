@@ -13,6 +13,27 @@ import { Badge, Button, Card, FormField, Input, PageHeader, PanneDeLecture, Sele
 
 const EMPTY_FORM: CreatePaymentInput = { customerId: '', planId: '', amount: 0, method: 'CASH', reference: '' };
 
+/**
+ * Au-delà d'une journée, un paiement en attente cesse d'être une file et
+ * devient un problème : le client a envoyé l'argent et n'a rien reçu.
+ */
+const ATTENTE_TROP_LONGUE_MS = 24 * 3_600_000;
+
+/** « aujourd'hui », « hier », « il y a 3 j ». */
+function depuis(iso: string): string {
+  const jours = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (jours <= 0) return "aujourd'hui";
+  if (jours === 1) return 'hier';
+  return `il y a ${jours} j`;
+}
+
+function attendDepuisTropLongtemps(paiement: { status: string; createdAt: string }): boolean {
+  return (
+    paiement.status === 'PENDING' &&
+    Date.now() - new Date(paiement.createdAt).getTime() > ATTENTE_TROP_LONGUE_MS
+  );
+}
+
 export function PaymentsPage() {
   const { canWrite } = useAuth();
   const { currency, format } = useCurrency();
@@ -154,10 +175,24 @@ export function PaymentsPage() {
       ) : règlements.isError ? (
         <PanneDeLecture requête={règlements} quoi="les paiements" />
       ) : (
-        <Table head={['Référence', 'Méthode', 'Montant', 'Statut', '']}>
+        <Table head={['Référence', 'Déclaré', 'Méthode', 'Montant', 'Statut', '']}>
           {payments?.map((payment) => (
-            <tr key={payment.id}>
+            <tr key={payment.id} className={attendDepuisTropLongtemps(payment) ? 'bg-amber-50/60' : undefined}>
               <td className="px-3 py-2 font-mono text-xs">{payment.reference}</td>
+              {/* La table ne portait aucune date : un paiement déclaré il y a
+                  cinq minutes et un autre qui attend depuis trois jours s'y
+                  lisaient pareil. Or un paiement en attente, c'est un client
+                  qui a payé et n'a rien reçu — le temps est l'information. */}
+              <td className="px-3 py-2 text-xs text-slate-500">
+                {new Date(payment.createdAt).toLocaleDateString('fr-FR')}
+                <span
+                  className={`ml-1.5 ${
+                    attendDepuisTropLongtemps(payment) ? 'font-medium text-amber-800' : ''
+                  }`}
+                >
+                  {depuis(payment.createdAt)}
+                </span>
+              </td>
               <td className="px-3 py-2">{méthodePaiement(payment.method)}</td>
               <td className="px-3 py-2">{format(payment.amount)}</td>
               <td className="px-3 py-2">

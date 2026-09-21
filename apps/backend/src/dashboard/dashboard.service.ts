@@ -64,7 +64,13 @@ export class DashboardService {
     // lui reste a vendre, qui arrive a echeance, et ce qui attend une
     // validation. Trois questions, trois comptages — et non trois ecrans.
     const dansSeptJours = new Date(Date.now() + 7 * 86_400_000);
-    const [ticketsDisponibles, abonnesActifs, echeancesProches, paiementsEnAttente] =
+    const [
+      ticketsDisponibles,
+      abonnesActifs,
+      echeancesProches,
+      paiementsEnAttente,
+      plusAncienEnAttente,
+    ] =
       await Promise.all([
         this.prisma.scoped.voucher.count({ where: { status: 'CREATED' } }),
         this.prisma.scoped.subscription.count({ where: { status: { in: ['ACTIVE', 'GRACE'] } } }),
@@ -75,6 +81,15 @@ export class DashboardService {
           },
         }),
         this.prisma.scoped.payment.count({ where: { status: PaymentStatus.PENDING } }),
+        // Le plus ancien paiement encore en attente. Le compte seul ne dit
+        // pas si la file avance : deux paiements déclarés ce matin et deux
+        // qui traînent depuis trois jours donnent le même « 2 », alors que
+        // le second cas est un client qui a payé et n'a rien reçu.
+        this.prisma.scoped.payment.findFirst({
+          where: { status: PaymentStatus.PENDING },
+          orderBy: { createdAt: 'asc' },
+          select: { createdAt: true },
+        }),
       ]);
 
     return {
@@ -89,6 +104,8 @@ export class DashboardService {
       abonnesActifs,
       echeancesProches,
       paiementsEnAttente,
+      /** `null` quand rien n'attend. */
+      paiementEnAttenteDepuis: plusAncienEnAttente?.createdAt ?? null,
     };
   }
 

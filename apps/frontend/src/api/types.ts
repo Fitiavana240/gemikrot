@@ -112,4 +112,11 @@ export interface DashboardSummary {
   /** Abonnements arrivant a echeance sous sept jours : a relancer. */
   echeancesProches: number;
   paiementsEnAttente: number;
+  /**
+   * Date du plus ancien paiement encore en attente, ou `null`.
+   *
+   * Le compte seul ne dit pas si la file avance : deux paiements déclarés ce
+   * matin et deux qui traînent depuis trois jours donnent le même « 2 ».
+   */
+  paiementEnAttenteDepuis: string | null;
 }
