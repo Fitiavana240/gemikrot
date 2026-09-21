@@ -82,8 +82,73 @@ model Tenant {
   ticketTemplates     TicketTemplate[]
   paymentClaims       PaymentClaim[]
   routerOperations    RouterOperation[]
+  hotspotLoginPage    HotspotLoginPage?
 
   @@map("tenants")
+}
+
+/// Ce que l'exploitant regle de sa page de connexion captive.
+///
+/// Le modele etait un fichier unique du depot, identique pour tous : seules
+/// trois chaines changeaient d'un exploitant a l'autre, et aucun ne pouvait
+/// changer un mot. Ces champs sont ce qu'il regle ; le formulaire de
+/// connexion et le bouton d'achat, eux, ne sont pas ici -- ils sont
+/// construits par le serveur au moment de publier, et c'est ce qui les rend
+/// indelebiles.
+///
+/// Tout est optionnel : une valeur nulle prend le defaut derive de
+/// l'exploitant (son nom de reseau, sa raison sociale). Une ligne n'est creee
+/// qu'au premier enregistrement.
+model HotspotLoginPage {
+  id       String @id @default(uuid())
+  tenantId String @unique @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Titre en haut de la carte. Defaut : le nom du reseau Wi-Fi.
+  titre            String?
+  sousTitre        String? @map("sous_titre")
+  libelleConnexion String? @map("libelle_connexion")
+  /// Libelle du bouton d'achat. Son existence n'est pas negociable, son
+  /// texte l'est.
+  libelleAchat     String? @map("libelle_achat")
+  aideAchat        String? @map("aide_achat")
+  piedDePage       String? @map("pied_de_page")
+  /// Couleur d'accent `#RRGGBB` : titre et bouton de connexion. Le bouton
+  /// d'achat garde la sienne -- le laisser recolorer permettrait de le
+  /// rendre invisible, ce que toute cette mecanique sert a empecher.
+  couleur          String?
+  logoUrl          String? @map("logo_url")
+  /// Adresse de la page de paiement, telle qu'un client captif peut
+  /// l'atteindre : sans Internet, et donc jamais le `dns-name` du portail.
+  portailUrl       String? @map("portail_url")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("hotspot_login_pages")
+}
+
+/// Ce qui a ete ecrit sur un routeur, et quand.
+///
+/// Sert a repondre a une seule question : la page servie aujourd'hui est-elle
+/// celle que la console a publiee ? Le contenu n'est pas relisible --
+/// RouterOS ne rend un fichier que sous 4 096 octets, et une page de
+/// connexion depasse ce seuil -- donc la comparaison se fait sur la taille et
+/// la date. C'est une detection de divergence, pas une verification de
+/// contenu, et l'ecran le dit.
+model HotspotLoginPublication {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  routerId String @map("router_id")
+  /// Chemin ecrit, derive du `html-directory` du profil qui sert reellement.
+  chemin   String
+  octets   Int
+  publieLe DateTime @default(now()) @map("publie_le")
+  publiePar String? @map("publie_par")
+
+  @@unique([routerId, chemin])
+  @@index([tenantId])
+  @@map("hotspot_login_publications")
 }
 
 /// Puce Mobile Money de l'exploitant : le numéro est affiché au client pour

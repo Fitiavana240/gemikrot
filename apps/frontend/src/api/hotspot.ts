@@ -98,17 +98,76 @@ export interface SessionView {
   active: boolean;
 }
 
+/** Ce que l'exploitant règle de sa page de connexion captive. */
+export interface ReglagesPageConnexion {
+  titre: string;
+  sousTitre: string;
+  labelCode: string;
+  libelleConnexion: string;
+  /** Le texte du bouton d'achat. Son existence, elle, ne se règle pas. */
+  libelleAchat: string;
+  aideAchat: string;
+  piedDePage: string;
+  couleur: string;
+  logoUrl: string | null;
+  portailUrl: string;
+}
+
+/** Un dossier que sert au moins un serveur HotSpot actif de ce routeur. */
+export interface CiblePublication {
+  chemin: string;
+  serveurs: string[];
+  motDePasseEnClairAccepte: boolean;
+  publie: { octets: number; publieLe: string } | null;
+  surLeRouteur: { octets: number | null; modifieLe: string | null } | null;
+}
+
+export interface EtatPageConnexion {
+  reglages: ReglagesPageConnexion;
+  parDefaut: boolean;
+  cibles: CiblePublication[];
+  /** Ce qui empêche de publier. Vide, la publication est possible. */
+  empechements: string[];
+  avertissements: string[];
+}
+
 export const hotspotApi = {
-  /** PUB-7 : la page du portail, remplie mais pas envoyée. */
-  apercuPageConnexion: (portail: string) =>
-    api.get<{ contenu: string; chemin: string; octets: number }>(
-      `/hotspot/page-connexion?portail=${encodeURIComponent(portail)}`,
+  /**
+   * PUB-7 : la page du portail, remplie mais pas envoyée.
+   *
+   * Les réglages en cours de saisie sont passés tels quels : l'aperçu suit ce
+   * qu'on tape, sans que rien ne soit enregistré.
+   */
+  apercuPageConnexion: (reglages: Partial<ReglagesPageConnexion>) => {
+    const q = new URLSearchParams();
+    for (const [clef, valeur] of Object.entries(reglages)) {
+      if (typeof valeur === 'string' && valeur !== '') q.set(clef, valeur);
+    }
+    return api.get<{ contenu: string; octets: number }>(`/hotspot/page-connexion?${q}`);
+  },
+  /**
+   * Les réglages enregistrés, et où la page doit aller sur ce routeur.
+   *
+   * `portailUrl` permet de faire suivre l'adresse en cours de saisie : sans
+   * elle, le refus ne se révélerait qu'après enregistrement.
+   */
+  etatPageConnexion: (routerId?: string, portailUrl?: string) =>
+    api.get<EtatPageConnexion>(
+      `/hotspot/page-connexion/etat${routerQuery(routerId)}${
+        portailUrl ? `${routerId ? '&' : '?'}portailUrl=${encodeURIComponent(portailUrl)}` : ''
+      }`,
     ),
-  /** Écrit la page sur le routeur, en écrasant celle qui s'y trouve. */
-  publierPageConnexion: (portail: string, routerId?: string) =>
-    api.post<{ chemin: string; octets: number }>(
+  /** Enregistre les réglages. Rien n'est envoyé au routeur. */
+  enregistrerPageConnexion: (reglages: Partial<ReglagesPageConnexion>) =>
+    api.patch<{ reglages: ReglagesPageConnexion; parDefaut: boolean }>(
+      '/hotspot/page-connexion',
+      reglages,
+    ),
+  /** Écrit la page sur chaque dossier réellement servi par le routeur. */
+  publierPageConnexion: (routerId?: string) =>
+    api.post<{ ecrits: { chemin: string; octets: number }[] }>(
       `/hotspot/page-connexion${routerId ? `?routerId=${routerId}` : ''}`,
-      { portail },
+      {},
     ),
   overview: (routerId?: string) =>
     api.get<HotspotOverview>(`/hotspot/overview${routerQuery(routerId)}`),

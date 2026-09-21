@@ -33,19 +33,46 @@ export class HotspotController {
    * payants, ni ceux qui viennent d'acheter.
    */
   @Get('page-connexion')
-  apercuPageConnexion(@Query('portail') portail: string) {
-    return this.pageConnexion.apercu(portail ?? '');
+  apercuPageConnexion(@Query() q: Record<string, string>) {
+    // Les reglages en cours de saisie priment sur ceux enregistres : c'est ce
+    // qui rend l'apercu vivant pendant qu'on tape, sans rien ecrire en base.
+    return this.pageConnexion.apercu(q as never);
   }
 
-  /** Ecrit la page sur le routeur, en ecrasant celle qui s'y trouve. */
+  /**
+   * Les reglages de l'exploitant, et l'etat de publication sur son routeur.
+   *
+   * Le chemin etait en dur (`flash/hotspot/login.html`). Il se trouve juste
+   * sur ce parc, et faux des qu'un serveur HotSpot utilise le profil
+   * `default`, qui sert depuis `hotspot` : la console ecrivait alors un
+   * fichier que personne ne sert, en annoncant un succes.
+   */
+  @Get('page-connexion/etat')
+  etatPageConnexion(
+    @Query('routerId') routerId?: string,
+    @Query('portailUrl') portailUrl?: string,
+  ) {
+    return this.pageConnexion.etat(routerId, portailUrl);
+  }
+
+  /** Enregistre les reglages. Rien n'est envoye au routeur ici. */
+  @Roles(AdminRole.SUPER_ADMIN, AdminRole.ADMIN)
+  @Patch('page-connexion')
+  enregistrerPageConnexion(
+    @Body() body: Record<string, string>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.pageConnexion.enregistrer(body as never, user.id);
+  }
+
+  /** Ecrit la page sur chaque dossier reellement servi par le routeur. */
   @Roles(AdminRole.SUPER_ADMIN, AdminRole.ADMIN)
   @Post('page-connexion')
   publierPageConnexion(
-    @Body() body: { portail: string },
     @CurrentUser() user: AuthenticatedUser,
     @Query('routerId') routerId?: string,
   ) {
-    return this.pageConnexion.publier(body.portail ?? '', user.id, routerId);
+    return this.pageConnexion.publier(user.id, routerId);
   }
 
   @Get('overview')

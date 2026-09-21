@@ -7,11 +7,25 @@
   $(...) sont interpretees par RouterOS, pas par un navigateur ni un bundler
   -- ne jamais le passer dans Vite.
 
-  QUATRE MARQUEURS sont remplaces par la console avant l'envoi :
-    __MARQUE__   le nom du reseau vu par le client
-    __LIEU__     la mention du bas de page
-    __PORTAIL__  l'adresse de la page de paiement, sans barre finale
-    __SLUG__     l'identifiant public de l'exploitant
+  LES MARQUEURS sont remplaces par la console avant l'envoi :
+    __MARQUE__             le titre, en haut de la carte
+    __SOUS_TITRE__         la phrase sous le titre
+    __LABEL_CODE__         le libelle du champ principal
+    __LIBELLE_CONNEXION__  le texte du bouton de connexion
+    __LIBELLE_ACHAT__      le texte du bouton d'achat
+    __AIDE_ACHAT__         la phrase sous le bouton d'achat
+    __LIEU__               la mention du bas de page
+    __COULEUR__            la couleur d'accent, #RRGGBB
+    __BLOC_LOGO__          le logo, ou rien
+    __PORTAIL__            l'adresse de la page de paiement, sans barre finale
+    __SLUG__               l'identifiant public de l'exploitant
+
+  CE QUE L'EXPLOITANT NE REGLE PAS, et c'est le coeur du dispositif : le
+  formulaire de connexion et le bouton d'achat. Il en change les mots, jamais
+  l'existence -- ils ne sont pas dans ce qu'il edite, donc il ne peut pas les
+  supprimer. La couleur du bouton d'achat non plus : la laisser regler
+  permettrait de le rendre invisible sur le fond, ce que toute cette
+  mecanique sert precisement a empecher.
 
   ASCII SEULEMENT. L'API du routeur refuse tout octet au-dessus de 127 :
   les accents s'ecrivent donc en entites HTML (&eacute;, &agrave;...), ce
@@ -52,7 +66,12 @@
         padding: 28px;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
       }
-      h1 { font-size: 18px; color: #0369a1; margin: 0 0 4px; }
+      h1 { font-size: 18px; color: __COULEUR__; margin: 0 0 4px; }
+      /* Le logo est charge depuis le reseau : son hote doit figurer dans le
+         Walled Garden, sinon il ne s'affiche pas pour un client captif. La
+         hauteur est bornee pour qu'une image mal dimensionnee ne pousse pas
+         le formulaire hors de l'ecran d'un telephone. */
+      .logo { display: block; max-width: 100%; max-height: 64px; margin: 0 auto 16px; }
       p.subtitle { margin: 0 0 20px; color: #64748b; font-size: 13px; }
       label {
         display: block;
@@ -81,7 +100,7 @@
         padding: 11px;
         border: 0;
         border-radius: 8px;
-        background: #0284c7;
+        background: __COULEUR__;
         color: #ffffff;
         font-size: 15px;
         font-weight: 600;
@@ -143,8 +162,9 @@
   </head>
   <body>
     <div class="card">
+      __BLOC_LOGO__
       <h1>__MARQUE__</h1>
-      <p class="subtitle">Entrez le code re&ccedil;u apr&egrave;s votre achat pour acc&eacute;der &agrave; Internet.</p>
+      <p class="subtitle">__SOUS_TITRE__</p>
 
       $(if chap-id)<div class="error">Session expir&eacute;e, veuillez r&eacute;essayer.</div>$(endif)
       $(if error)<div class="error">$(error)</div>$(endif)
@@ -155,7 +175,7 @@
         <input type="hidden" name="username" id="hidden-username" />
         <input type="hidden" name="password" id="hidden-password" />
 
-        <label for="code">Code d'acc&egrave;s ou nom</label>
+        <label for="code">__LABEL_CODE__</label>
         <input
           type="text"
           id="code"
@@ -186,7 +206,7 @@
           placeholder="laisser vide si vous avez un ticket"
         />
 
-        <button type="submit">Se connecter</button>
+        <button type="submit">__LIBELLE_CONNEXION__</button>
       </form>
 
       <!--
@@ -197,10 +217,8 @@
       -->
       <div class="ou">ou</div>
 
-      <a class="payer" href="__PORTAIL__/p/__SLUG__">Acheter un acc&egrave;s</a>
-      <p class="payer-aide">
-        Payez par Mobile Money, sans quitter le Wi-Fi.
-      </p>
+      <a class="payer" href="__PORTAIL__/p/__SLUG__">__LIBELLE_ACHAT__</a>
+      <p class="payer-aide">__AIDE_ACHAT__</p>
 
       <div class="footer">__LIEU__</div>
     </div>

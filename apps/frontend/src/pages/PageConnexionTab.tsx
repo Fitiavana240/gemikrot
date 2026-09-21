@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { hotspotApi } from '../api/hotspot';
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { hotspotApi, type ReglagesPageConnexion } from '../api/hotspot';
 import { useAuth } from '../auth/AuthContext';
 import { useRouterSelection } from '../routers/RouterContext';
 import { ApiError } from '../api/client';
@@ -16,71 +16,307 @@ import { Button, Card, FormField, Input } from '../components/ui';
  * sans code voyait une page qui ne lui proposait rien, et devait trouver le
  * vendeur.
  *
- * Le paiement ne demande **aucun accès Internet** : la page est servie sur le
- * réseau local, le client la joint par le Wi-Fi seul, et l'argent part par
- * Mobile Money, hors du routeur.
+ * **Le bouton d'achat n'est pas dans ce que l'exploitant règle.** Il en change
+ * les mots ; le bloc, lui, est écrit par le serveur. On ne supprime pas ce
+ * qu'on ne tient pas. Le formulaire de connexion non plus : une page de
+ * connexion cassée, et plus personne ne se connecte — clients payants
+ * compris.
  */
 
 /** Ce que le client tape : l'adresse doit lui être joignable sans Internet. */
-const EXEMPLE = 'http://192.168.88.250:5173';
+const EXEMPLE_PORTAIL = 'http://192.168.88.135:5173';
 
 export function PageConnexionTab() {
   const { canWrite } = useAuth();
   const { currentId } = useRouterSelection();
-  const [portail, setPortail] = useState(EXEMPLE);
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<ReglagesPageConnexion | null>(null);
   const [confirmer, setConfirmer] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [compteRendu, setCompteRendu] = useState<string | null>(null);
 
-  const apercu = useQuery({
-    queryKey: ['page-connexion', portail],
-    queryFn: () => hotspotApi.apercuPageConnexion(portail),
-    enabled: portail.trim().length > 0,
+  /**
+   * L'adresse saisie, mais pas à chaque frappe.
+   *
+   * Vérifier les empêchements demande trois lectures du routeur — serveurs,
+   * profils, fichiers. Les lancer à chaque caractère d'une adresse ferait
+   * partir des dizaines d'allers-retours sur un lien qui met 150 ms à
+   * répondre, et la réponse affichée serait celle d'une frappe précédente.
+   */
+  const [portailDiffere, setPortailDiffere] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setPortailDiffere(form?.portailUrl ?? ''), 500);
+    return () => clearTimeout(t);
+  }, [form?.portailUrl]);
+
+  const etat = useQuery({
+    // L'adresse entre dans la clef : les refus suivent ce qu'on tape, au lieu
+    // de n'apparaître qu'après avoir enregistré.
+    queryKey: ['page-connexion-etat', currentId, portailDiffere],
+    queryFn: () => hotspotApi.etatPageConnexion(currentId, portailDiffere),
     retry: false,
   });
 
+  /**
+   * Le formulaire part des réglages enregistrés, une fois.
+   *
+   * Le recopier à chaque rendu écraserait la saisie en cours dès que la
+   * requête se rafraîchit — on tape un titre, il redevient l'ancien.
+   */
+  useEffect(() => {
+    if (etat.data && form === null) setForm(etat.data.reglages);
+  }, [etat.data, form]);
+
+  /**
+   * L'aperçu suit la saisie, avec le même délai.
+   *
+   * Il ne touche pas au routeur — c'est un rendu de texte — mais une requête
+   * par caractère fait clignoter l'iframe à chaque lettre, ce qui rend le
+   * réglage désagréable au moment même où on le relit.
+   */
+  const [formDiffere, setFormDiffere] = useState<ReglagesPageConnexion | null>(null);
+  useEffect(() => {
+    const t = setTimeout(() => setFormDiffere(form), 350);
+    return () => clearTimeout(t);
+  }, [form]);
+
+  const apercu = useQuery({
+    queryKey: ['page-connexion-apercu', formDiffere],
+    queryFn: () => hotspotApi.apercuPageConnexion(formDiffere ?? {}),
+    enabled: formDiffere !== null,
+    retry: false,
+  });
+
+  const enregistrer = useMutation({
+    mutationFn: () => hotspotApi.enregistrerPageConnexion(form ?? {}),
+    onSuccess: (r) => {
+      setErreur(null);
+      setForm(r.reglages);
+      setCompteRendu('Réglages enregistrés. Rien n’a encore été envoyé au routeur.');
+      queryClient.invalidateQueries({ queryKey: ['page-connexion-etat'] });
+    },
+    onError: (e) => setErreur(e instanceof ApiError ? e.message : 'Erreur inconnue'),
+  });
+
   const publier = useMutation({
-    mutationFn: () => hotspotApi.publierPageConnexion(portail, currentId),
+    mutationFn: () => hotspotApi.publierPageConnexion(currentId),
     onSuccess: (r) => {
       setErreur(null);
       setConfirmer(false);
-      setCompteRendu(`Page écrite sur le routeur : ${r.chemin}, ${r.octets} octets.`);
+      setCompteRendu(
+        `Page écrite sur le routeur : ${r.ecrits.map((e) => e.chemin).join(', ')} — ${
+          r.ecrits[0]?.octets ?? 0
+        } octets.`,
+      );
+      queryClient.invalidateQueries({ queryKey: ['page-connexion-etat'] });
     },
     onError: (e) => setErreur(e instanceof ApiError ? e.message : 'Le routeur a refusé.'),
   });
 
+  const champ = (clef: keyof ReglagesPageConnexion, valeur: string) =>
+    setForm((f) => (f ? { ...f, [clef]: valeur } : f));
+
+  const d = etat.data;
+  const bloque = (d?.empechements.length ?? 0) > 0;
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {compteRendu && (
         <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           {compteRendu}
         </p>
       )}
-
-      <div className="flex flex-wrap items-end gap-3">
-        <FormField label="Adresse de la page de paiement">
-          <Input
-            value={portail}
-            onChange={(e) => setPortail(e.target.value)}
-            placeholder={EXEMPLE}
-            className="w-80"
-          />
-        </FormField>
-        {canWrite && (
-          <Button
-            variant="danger"
-            disabled={apercu.isPending || apercu.isError}
-            onClick={() => setConfirmer(true)}
-          >
-            Publier sur le routeur
-          </Button>
-        )}
-      </div>
-
       {erreur && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {erreur}
         </p>
+      )}
+
+      {/* Avant les champs : ce qui empêchera de publier. Les découvrir au
+          moment de cliquer, après avoir tout réglé, ferait recommencer. */}
+      {d?.empechements.map((m) => (
+        <p
+          key={m}
+          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+        >
+          <strong>Publication impossible.</strong> {m}
+        </p>
+      ))}
+      {d?.avertissements.map((m) => (
+        <p
+          key={m}
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          {m}
+        </p>
+      ))}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card title="Ce que voit votre client">
+          {form === null ? (
+            <div className="h-64 animate-pulse rounded bg-slate-100" />
+          ) : (
+            <div className="space-y-3">
+              <FormField label="Titre">
+                <Input value={form.titre} onChange={(e) => champ('titre', e.target.value)} />
+              </FormField>
+              <FormField label="Phrase sous le titre">
+                <Input
+                  value={form.sousTitre}
+                  onChange={(e) => champ('sousTitre', e.target.value)}
+                />
+              </FormField>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="Bouton de connexion">
+                  <Input
+                    value={form.libelleConnexion}
+                    onChange={(e) => champ('libelleConnexion', e.target.value)}
+                  />
+                </FormField>
+                {/* Le texte se règle, le bouton non : c'est ce qui le rend
+                    indélébile. L'aide sous le champ le dit, plutôt que de
+                    laisser croire qu'on pourrait l'enlever. */}
+                <FormField
+                  label="Bouton d'achat"
+                  aide="Ce bouton est toujours présent : seul son texte se règle."
+                >
+                  <Input
+                    value={form.libelleAchat}
+                    onChange={(e) => champ('libelleAchat', e.target.value)}
+                  />
+                </FormField>
+              </div>
+              <FormField label="Phrase sous le bouton d'achat">
+                <Input
+                  value={form.aideAchat}
+                  onChange={(e) => champ('aideAchat', e.target.value)}
+                />
+              </FormField>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="Pied de page">
+                  <Input
+                    value={form.piedDePage}
+                    onChange={(e) => champ('piedDePage', e.target.value)}
+                  />
+                </FormField>
+                <FormField
+                  label="Couleur d'accent"
+                  aide="Elle porte du texte blanc : une teinte trop claire est refusée."
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={/^#[0-9a-fA-F]{6}$/.test(form.couleur) ? form.couleur : '#0284c7'}
+                      onChange={(e) => champ('couleur', e.target.value)}
+                      className="h-9 w-12 cursor-pointer rounded border border-slate-300"
+                      aria-label="Couleur d'accent"
+                    />
+                    <Input
+                      value={form.couleur}
+                      onChange={(e) => champ('couleur', e.target.value)}
+                      className="font-mono"
+                    />
+                  </div>
+                </FormField>
+              </div>
+              <FormField
+                label="Logo (adresse d'une image)"
+                aide="Chargé depuis le réseau : son adresse doit aussi être autorisée dans le Walled Garden, sinon il ne s'affiche pas. Laissez vide pour ne pas en mettre."
+              >
+                <Input
+                  value={form.logoUrl ?? ''}
+                  placeholder="https://…/logo.png"
+                  onChange={(e) => champ('logoUrl', e.target.value)}
+                />
+              </FormField>
+              <FormField
+                label="Adresse de la page de paiement"
+                aide="C'est elle que le bouton d'achat ouvrira. Elle doit être joignable depuis le Wi-Fi seul, sans Internet — donc jamais le nom du portail captif lui-même."
+              >
+                <Input
+                  value={form.portailUrl}
+                  placeholder={EXEMPLE_PORTAIL}
+                  onChange={(e) => champ('portailUrl', e.target.value)}
+                />
+              </FormField>
+
+              {canWrite && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    disabled={enregistrer.isPending}
+                    onClick={() => enregistrer.mutate()}
+                  >
+                    {enregistrer.isPending ? 'Enregistrement…' : 'Enregistrer'}
+                  </Button>
+                  <Button
+                    variant="danger"
+                    disabled={bloque || apercu.isError || publier.isPending}
+                    onClick={() => setConfirmer(true)}
+                  >
+                    Publier sur le routeur
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+
+        <Card title="Aperçu — ce qui sera écrit">
+          {apercu.isPending ? (
+            <div className="h-96 animate-pulse rounded bg-slate-100" />
+          ) : apercu.isError ? (
+            <p className="text-sm text-red-700">
+              {apercu.error instanceof ApiError
+                ? apercu.error.message
+                : "L'aperçu n'a pas pu être produit."}
+            </p>
+          ) : (
+            <>
+              <div className="mb-2 text-xs text-slate-500">{apercu.data?.octets} octets</div>
+              {/* Le rendu, pas le code : c'est ce que le client verra, et c'est
+                  la seule chose qu'on puisse vraiment relire. `sandbox` sans
+                  `allow-scripts` : la page porte du JavaScript, et rien ne
+                  justifie de l'exécuter dans la console. */}
+              <iframe
+                title="Aperçu de la page de connexion"
+                sandbox=""
+                srcDoc={apercu.data?.contenu ?? ''}
+                className="h-[28rem] w-full rounded-lg border border-slate-200 bg-white"
+              />
+            </>
+          )}
+        </Card>
+      </div>
+
+      {/* Où la page ira réellement. Le chemin était en dur : il se trouve juste
+          ici, et faux dès qu'un serveur utilise le profil `default`. */}
+      {d && d.cibles.length > 0 && (
+        <Card title="Où la page sera écrite">
+          <ul className="space-y-2 text-sm">
+            {d.cibles.map((c) => (
+              <li key={c.chemin} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-mono text-xs text-slate-700">{c.chemin}</span>
+                <span className="text-slate-500">
+                  sert {c.serveurs.join(', ')}
+                </span>
+                {c.publie ? (
+                  <span className="text-slate-500">
+                    · publiée le {new Date(c.publie.publieLe).toLocaleString('fr-FR')} (
+                    {c.publie.octets} octets)
+                  </span>
+                ) : (
+                  <span className="text-amber-800">· jamais publiée par la console</span>
+                )}
+                {c.surLeRouteur && (
+                  <span className="text-slate-500">
+                    · sur le routeur : {c.surLeRouteur.octets} octets,{' '}
+                    {c.surLeRouteur.modifieLe}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
 
       {confirmer && (
@@ -101,48 +337,32 @@ export function PageConnexionTab() {
             ni les clients déjà payants, ni ceux qui viennent d&apos;acheter.
           </p>
           <p className="mt-2">
-            Relisez l&apos;aperçu ci-dessous avant de répondre, et surtout l&apos;adresse{' '}
-            <span className="font-mono text-xs">{portail}</span> : c&apos;est elle que le
-            bouton « Acheter un accès » ouvrira, et elle doit être joignable{' '}
+            Elle sera écrite dans{' '}
+            <span className="font-mono text-xs">
+              {d?.cibles.map((c) => c.chemin).join(', ')}
+            </span>{' '}
+            — les dossiers que servent réellement vos serveurs HotSpot.
+          </p>
+          <p className="mt-2">
+            Relisez l&apos;aperçu, et surtout l&apos;adresse{' '}
+            <span className="font-mono text-xs">{form?.portailUrl}</span> : c&apos;est elle
+            que le bouton d&apos;achat ouvrira, et elle doit être joignable{' '}
             <strong>depuis le Wi-Fi seul</strong>, sans Internet.
           </p>
         </Confirmation>
       )}
 
-      <Card title="Aperçu — ce qui sera écrit">
-        {apercu.isPending ? (
-          <div className="h-32 animate-pulse rounded bg-slate-100" />
-        ) : apercu.isError ? (
-          <p className="text-sm text-red-700">
-            {apercu.error instanceof ApiError
-              ? apercu.error.message
-              : "L'aperçu n'a pas pu être produit."}
-          </p>
-        ) : (
-          <>
-            <div className="mb-2 text-xs text-slate-500">
-              {apercu.data?.chemin} — {apercu.data?.octets} octets
-            </div>
-            {/* Le rendu, pas le code : c'est ce que le client verra, et c'est
-                la seule chose qu'on puisse vraiment relire. `sandbox` sans
-                `allow-scripts` : la page porte du JavaScript, et rien ne
-                justifie de l'exécuter dans la console. */}
-            <iframe
-              title="Aperçu de la page de connexion"
-              sandbox=""
-              srcDoc={apercu.data?.contenu ?? ''}
-              className="h-96 w-full rounded-lg border border-slate-200 bg-white"
-            />
-          </>
-        )}
-      </Card>
-
       <p className="max-w-3xl text-xs text-slate-500">
         Cette page est servie <strong>par le routeur</strong>, pas par la console : elle reste
         affichée même si l&apos;application est arrêtée. C&apos;est pourquoi elle ne va
         chercher aucune donnée — une page de connexion ne doit avoir aucun mode de panne.
-        L&apos;adresse du portail doit figurer dans le <strong>Walled Garden</strong>, faute de
-        quoi le bouton mènera à une page que le client ne peut pas atteindre.
+        <br />
+        Le formulaire de connexion et le bouton d&apos;achat ne font pas partie de ce que vous
+        réglez : ils sont écrits par la console à chaque publication.{' '}
+        <strong>Rien n&apos;empêche de les retirer depuis WinBox</strong> — c&apos;est votre
+        routeur. Mais la console s&apos;en apercevra : elle compare la taille et la date du
+        fichier servi à ceux de sa dernière publication. Elle ne peut pas en relire le
+        contenu, RouterOS ne rendant un fichier que sous 4 096 octets.
       </p>
     </div>
   );
