@@ -32,28 +32,72 @@ export function Modale({
 }) {
   const panneau = useRef<HTMLDivElement>(null);
 
+  /**
+   * `onFermer` derrière une référence, et la raison est un vrai défaut vécu.
+   *
+   * Les appelants écrivent `onFermer={() => setCréer(false)}` : une fonction
+   * neuve à chaque rendu. Un effet qui en dépend se démonte et se remonte
+   * donc à **chaque frappe** — et comme il posait le focus sur le panneau, le
+   * curseur quittait le champ après chaque lettre. Le champ gardait le texte,
+   * mais il fallait recliquer dedans pour écrire la suivante.
+   *
+   * La référence garde la fonction à jour sans que rien n'en dépende.
+   */
+  const fermer = useRef(onFermer);
+  fermer.current = onFermer;
+
   useEffect(() => {
     // Échap ferme : c'est le réflexe de tout le monde, et sans lui une
     // fenêtre sans bouton visible piège l'utilisateur.
     const auClavier = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onFermer();
+      if (e.key === 'Escape') fermer.current();
     };
     document.addEventListener('keydown', auClavier);
 
     // Le fond ne défile plus derrière la fenêtre : sur un téléphone, faire
     // défiler la page au lieu du formulaire est la première chose qui arrive.
+    //
+    // La valeur d'avant est relevée une seule fois. Quand l'effet se rejouait
+    // à chaque frappe, il relevait `hidden` — la sienne — et la « restaurait »
+    // à la fermeture : la page entière ne défilait plus ensuite.
     const débordement = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
     // Le focus entre dans la fenêtre, sinon la tabulation continue de
-    // parcourir la page cachée derrière.
-    panneau.current?.focus();
+    // parcourir la page cachée derrière. Une seule fois, à l'ouverture :
+    // c'est tout le propos de cet effet sans dépendances.
+    //
+    // Dans le premier champ, et non sur le panneau : on ouvre une fenêtre
+    // pour y écrire. Prendre le panneau obligeait à un clic de plus, et
+    // écrasait l'`autoFocus` que certains formulaires posent eux-mêmes.
+    // Un champ de saisie, jamais une liste déroulante : une frappe dans une
+    // liste qui a le focus en change la valeur en silence, sans curseur pour
+    // le montrer. Quand le premier champ est une liste, le focus reste sur le
+    // panneau et la tabulation l'atteint aussitôt.
+    const cadre = panneau.current;
+    if (cadre && !cadre.contains(document.activeElement)) {
+      const premier = cadre.querySelector<HTMLElement>(
+        'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([disabled]), textarea:not([disabled])',
+      );
+      (premier ?? cadre).focus();
+      // Un champ déjà rempli voit son contenu sélectionné : sans cela le
+      // curseur se pose à la fin, et taper « 25 » dans une quantité qui vaut
+      // « 10 » donne « 1025 ». Constaté à l'essai.
+      if (premier instanceof HTMLInputElement && premier.value !== '') {
+        try {
+          premier.select();
+        } catch {
+          // `select()` lève sur les types qui n'ont pas de sélection
+          // (`number` selon les navigateurs). Le focus, lui, est acquis.
+        }
+      }
+    }
 
     return () => {
       document.removeEventListener('keydown', auClavier);
       document.body.style.overflow = débordement;
     };
-  }, [onFermer]);
+  }, []);
 
   return (
     <div
