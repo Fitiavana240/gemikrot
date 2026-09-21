@@ -118,8 +118,33 @@ export const enrollmentsApi = {
   cancel: (id: string) => api.delete<void>(`/router-enrollments/${id}`),
 };
 
+/**
+ * L'état d'un routeur en un appel : qui il est, ce qu'il fait tourner, et
+ * quelle heure il est chez lui.
+ *
+ * L'horloge en fait partie parce que c'est **elle** qui décide des
+ * expirations. Une console dont la pendule avance sur celle du routeur
+ * annonce des coupures qui n'ont pas eu lieu, et l'écart ne se voit nulle
+ * part tant que personne ne montre les deux.
+ */
+export interface EtatRouteur {
+  identity: { name: string };
+  resource: {
+    uptime: string;
+    version: string;
+    boardName: string;
+    architectureName: string;
+    cpuLoadPercent: number;
+    freeMemoryBytes: number;
+    totalMemoryBytes: number;
+  };
+  ntp: { enabled: boolean; status: string; servers: string[] };
+  clock: { time: string; date: string; timeZone: string; gmtOffset: string };
+}
+
 export const routersApi = {
   list: () => api.get<RouterView[]>('/routers'),
+  etat: (id: string) => api.get<EtatRouteur>(`/routers/${id}/status`),
   pendingOperations: (routerId?: string) =>
     api.get<RouterOperation[]>(
       `/routers/operations/pending${routerId ? `?routerId=${routerId}` : ''}`,

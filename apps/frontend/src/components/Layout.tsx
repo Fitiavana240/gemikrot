@@ -8,6 +8,7 @@ import { APP_NAME, BrandMark } from './Brand';
 import { useRouterSelection } from '../routers/RouterContext';
 import { REACHABILITY_LABEL } from '../api/routers';
 import { SideNav } from './SideNav';
+import { Pied } from './Pied';
 
 /** Le SUPER_ADMIN pilote la plateforme, pas un réseau en particulier. */
 
@@ -230,6 +231,9 @@ export function Layout() {
         <main className="min-w-0 flex-1 p-4 lg:p-6">
           <Outlet />
         </main>
+        {/* En bas de la colonne de contenu, pas en travers de la barre
+            latérale : il parle du routeur choisi, qui se choisit au-dessus. */}
+        <Pied />
       </div>
     </div>
   );

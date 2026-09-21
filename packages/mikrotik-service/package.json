@@ -1,6 +1,6 @@
 {
   "name": "@wifitati/mikrotik-service",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Couche d'abstraction MikroTik pour WIFI-TATI Manager (interface + implémentation REST RouterOS)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
