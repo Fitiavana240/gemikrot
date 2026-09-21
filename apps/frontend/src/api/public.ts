@@ -105,6 +105,27 @@ export const publicApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  /**
+   * Racheter du temps sur un accès existant.
+   *
+   * Pas de numéro de téléphone : il est sur la fiche du client depuis son
+   * premier achat, et le retaper ne serait qu'une occasion de se tromper.
+   */
+  reabonner: (
+    slug: string,
+    input: {
+      identifiant: string;
+      /** La référence du premier achat : elle prouve que le compte est le sien. */
+      motDePasse: string;
+      planId: string;
+      accountId: string;
+      reference: string;
+    },
+  ) =>
+    request<{ token: string; state: ClaimState; identifiant: string }>(`/${slug}/reabonner`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
   status: (slug: string, token: string) => request<ClaimView>(`/${slug}/claim/${token}`),
   lookup: (slug: string, input: { phone: string; reference: string }) =>
     request<ClaimView>(`/${slug}/lookup`, { method: 'POST', body: JSON.stringify(input) }),

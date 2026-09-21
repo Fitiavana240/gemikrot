@@ -116,6 +116,18 @@ export class PaymentsService {
       return this.verifySubscriptionPayment(payment, adminUserId);
     }
 
+    /**
+     * Un réabonnement ne vend rien : il rachète du temps sur un accès qui
+     * existe déjà.
+     *
+     * Passer par le chemin ordinaire tirerait un ticket du stock — un code
+     * aléatoire là où le client attend le sien — ou buterait sur `activate`,
+     * qui refuse à raison tout ticket déjà vendu.
+     */
+    if (payment.renewsVoucherId) {
+      return this.verifierReabonnement(payment, adminUserId);
+    }
+
     // Le ticket peut avoir été **réservé à la déclaration** : un achat en
     // ligne crée le sien, au nom du client et avec sa référence pour mot de
     // passe. Tirer alors un ticket du stock rendrait un code aléatoire à la
@@ -152,6 +164,44 @@ export class PaymentsService {
       targetType: 'Payment',
       targetId: payment.id,
       payloadDiff: { voucherId: activated.id, amount: payment.amount.toString() },
+    });
+
+    return this.findOne(payment.id);
+  }
+
+  /**
+   * Réabonnement d'un accès acheté en ligne.
+   *
+   * Même garantie d'idempotence que partout ailleurs : l'update conditionnel
+   * sur `PENDING` est pris **avant** de toucher au routeur, de sorte que deux
+   * vérifications concurrentes ne puissent pas empiler deux périodes pour un
+   * seul paiement.
+   */
+  private async verifierReabonnement(payment: Payment, adminUserId: string): Promise<Payment> {
+    const claimed = await this.prisma.scoped.payment.updateMany({
+      where: { id: payment.id, status: PaymentStatus.PENDING },
+      data: {
+        status: PaymentStatus.VERIFIED,
+        verifiedByAdminId: adminUserId,
+        verifiedAt: new Date(),
+      },
+    });
+    if (claimed.count === 0) {
+      throw new ConflictException(`Paiement ${payment.id} déjà vérifié par une requête concurrente`);
+    }
+
+    const prolonge = await this.vouchers.renouveler(payment.renewsVoucherId!, { adminUserId });
+
+    await this.audit.log({
+      adminUserId,
+      action: 'VERIFY_PAYMENT',
+      targetType: 'Payment',
+      targetId: payment.id,
+      payloadDiff: {
+        reabonnement: prolonge.code,
+        echeance: prolonge.expiresAt?.toISOString() ?? null,
+        amount: payment.amount.toString(),
+      },
     });
 
     return this.findOne(payment.id);

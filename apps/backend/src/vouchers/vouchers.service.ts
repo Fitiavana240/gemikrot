@@ -262,6 +262,77 @@ export class VouchersService {
    * `code` sert à la fois de nom d'utilisateur et de mot de passe RouterOS
    * (Section 6 : un seul champ à saisir côté client).
    */
+  /**
+   * Rachète du temps sur un accès qui existe déjà.
+   *
+   * `activate` ne sait pas faire : elle refuse tout ticket qui n'est plus
+   * `CREATED`, et c'est juste — vendre deux fois le même ticket est une
+   * erreur. Un réabonnement n'est pas une seconde vente : le client garde son
+   * identifiant, son mot de passe et son compte, et rachète de la durée.
+   *
+   * **C'est le routeur qui calcule la nouvelle échéance**, pas nous. Une
+   * attribution de plus empile une période sur celle en cours, et `end-time`
+   * en revient calculé : notre addition de jours ne ferait que diverger de
+   * ce qu'il applique réellement.
+   *
+   * Et jamais plus tôt que ce qui court déjà. Un client qui se réabonne en
+   * avance garde ses jours restants ; si le routeur rendait une échéance
+   * antérieure — parce qu'il repart de maintenant au lieu d'empiler — la
+   * retenir lui volerait ces jours-là, en silence.
+   */
+  async renouveler(
+    voucherId: string,
+    params: { adminUserId?: string } = {},
+  ): Promise<Voucher> {
+    const voucher = await this.findOne(voucherId);
+    const plan = await this.getActivePlan(voucher.planId);
+
+    if (!voucher.umUsername) {
+      throw new ConflictException(
+        `« ${voucher.code} » n'a pas de compte User Manager : seul un accès acheté en ligne se réabonne.`,
+      );
+    }
+
+    const routerId = await this.getDefaultRouterId();
+    const { profileName } = await this.provisioning.reconcile(plan.id, routerId);
+    const mikrotik = await this.clients.forRouter(routerId);
+
+    const assignment = await mikrotik.assignProfile({
+      username: voucher.umUsername,
+      profileName,
+    });
+    const clock = await mikrotik.getClock();
+    const rendue = parseRouterTime(assignment.endTime, clock.gmtOffset);
+    const echeance =
+      rendue && voucher.expiresAt && rendue < voucher.expiresAt ? voucher.expiresAt : rendue;
+
+    const prolonge = await this.prisma.scoped.voucher.update({
+      where: { id: voucher.id },
+      data: {
+        // Un ticket expiré redevient actif : c'est tout l'objet du geste.
+        status: VoucherStatus.ACTIVE,
+        umState: assignment.state,
+        expiresAt: echeance ?? voucher.expiresAt,
+        lastReconciledAt: new Date(),
+      },
+    });
+
+    await this.audit.log({
+      adminUserId: params.adminUserId,
+      routerId,
+      action: 'RENEW_VOUCHER',
+      targetType: 'Voucher',
+      targetId: voucher.id,
+      payloadDiff: {
+        code: voucher.code,
+        profil: profileName,
+        echeance: echeance?.toISOString() ?? null,
+      },
+    });
+
+    return prolonge;
+  }
+
   async activate(
     voucherId: string,
     params: { customerId: string; deviceId?: string; adminUserId?: string },

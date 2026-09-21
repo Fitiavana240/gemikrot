@@ -602,7 +602,9 @@ model Voucher {
   customer    Customer?     @relation(fields: [tenantId, customerId], references: [tenantId, id])
   deviceId    String?       @map("device_id")
   device      Device?       @relation(fields: [tenantId, deviceId], references: [tenantId, id])
-  payment     Payment?
+  payment     Payment?  @relation("TicketVendu")
+  /// Les paiements qui ont rachete du temps sur cet acces.
+  reabonnements Payment[] @relation("TicketProlonge")
   createdAt   DateTime      @default(now()) @map("created_at")
   activatedAt DateTime?     @map("activated_at")
   /// Échéance recopiée depuis `end-time` du routeur. `null` tant que la
@@ -659,7 +661,20 @@ model Payment {
   /// survit à ce qu'il a soldé. Sans `SetNull`, la purge échouerait sur toute
   /// ligne payée — c'est-à-dire précisément celles qui comptent.
   voucherId          String?       @unique @map("voucher_id")
-  voucher            Voucher?      @relation(fields: [tenantId, voucherId], references: [tenantId, id], onDelete: SetNull)
+  voucher            Voucher?      @relation("TicketVendu", fields: [tenantId, voucherId], references: [tenantId, id], onDelete: SetNull)
+  /// Ticket que ce paiement **prolonge**, pour un reabonnement en ligne.
+  ///
+  /// Distinct de `voucherId`, et il fallait qu'il le soit : celui-la est
+  /// unique, parce qu'un ticket n'est vendu qu'une fois. Un reabonnement ne
+  /// vend rien -- il rachete du temps sur un acces qui existe deja, et cela
+  /// peut arriver tous les mois. Les faire porter par le meme champ aurait
+  /// bute sur la contrainte des le second paiement.
+  ///
+  /// `SetNull` a la purge, comme `voucherId` : le paiement survit au ticket
+  /// qu'il a prolonge, sans quoi la purge echouerait sur les lignes payees --
+  /// precisement celles qui comptent.
+  renewsVoucherId    String?       @map("renews_voucher_id")
+  renewsVoucher      Voucher?      @relation("TicketProlonge", fields: [tenantId, renewsVoucherId], references: [tenantId, id], onDelete: SetNull)
   subscriptionId     String?       @map("subscription_id")
   subscription       Subscription? @relation(fields: [tenantId, subscriptionId], references: [tenantId, id])
   verifiedByAdminId  String?       @map("verified_by_admin_id")

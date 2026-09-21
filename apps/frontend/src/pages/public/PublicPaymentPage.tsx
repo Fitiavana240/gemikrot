@@ -21,6 +21,15 @@ const PROVIDER_LABEL: Record<string, string> = {
 
 type Step = 'offres' | 'paiement' | 'suivi' | 'recherche';
 
+/**
+ * Acheter un premier acces, ou racheter du temps sur celui qu'on a.
+ *
+ * Les deux parcours partagent tout jusqu'au formulaire : memes offres, memes
+ * numeros, meme attente. Seule change la facon de se nommer -- un nom qu'on
+ * choisit, ou un identifiant qu'on possede deja et qu'on prouve.
+ */
+type Mode = 'achat' | 'reabonnement';
+
 /** Le jeton de suivi survit à une fermeture d'onglet : le client y revient. */
 const TOKEN_KEY = 'gemikrot_claim_token';
 
@@ -30,6 +39,7 @@ export function PublicPaymentPage() {
   const t = TRANSLATIONS[lang];
 
   const [step, setStep] = useState<Step>('offres');
+  const [mode, setMode] = useState<Mode>('achat');
   const [plan, setPlan] = useState<PublicPlan | null>(null);
   const [account, setAccount] = useState<PublicPaymentAccount | null>(null);
   const [token, setToken] = useState<string | null>(() => {
@@ -123,23 +133,49 @@ export function PublicPaymentPage() {
       )}
 
       {step === 'offres' && (
-        <OffersStep
-          plans={data.plans}
-          lang={lang}
-          money={money}
-          onPick={(picked) => {
-            setPlan(picked);
-            setAccount(data.paymentAccounts[0] ?? null);
-            setStep('paiement');
-            setError(null);
-          }}
-        />
+        <>
+          {/* Deux chemins, dits avant les offres : le client qui se reabonne
+              n'a pas a lire le parcours d'un premier achat pour decouvrir
+              ensuite qu'on lui demande un nom qu'il a deja. */}
+          <div className="mb-4 flex rounded-lg border border-slate-200 p-1 text-sm">
+            {(['achat', 'reabonnement'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => {
+                  setMode(m);
+                  setError(null);
+                }}
+                className={`flex-1 rounded-md px-3 py-2 font-medium transition-colors ${
+                  mode === m ? 'bg-sky-600 text-white' : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {m === 'achat' ? t.buy : t.renewEntry}
+              </button>
+            ))}
+          </div>
+          {mode === 'reabonnement' && (
+            <p className="mb-3 text-sm text-slate-600">{t.renewEntryHint}</p>
+          )}
+          <OffersStep
+            plans={data.plans}
+            lang={lang}
+            money={money}
+            onPick={(picked) => {
+              setPlan(picked);
+              setAccount(data.paymentAccounts[0] ?? null);
+              setStep('paiement');
+              setError(null);
+            }}
+          />
+        </>
       )}
 
       {step === 'paiement' && plan && (
         <PaymentStep
           slug={slug}
           lang={lang}
+          mode={mode}
           plan={plan}
           money={money}
           accounts={data.paymentAccounts}
@@ -305,6 +341,7 @@ function OffersStep({
 function PaymentStep({
   slug,
   lang,
+  mode,
   plan,
   money,
   accounts,
@@ -316,6 +353,7 @@ function PaymentStep({
 }: {
   slug: string;
   lang: Lang;
+  mode: Mode;
   plan: PublicPlan;
   money: Intl.NumberFormat;
   accounts: PublicPaymentAccount[];
@@ -330,6 +368,10 @@ function PaymentStep({
   const [phone, setPhone] = useState('');
   const [reference, setReference] = useState('');
   const [copied, setCopied] = useState(false);
+  /** Reabonnement : l'identifiant qu'on possede, et la preuve qu'on le possede. */
+  const [identifiantExistant, setIdentifiantExistant] = useState('');
+  const [motDePasse, setMotDePasse] = useState('');
+  const reabonnement = mode === 'reabonnement';
 
   // Montré pendant la saisie, pas après. Transformer le nom en silence et le
   // révéler une fois le paiement fait serait une mauvaise surprise au moment
@@ -338,13 +380,21 @@ function PaymentStep({
 
   const claim = useMutation({
     mutationFn: () =>
-      publicApi.claim(slug, {
-        planId: plan.id,
-        accountId: account!.id,
-        phone,
-        reference,
-        holderName,
-      }),
+      reabonnement
+        ? publicApi.reabonner(slug, {
+            identifiant: identifiantExistant.trim(),
+            motDePasse,
+            planId: plan.id,
+            accountId: account!.id,
+            reference,
+          })
+        : publicApi.claim(slug, {
+            planId: plan.id,
+            accountId: account!.id,
+            phone,
+            reference,
+            holderName,
+          }),
     onSuccess: (result) => onClaimed(result.token),
     onError: (err) =>
       onError(err instanceof PublicApiError ? err.message : 'Erreur, réessayez.'),
@@ -433,9 +483,51 @@ function PaymentStep({
           malgré tout le parcours d'achat complet jusqu'à cet écran. */}
       {accounts.length === 0 ? null : (
       <form onSubmit={submit} className="mt-5 space-y-3">
-        <h2 className="font-medium text-slate-900">{t.confirmTitle}</h2>
-        <p className="text-sm text-slate-500">{t.confirmIntro}</p>
+        <h2 className="font-medium text-slate-900">
+          {reabonnement ? t.renewTitle : t.confirmTitle}
+        </h2>
+        <p className="text-sm text-slate-500">
+          {reabonnement ? t.renewIntro : t.confirmIntro}
+        </p>
 
+        {/* Deux formulaires, et un seul chemin de paiement. Celui qui se
+            reabonne ne se nomme pas : il se reconnait, et le prouve. */}
+        {reabonnement ? (
+          <>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-slate-600">{t.renewId}</span>
+              <input
+                value={identifiantExistant}
+                onChange={(e) => setIdentifiantExistant(e.target.value)}
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                required
+                placeholder="Rakoto-Jean"
+                className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 font-mono text-base focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+              />
+              <span className="mt-1 block text-xs text-slate-500">{t.renewIdHint}</span>
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-slate-600">
+                {t.renewPassword}
+              </span>
+              <input
+                value={motDePasse}
+                onChange={(e) => setMotDePasse(e.target.value)}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                required
+                placeholder="6CK4L2M9PQ"
+                className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 font-mono text-base uppercase focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+              />
+              <span className="mt-1 block text-xs text-slate-500">{t.renewPasswordHint}</span>
+            </label>
+          </>
+        ) : (
+        <>
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-slate-600">{t.yourName}</span>
           <input
@@ -468,8 +560,13 @@ function PaymentStep({
           />
         </label>
 
+        </>
+        )}
+
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-slate-600">{t.reference}</span>
+          <span className="mb-1 block text-xs font-medium text-slate-600">
+            {reabonnement ? t.renewNewReference : t.reference}
+          </span>
           <input
             value={reference}
             onChange={(e) => setReference(e.target.value)}
@@ -479,7 +576,13 @@ function PaymentStep({
             placeholder="6CK4L2M9PQ"
             className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 font-mono text-base uppercase focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
           />
-          <span className="mt-1 block text-xs text-slate-500">{t.referenceHint}</span>
+          {/* L'aide du premier achat disait « elle deviendra votre mot de
+              passe » -- faux pour un reabonnement, et ecrit juste sous la
+              ligne qui promet le contraire. Se contredire sur l'ecran ou le
+              client engage son argent est la meilleure facon de le perdre. */}
+          <span className="mt-1 block text-xs text-slate-500">
+            {reabonnement ? t.renewReferenceHint : t.referenceHint}
+          </span>
         </label>
 
         {/* L'avertissement juste au-dessus du bouton, là où le doigt se
@@ -487,15 +590,26 @@ function PaymentStep({
             soit, donc oublié au moment d'envoyer. */}
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
           <div className="text-sm font-medium text-amber-900">⚠ {t.checkTwice}</div>
-          <p className="mt-0.5 text-xs text-amber-900">{t.checkTwiceBody}</p>
+          <p className="mt-0.5 text-xs text-amber-900">
+            {reabonnement ? t.renewCheckTwiceBody : t.checkTwiceBody}
+          </p>
         </div>
 
         <button
           type="submit"
-          disabled={claim.isPending || !account || !identifiantUtilisable(identifiant)}
+          disabled={
+            claim.isPending ||
+            !account ||
+            // Un reabonnement ne fabrique pas d'identifiant : il en reprend
+            // un. Lui appliquer la regle du premier achat interdirait
+            // d'envoyer un nom pourtant valide.
+            (reabonnement
+              ? identifiantExistant.trim().length < 3 || motDePasse.trim().length < 4
+              : !identifiantUtilisable(identifiant))
+          }
           className="w-full rounded-lg bg-sky-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-sky-700 disabled:bg-slate-300"
         >
-          {claim.isPending ? t.submitting : t.submit}
+          {claim.isPending ? t.submitting : reabonnement ? t.renewSubmit : t.submit}
         </button>
       </form>
       )}

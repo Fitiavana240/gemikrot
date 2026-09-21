@@ -19,6 +19,7 @@ describe('PublicService', () => {
   const suffix = Date.now();
   const tenantA = `pub-a-${suffix}`;
   const tenantB = `pub-b-${suffix}`;
+  let planA = '';
   let planB = '';
   let accountA = '';
 
@@ -57,7 +58,7 @@ describe('PublicService', () => {
           status: 'ACTIVE',
         },
       });
-    await makePlan(tenantA, `PLAN-A-${suffix}`);
+    planA = (await makePlan(tenantA, `PLAN-A-${suffix}`)).id;
     planB = (await makePlan(tenantB, `PLAN-B-${suffix}`)).id;
 
     accountA = (
@@ -98,6 +99,151 @@ describe('PublicService', () => {
     await prisma.plan.deleteMany({ where: { tenantId: { in: ids } } });
     await prisma.tenant.deleteMany({ where: { id: { in: ids } } });
     await prisma.$disconnect();
+  });
+
+  describe('reabonnement', () => {
+    /**
+     * Un acces deja vendu, tel que `claim` en produit un : l'identifiant vient
+     * du nom, le mot de passe est la reference du transfert.
+     */
+    const poser = async (code: string, motDePasse: string) => {
+      const client = await prisma.customer.create({
+        data: { tenantId: tenantA, name: code, phone: `034${Date.now() % 1_000_000}${code.length}` },
+      });
+      return prisma.voucher.create({
+        data: {
+          tenantId: tenantA,
+          code,
+          accessPassword: motDePasse,
+          planId: planA,
+          price: 2000,
+          customerId: client.id,
+          target: 'USER_MANAGER',
+          umUsername: code,
+          status: 'ACTIVE',
+        },
+      });
+    };
+
+    it('rattache le paiement a l’acces existant, sans en vendre un second', async () => {
+      // `voucherId` est unique : un ticket ne se vend qu'une fois. Un
+      // reabonnement passe donc par `renewsVoucherId`, sans quoi le second
+      // paiement buterait sur la contrainte.
+      const acces = await poser(`Reab-Un-${suffix}`, 'REFUN');
+
+      const r = await service.reabonner(tenantA, {
+        identifiant: acces.code,
+        motDePasse: 'REFUN',
+        planId: planA,
+        accountId: accountA,
+        reference: `REAB1${suffix}`.slice(0, 20),
+      });
+
+      expect(r.identifiant).toBe(acces.code);
+      const paiement = await prisma.payment.findFirst({
+        where: { renewsVoucherId: acces.id },
+      });
+      expect(paiement).not.toBeNull();
+      // Rien n'est vendu : le champ du ticket delivre reste vide.
+      expect(paiement?.voucherId).toBeNull();
+    });
+
+    it('accepte l’identifiant ecrit autrement', async () => {
+      // L'index unique de Postgres distingue `Herve` de `herve`, pas le
+      // client qui retape son nom sur un telephone.
+      const acces = await poser(`Reab-Casse-${suffix}`, 'REFCASSE');
+
+      const r = await service.reabonner(tenantA, {
+        identifiant: acces.code.toLowerCase(),
+        motDePasse: 'refcasse',
+        planId: planA,
+        accountId: accountA,
+        reference: `REAB2${suffix}`.slice(0, 20),
+      });
+
+      expect(r.identifiant).toBe(acces.code);
+    });
+
+    it('refuse un mot de passe faux, et ne dit pas lequel des deux est faux', async () => {
+      // Deux messages distincts diraient a n'importe qui si tel prenom est
+      // client d'ici : il suffirait d'essayer des prenoms.
+      const acces = await poser(`Reab-Faux-${suffix}`, 'BONNE');
+
+      // Le `catch` est attache des la creation, et non a l'attente : deux
+      // promesses lancees ensemble rejettent avant qu'on les attende, et
+      // vitest signale alors un rejet non gere qui masquerait une vraie
+      // erreur un autre jour.
+      const m1 = await service
+        .reabonner(tenantA, {
+          identifiant: acces.code,
+          motDePasse: 'MAUVAISE',
+          planId: planA,
+          accountId: accountA,
+          reference: `REAB3${suffix}`.slice(0, 20),
+        })
+        .then(() => 'aucun refus', (e) => e.message);
+      const m2 = await service
+        .reabonner(tenantA, {
+          identifiant: `Personne-${suffix}`,
+          motDePasse: 'BONNE',
+          planId: planA,
+          accountId: accountA,
+          reference: `REAB4${suffix}`.slice(0, 20),
+        })
+        .then(() => 'aucun refus', (e) => e.message);
+      expect(m1).toMatch(/Identifiant ou code inconnu/);
+      expect(m1).toBe(m2);
+    });
+
+    it('ne prolonge pas l’acces d’un autre exploitant', async () => {
+      // Le cloisonnement doit tenir sans jeton : c'est la seule barriere ici.
+      const acces = await poser(`Reab-Cloison-${suffix}`, 'REFCLOISON');
+
+      await expect(
+        service.reabonner(tenantB, {
+          identifiant: acces.code,
+          motDePasse: 'REFCLOISON',
+          planId: planB,
+          accountId: accountA,
+          reference: `REAB5${suffix}`.slice(0, 20),
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('refuse un acces bloque', async () => {
+      // Un reabonnement ne doit pas servir a contourner un blocage : le
+      // client paierait pour un acces qui ne se rouvrirait pas.
+      const acces = await poser(`Reab-Bloque-${suffix}`, 'REFBLOQ');
+      await prisma.voucher.update({ where: { id: acces.id }, data: { status: 'DISABLED' } });
+
+      await expect(
+        service.reabonner(tenantA, {
+          identifiant: acces.code,
+          motDePasse: 'REFBLOQ',
+          planId: planA,
+          accountId: accountA,
+          reference: `REAB6${suffix}`.slice(0, 20),
+        }),
+      ).rejects.toThrow(/bloqu/i);
+    });
+
+    it('rejoue la meme declaration sans creer un second paiement', async () => {
+      const acces = await poser(`Reab-Rejeu-${suffix}`, 'REFREJEU');
+      const reference = `REAB7${suffix}`.slice(0, 20);
+      const entree = {
+        identifiant: acces.code,
+        motDePasse: 'REFREJEU',
+        planId: planA,
+        accountId: accountA,
+        reference,
+      };
+
+      const un = await service.reabonner(tenantA, entree);
+      const deux = await service.reabonner(tenantA, entree);
+
+      expect(deux.token).toBe(un.token);
+      expect(await prisma.payment.count({ where: { renewsVoucherId: acces.id } })).toBe(1);
+    });
   });
 
   describe('vitrine', () => {

@@ -220,6 +220,133 @@ export class PublicService {
   }
 
   /**
+   * Le client rachète du temps sur l'accès qu'il a déjà.
+   *
+   * Il garde son identifiant — c'est tout l'intérêt : il n'a pas à retenir un
+   * nouveau nom tous les mois, ni à réapprendre à se connecter. Seule la
+   * référence du transfert change, puisque c'est un nouveau paiement.
+   *
+   * **Son mot de passe ne change pas**, et ce choix est délibéré. La
+   * référence de son premier achat est celle qui est écrite sur le routeur,
+   * et c'est celle qu'il a notée. La remplacer par la nouvelle le mettrait
+   * dehors s'il ressort son ancien SMS — et il n'aurait aucun moyen de
+   * comprendre pourquoi son code « ne marche plus ».
+   *
+   * Cette même référence sert donc de preuve : la saisir, c'est montrer qu'on
+   * est bien le titulaire. Sans elle, n'importe qui pourrait prolonger — ou,
+   * bien pire, se tromper d'un caractère et payer pour le compte d'un autre.
+   */
+  async reabonner(
+    slug: string,
+    input: {
+      identifiant: string;
+      motDePasse: string;
+      planId: string;
+      accountId: string;
+      reference: string;
+    },
+  ): Promise<{ token: string; state: ClaimState; identifiant: string }> {
+    const tenant = await this.requireActiveTenant(slug);
+    const reference = normalizeReference(input.reference);
+    if (!isUsableReference(reference)) {
+      throw new BadRequestException(
+        "Référence invalide — entre 4 et 32 lettres ou chiffres, telle qu'elle figure dans votre SMS",
+      );
+    }
+
+    return this.tenantContext.runAsTenant(tenant.id, async () => {
+      // Insensible à la casse, comme à la création : l'index unique de
+      // Postgres distingue `Herve-Razafy` de `herve-razafy`, pas le client.
+      const acces = await this.prisma.scopedStrict.voucher.findFirst({
+        where: { code: { equals: input.identifiant.trim(), mode: 'insensitive' } },
+        include: { customer: { select: { id: true, phone: true } } },
+      });
+
+      /**
+       * Un seul message pour « identifiant inconnu » et « mot de passe
+       * faux ».
+       *
+       * Deux messages distincts diraient à n'importe qui si tel nom est
+       * client d'ici : il suffirait d'essayer des prénoms. Ce n'est pas un
+       * grand secret, mais il n'y a aucune raison de le distribuer.
+       */
+      const refus = new BadRequestException(
+        "Identifiant ou code inconnu. Vérifiez ce que vous avez saisi — c'est le nom et la référence de votre premier achat. Si c'est votre premier accès, utilisez plutôt « Acheter un accès ».",
+      );
+      if (!acces) throw refus;
+      if (!acces.accessPassword || acces.accessPassword !== normalizeReference(input.motDePasse)) {
+        throw refus;
+      }
+      if (acces.status === 'CANCELLED' || acces.status === 'DISABLED') {
+        throw new BadRequestException(
+          'Cet accès a été bloqué. Contactez le vendeur : un réabonnement ne le rouvrirait pas.',
+        );
+      }
+
+      const plan = await this.prisma.scopedStrict.plan.findFirst({
+        where: { id: input.planId, status: PlanStatus.ACTIVE, kind: PlanKind.TICKET },
+      });
+      if (!plan) throw new NotFoundException('Offre introuvable');
+
+      const account = await this.prisma.scopedStrict.mobileMoneyAccount.findFirst({
+        where: { id: input.accountId, isActive: true },
+      });
+      if (!account) throw new NotFoundException('Moyen de paiement introuvable');
+
+      // Rejouer la même déclaration ne crée pas un second paiement : le
+      // client qui recharge la page retrouve son suivi.
+      const existant = await this.prisma.scopedStrict.payment.findFirst({
+        where: { reference, method: account.provider },
+        include: { claim: true },
+      });
+      if (existant?.claim) {
+        return {
+          token: existant.claim.token,
+          state: this.stateOf(existant.status),
+          identifiant: acces.code,
+        };
+      }
+      if (existant) {
+        throw new BadRequestException(
+          "Cette référence a déjà été utilisée. Contactez le vendeur si vous pensez que c'est une erreur.",
+        );
+      }
+
+      const payment = await this.prisma.scopedStrict.payment.create({
+        data: {
+          tenantId: tenant.id,
+          customerId: acces.customerId!,
+          planId: plan.id,
+          amount: plan.price,
+          currency: tenant.currency,
+          method: account.provider,
+          reference,
+          // `renewsVoucherId`, et non `voucherId` : celui-là est unique, parce
+          // qu'un ticket ne se vend qu'une fois. Un réabonnement ne vend rien.
+          renewsVoucherId: acces.id,
+        },
+      });
+
+      const claim = await this.prisma.scopedStrict.paymentClaim.create({
+        data: {
+          tenantId: tenant.id,
+          paymentId: payment.id,
+          token: randomBytes(24).toString('base64url'),
+          // Le numéro vient de sa fiche : il l'a donné au premier achat, et
+          // le retaper ne serait qu'une occasion de se tromper.
+          phone: acces.customer?.phone ?? '',
+          reference,
+        },
+      });
+
+      this.logger.log(
+        `Réabonnement déclaré : ${plan.name} pour ${acces.code} (${account.provider})`,
+      );
+      return { token: claim.token, state: 'EN_ATTENTE' as const, identifiant: acces.code };
+    });
+  }
+
+  /**
    * Le client déclare avoir payé. Rien ne lui est ouvert à ce stade : un
    * paiement en attente est enregistré, que la lecture des SMS ou un admin
    * viendra confirmer.
