@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
 import { Public } from '../auth/public.decorator.js';
 import { PublicService } from './public.service.js';
 import { RateLimitGuard } from './rate-limit.guard.js';
@@ -17,6 +18,30 @@ import { normalizePhone, normalizeReference } from './payment-normalization.js';
 @Controller('public')
 export class PublicController {
   constructor(private readonly publicService: PublicService) {}
+
+  /**
+   * A qui appartient l'adresse par laquelle on est arrive ?
+   *
+   * Deux segments, et non un : `:slug` en consomme un seul, donc aucune
+   * collision possible avec l'exploitant qui s'appellerait << hote >>.
+   *
+   * `?hote=` existe pour se tester sans DNS : la reponse ne contient qu'un
+   * slug, qui est deja dans l'adresse publique imprimee sur les tickets. Rien
+   * n'est divulgue ici que le QR d'un ticket ne dise deja.
+   */
+  @Get('resolution/hote')
+  @UseGuards(
+    new RateLimitGuard([
+      { key: (req) => `hote:${req.ip}`, limit: 60, windowMs: 60_000, message: 'Trop de requêtes.' },
+    ]),
+  )
+  async resoudreHote(@Req() req: Request, @Query('hote') hote?: string) {
+    // `req.hostname` derriere un proxy ne vaut que si `trust proxy` est pose ;
+    // l'en-tete transmise par le proxy est donc lue en premier, et elle peut
+    // contenir une liste -- le premier element est le client.
+    const transmis = String(req.headers['x-forwarded-host'] ?? '').split(',')[0];
+    return (await this.publicService.slugParHote(hote || transmis || req.hostname)) ?? { slug: null };
+  }
 
   @Get(':slug')
   @UseGuards(

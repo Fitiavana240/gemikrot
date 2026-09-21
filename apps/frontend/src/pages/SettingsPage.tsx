@@ -156,7 +156,20 @@ export function SettingsPage() {
               ))}
             </Select>
           </FormField>
-          <FormField label="Domaines (séparés par des virgules)">
+          {/* Ils servaient deja au QR des tickets, mais rien ne s'en servait
+              pour repondre : un client qui tapait l'adresse tombait sur
+              l'ecran de connexion de la console. */}
+          <FormField
+            label="Domaines (séparés par des virgules)"
+            aide={
+              <>
+                Vos clients qui tapent l&apos;une de ces adresses arrivent{' '}
+                <strong>directement sur votre page de paiement</strong>, sans avoir à
+                connaître de lien. Ces domaines s&apos;impriment aussi dans le QR de vos
+                tickets. Il faut qu&apos;ils pointent vers ce serveur.
+              </>
+            }
+          >
             <Input
               value={(form.domains ?? []).join(', ')}
               onChange={(e) =>

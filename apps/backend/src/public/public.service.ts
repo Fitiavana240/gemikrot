@@ -11,6 +11,32 @@ import {
   normalizeReference,
 } from './payment-normalization.js';
 
+/**
+ * L'hote tel qu'on peut le comparer a un domaine enregistre.
+ *
+ * Le navigateur envoie parfois un port (`wifitati.net:8080`), parfois une
+ * majuscule, et le proxy peut ajouter des espaces. Un domaine saisi a la main
+ * dans les reglages n'aura rien de tout cela : sans normalisation, les deux ne
+ * se rencontrent jamais et la resolution echoue en silence.
+ *
+ * Rend une chaine vide pour ce qui ne peut pas etre un domaine -- une adresse
+ * IP, `localhost`, ou n'importe quoi de vide. Non par prudence de principe :
+ * la console de developpement repond sur `localhost`, et la laisser resoudre
+ * vers une vitrine rendrait l'ecran de connexion inatteignable.
+ */
+export function normaliserHote(hote: string | undefined | null): string {
+  const brut = (hote ?? '').trim().toLowerCase();
+  // Le port d'abord : `[::1]:5173` doit perdre son port avant tout test.
+  const sansPort = brut.replace(/:\d+$/, '');
+  if (!sansPort || sansPort === 'localhost' || sansPort.endsWith('.localhost')) return '';
+  // Une adresse IP n'est pas un domaine : le portail captif sert la console
+  // par son adresse, et elle doit rester la console.
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(sansPort)) return '';
+  if (sansPort.startsWith('[') || sansPort.includes(':')) return '';
+  if (!sansPort.includes('.')) return '';
+  return sansPort;
+}
+
 export interface PublicTenantView {
   wifiName: string;
   logoUrl: string | null;
@@ -72,6 +98,37 @@ export class PublicService {
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
   ) {}
+
+  /**
+   * L'exploitant à qui appartient cette adresse.
+   *
+   * Les domaines étaient enregistrés — ils s'impriment même sur le QR des
+   * tickets — mais rien ne s'en servait pour répondre. Un client qui tapait
+   * l'adresse de son fournisseur tombait sur l'écran de connexion de la
+   * console : une page d'administration, dans une langue qui n'est pas la
+   * sienne, sans aucun rapport avec ce qu'il cherchait.
+   *
+   * Rendre le slug plutôt que la vitrine elle-même : l'appelant redirige, et
+   * l'adresse qui s'affiche reste celle qui marche partout — celle qu'on peut
+   * recopier, mettre en favori, ou coller dans le Walled Garden.
+   */
+  async slugParHote(hote: string): Promise<{ slug: string } | null> {
+    const normalisé = normaliserHote(hote);
+    if (!normalisé) return null;
+
+    // `www.` et le domaine nu désignent le même site pour qui le tape. En
+    // enregistrer un seul et se voir refuser l'autre serait incompréhensible.
+    const candidats = normalisé.startsWith('www.')
+      ? [normalisé, normalisé.slice(4)]
+      : [normalisé, `www.${normalisé}`];
+
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { status: TenantStatus.ACTIVE, domains: { hasSome: candidats } },
+      select: { slug: true },
+    });
+
+    return tenant ? { slug: tenant.slug } : null;
+  }
 
   /**
    * Vitrine : la marque, les offres à la vente, et où payer.

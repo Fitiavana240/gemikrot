@@ -80,6 +80,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const publicApi = {
+  /**
+   * L'exploitant a qui appartient l'adresse par laquelle on est arrive.
+   *
+   * Rend `{ slug: null }` quand l'adresse n'est celle de personne -- le cas de
+   * la console, et le cas le plus frequent.
+   */
+  resoudreHote: () => request<{ slug: string | null }>('/resolution/hote'),
   tenant: (slug: string) => request<PublicTenant>(`/${slug}`),
   claim: (
     slug: string,
