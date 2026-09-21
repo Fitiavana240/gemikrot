@@ -80,7 +80,7 @@ export function PlansPage() {
    * et c'est le routeur qui sert les clients.
    */
   const syncMutation = useMutation({
-    mutationFn: plansApi.syncUserManager,
+    mutationFn: (planId: string) => plansApi.syncUserManager(planId, currentId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['plans'] }),
   });
 

@@ -28,8 +28,19 @@ export const plansApi = {
   update: (id: string, input: Partial<CreatePlanInput>) =>
     api.patch<Plan>(`/plans/${id}`, input),
   /** Repousser l'offre vers User Manager quand le routeur a divergé. */
-  syncUserManager: (id: string) =>
-    api.post<{ profileName: string; actions: string[] }>(`/plans/${id}/sync-user-manager`),
+  /**
+   * Repousser l'offre vers User Manager **sur le routeur indiqué**.
+   *
+   * `routerId` n'était pas transmis, et le serveur retombait alors sur le
+   * routeur par défaut. Avec plusieurs routeurs, l'écran comparait celui
+   * qu'on avait sélectionné et le bouton écrivait sur un autre : l'écart
+   * restait affiché, on repoussait, il restait encore. Invisible tant qu'il
+   * n'y a qu'un routeur — c'est bien pour cela que ça a tenu si longtemps.
+   */
+  syncUserManager: (id: string, routerId?: string) =>
+    api.post<{ profileName: string; actions: string[] }>(
+      `/plans/${id}/sync-user-manager${routerId ? `?routerId=${routerId}` : ''}`,
+    ),
   create: (input: CreatePlanInput) => api.post<Plan>('/plans', input),
   archive: (id: string) => api.delete<Plan>(`/plans/${id}`),
   /**

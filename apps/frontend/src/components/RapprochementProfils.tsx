@@ -44,7 +44,7 @@ export function RapprochementProfils() {
    * porte.
    */
   const pousser = useMutation({
-    mutationFn: (planId: string) => plansApi.syncUserManager(planId),
+    mutationFn: (planId: string) => plansApi.syncUserManager(planId, currentId),
     onSuccess: () => {
       setErreur(null);
       queryClient.invalidateQueries({ queryKey: ['plans'] });
