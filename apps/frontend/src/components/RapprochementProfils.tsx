@@ -34,6 +34,26 @@ export function RapprochementProfils() {
     retry: false,
   });
 
+  /**
+   * Pousse le profil de l'offre sur le routeur.
+   *
+   * C'est ce geste qui rend les deux listes identiques. Il **écrit sur le
+   * routeur** — il y crée un profil User Manager — d'où le bouton nommé et
+   * non un rattrapage automatique : pousser tout seul ce que l'exploitant
+   * n'a pas relu reviendrait à décider à sa place de ce que son routeur
+   * porte.
+   */
+  const pousser = useMutation({
+    mutationFn: (planId: string) => plansApi.syncUserManager(planId),
+    onSuccess: () => {
+      setErreur(null);
+      queryClient.invalidateQueries({ queryKey: ['plans'] });
+      queryClient.invalidateQueries({ queryKey: ['rapprochement-profils'] });
+      queryClient.invalidateQueries({ queryKey: ['um-profiles'] });
+    },
+    onError: (e) => setErreur(e instanceof ApiError ? e.message : 'Erreur inconnue'),
+  });
+
   const créer = useMutation({
     mutationFn: (profil: string) => plansApi.creerDepuisProfil(profil, currentId),
     onSuccess: () => {
@@ -49,25 +69,64 @@ export function RapprochementProfils() {
   if (requête.isError) return null;
 
   const d = requête.data;
-  const casse = (d?.offres ?? []).filter(
-    (o) => o.auPublic && !o.profilHotspotPresent && !o.profilUmPresent,
-  );
+  /**
+   * Les offres vendues au public que le routeur ne porte pas encore.
+   *
+   * La page de paiement les propose, le routeur n'a pas leur profil. Ce
+   * n'est pas bloquant — il sera créé à la première vente en ligne — mais
+   * c'est ce qui fait diverger les deux listes, et c'est ce qu'on vient
+   * corriger ici.
+   */
+  const aPousser = (d?.offres ?? []).filter((o) => o.auPublic && !o.profilUmPresent);
   const sansOffre = d?.profilsUmSansOffre ?? [];
 
-  if (!d || (casse.length === 0 && sansOffre.length === 0)) return null;
+  if (!d || (aPousser.length === 0 && sansOffre.length === 0)) return null;
 
   return (
     <Card title="Le routeur et les offres ne disent pas la même chose">
+      {/* La question que pose tout exploitant qui met les deux écrans côte à
+          côte. Y répondre ici évite de la reposer à chaque fois. */}
+      <p className="mb-3 max-w-3xl text-xs text-slate-500">
+        Les deux listes <strong>ne peuvent pas coïncider entièrement</strong>, et ce n&apos;est
+        pas un défaut : la page de paiement ne montre que les offres à ticket actives, un
+        abonnement se vendant au comptoir. Ce qui suit est ce qui diverge{' '}
+        <strong>sans raison</strong>.
+      </p>
       {erreur && <p className="mb-2 text-sm text-red-700">{erreur}</p>}
 
-      {casse.length > 0 && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
-          <strong>
-            {casse.length} offre(s) vendue(s) au public n&apos;ont aucun profil sur le routeur.
-          </strong>{' '}
-          Le profil manquant sera créé à la première vente en ligne — mais une génération de
-          lot au comptoir, elle, échouera. Les noms :{' '}
-          <span className="font-mono text-xs">{casse.map((o) => o.nom).join(', ')}</span>.
+      {aPousser.length > 0 && (
+        <div className="mb-4">
+          <p className="mb-2 max-w-3xl text-sm text-slate-600">
+            <strong>
+              {aPousser.length} offre(s) sont vendues sur la page de paiement sans que le
+              routeur porte leur profil.
+            </strong>{' '}
+            C&apos;est ce qui fait diverger les deux listes. Ce n&apos;est pas bloquant — le
+            profil sera créé à la première vente en ligne — mais une génération de lot au
+            comptoir, elle, échouerait.
+          </p>
+          <Table head={['Offre', 'Profil attendu', 'Prix', '']} colonnes={false}>
+            {aPousser.map((o) => (
+              <tr key={o.id}>
+                <td className="px-3 py-2 font-medium">{o.nom}</td>
+                <td className="px-3 py-2 font-mono text-xs text-slate-500">
+                  {o.profilUm ?? o.profilHotspot}
+                </td>
+                <td className="px-3 py-2 tabular-nums">{format(Number(o.prix))}</td>
+                <td className="px-3 py-2 text-right">
+                  {canWrite && (
+                    <Button
+                      variant="secondary"
+                      disabled={pousser.isPending}
+                      onClick={() => pousser.mutate(o.id)}
+                    >
+                      {pousser.isPending ? 'Envoi…' : 'Pousser sur le routeur'}
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </Table>
         </div>
       )}
 
