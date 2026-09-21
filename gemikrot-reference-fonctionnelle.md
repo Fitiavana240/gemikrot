@@ -1,7 +1,7 @@
 # GEMIKROT — Document de référence fonctionnel du SaaS
 # Gestion de réseaux Wi-Fi MikroTik · Tickets, abonnements et paiement mobile — Madagascar
 
-**Date de rédaction :** 2026-09-19 · **Dernière relecture de la colonne « Implémenté » :** 2026-09-21 · **Statut :** v0.3 — socle multi-exploitants, tickets sur User Manager, page de paiement publique en validation manuelle, console multi-routeurs, tolérance aux pannes, statistiques et abonnement plateforme livrés. Reconnaissance automatique des SMS **non commencée** — c'est elle qui sépare le produit d'un carnet électronique. PPPoE non couvert. Voir §16 Journal.
+**Date de rédaction :** 2026-09-19 · **Dernière relecture de la colonne « Implémenté » :** 2026-09-22 · **Statut :** v0.3 — socle multi-exploitants, tickets sur User Manager, page de paiement publique en validation manuelle, console multi-routeurs, tolérance aux pannes, statistiques et abonnement plateforme livrés. Reconnaissance automatique des SMS **non commencée** — c'est elle qui sépare le produit d'un carnet électronique. PPPoE non couvert. Voir §16 Journal.
 **Objet :** remplacer Winbox et le carnet de tickets par une console web multi-exploitants qui pilote **plusieurs routeurs MikroTik à distance**, vend des accès Wi-Fi (tickets et abonnements), encaisse par Mobile Money et coupe réellement les accès expirés.
 
 > **Impact :** ⭐ Utile · ⭐⭐ Important · ⭐⭐⭐ Critique
@@ -158,6 +158,9 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | SOC-6 | **Audit de toutes les opérations** (qui, quand, quoi, depuis quelle IP) : connexions, paiements, tickets, écritures routeur. Consultable depuis la console, filtrable, réservé aux rôles d'administration | ⭐⭐⭐ | 🟢 | ✅ |
 | SOC-7 | **Devise par exploitant**, formatage `Intl.NumberFormat`, devise figée sur chaque paiement pour que l'historique reste lisible après changement | ⭐⭐ | 🟢 | ✅ |
 | SOC-8 | **i18n de la console** FR (+ MG/EN). La console est en français en dur ; seule la page client est bilingue | ⭐ | 🟡 | ⬜ |
+| SOC-10 | **Tous les réglages au même endroit** : marque, apparence, modèle de ticket, portail captif, courriel, compte | ⭐⭐ | 🟢 | ✅ livré — le modèle de ticket et la page du portail avaient chacun leur entrée ailleurs. On ne cherche pas un réglage dans le menu où il a été rangé, on le cherche dans « Paramètres » |
+| SOC-11 | **Mode clair / sombre**, ou celui de l'appareil | ⭐ | 🟡 | ✅ livré par les variables de thème de Tailwind v4 : **aucune page retouchée** là où la passe manuelle aurait demandé 838 modifications sur 62 fichiers. La page de paiement du client reste claire — elle se lit au soleil — et l'impression aussi |
+| SOC-12 | **Boîte de notification** dans la barre : ce qui demande une décision, rassemblé | ⭐⭐ | 🟢 | ✅ livré — **rien n'est stocké**, tout se recalcule à la lecture : une table vieillirait et annoncerait « paiement en attente » sur un paiement validé la veille. Et **aucune lecture du routeur** : une cloche se consulte souvent |
 | SOC-9 | **Multi-routeurs réel** : sélecteur de routeur dans la console et propagation partout, via un contexte React et un choix mémorisé. Le repli sur « le plus ancien routeur enregistré » a disparu de l'interface | ⭐⭐⭐ | 🟡 | ✅ |
 
 ---
@@ -201,7 +204,7 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | OFF-5 | **Tous les comptes du routeur visibles**, y compris ceux créés hors application, étiquetés comme tels et jamais rattachés d'office à un client | ⭐⭐ | 🟢 | ✅ |
 | OFF-6 | **Nombre d'appareils simultanés** par offre (`shared-users`) | ⭐⭐ | 🟢 | ✅ |
 | OFF-7 | **Grilles tarifaires datées** : une hausse ne doit pas réécrire le prix des tickets déjà vendus. Le prix est figé sur le ticket, mais l'historique des grilles n'existe pas | ⭐ | 🟡 | 🟡 |
-| OFF-8 | **Offres par routeur ou par site** : aujourd'hui une offre est réconciliée sur le routeur par défaut uniquement | ⭐⭐ | 🟡 | ⬜ |
+| OFF-8 | **Offres par routeur ou par site** | ⭐⭐ | 🟡 | 🟡 le défaut concret est corrigé : « Synchroniser » ne transmettait pas le routeur sélectionné et écrivait sur le routeur par défaut — invisible à un routeur, faux dès le second. Choisir *quels* routeurs portent une offre demande un modèle de données qu'il serait vain d'écrire sans un second site pour l'éprouver |
 
 ---
 
@@ -276,6 +279,7 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | PUB-6 | **Limitation de débit** par (exploitant, téléphone) et (exploitant, référence) en primaire, l'IP en filet — derrière le portail captif tous les clients partagent l'adresse du routeur | ⭐⭐⭐ | 🟡 | ✅ |
 | PUB-7 | **Page captive branchée** sur la page de paiement : lien « j'ai payé par Mobile Money », marque de l'exploitant à la place du nom en dur, et récupération du code sans quitter le portail | ⭐⭐⭐ | 🟡 | 🟡 page écrite, aperçu et publication depuis la console (`hotspot/login.html`) — **non publiée sur le routeur réel** : elle remplace celle que voient les clients, la décision revient à l'exploitant |
 | PUB-8 | **Lien WhatsApp d'assistance** sur la page client — le canal naturel ici quand un paiement n'aboutit pas | ⭐⭐ | 🟢 | ✅ livré — le lien n'apparaît que si un numéro est enregistré : une porte d'assistance qui ne mène nulle part est pire que pas d'assistance annoncée |
+| PUB-10 | **Racheter du temps sans changer d'identifiant** : le client retape son nom et son numéro, son accès est prolongé et son mot de passe devient la nouvelle référence | ⭐⭐⭐ | 🟡 | ✅ livré — **le même formulaire que le premier achat**, pour que personne n'ait à deviner dans quelle catégorie il tombe. Le numéro sert de preuve : sans lui, taper le nom de son voisin et payer suffirait à le mettre dehors |
 | PUB-9 | **Vitrine de l'exploitant** (offres publiques, présentation) sur son domaine ou sous-domaine | ⭐ | 🟡 | 🟡 la résolution par domaine est livrée : un visiteur anonyme arrivant par le domaine d'un exploitant va sur sa page de paiement, et non sur l'écran de connexion de la console. Reste ce qui n'est pas dans ce dépôt — faire pointer le domaine et son certificat (§ déploiement) |
 
 ---
@@ -288,6 +292,9 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | COM-2 | **Envoi de SMS** : code d'accès, avertissement d'échéance, confirmation. File persistée avec reprise, jamais d'échec silencieux | ⭐⭐⭐ | 🟡 | ⬜ |
 | COM-3 | **Modèles FR/MG** par type de message | ⭐⭐ | 🟢 | ⬜ |
 | COM-4 | **Quota et coût** par exploitant, avec compteur visible | ⭐ | 🟢 | ⬜ |
+| COM-5 | **Envoi de courriel** : serveur SMTP par exploitant, mot de passe chiffré, journal de chaque tentative, essai depuis la console | ⭐⭐ | 🟡 | ✅ livré — **rien ne part tant que l'exploitant n'a pas coché** : la configuration ne suffit pas, c'est un interrupteur. Chaque tentative laisse une ligne, réussie ou non, sans quoi un envoi raté laisse croire qu'on a prévenu. Un courriel en échec n'interrompt jamais ce qui l'a déclenché |
+| COM-6 | **Avertir les administrateurs par courriel** qu'un client a déclaré un paiement et attend son accès | ⭐⭐⭐ | 🟢 | ✅ livré — la panne la plus chère du produit : deux clients de ce parc ont payé et attendu trois jours parce que personne n'avait ouvert le bon écran. Seuls les comptes qui peuvent vérifier sont prévenus |
+| COM-7 | **Avertir le client par courriel** (code d'accès, échéance, reçu). Suppose de lui demander son adresse sur la page de paiement — les 16 fiches de ce parc n'en ont aucune | ⭐⭐ | 🟢 | ⬜ |
 
 ---
 
@@ -310,7 +317,7 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | SAS-1 | **Liste des exploitants**, activation, suspension | ⭐⭐⭐ | 🟢 | ✅ |
 | SAS-2 | **Abonnement plateforme** : offre, nombre de routeurs autorisé, échéance, blocage à l'expiration | ⭐⭐⭐ | 🟡 | ✅ livré — tolérance de 15 jours, puis **seule la vente s'arrête** : la consultation reste ouverte, et les clients finaux gardent leur accès (le routeur applique seul les validités). On ferme la console, pas le Wi-Fi |
 | SAS-3 | **Accompagnement à la mise en route** : étapes visibles (routeur connecté, offres créées, puce enregistrée, première vente) | ⭐⭐ | 🟡 | ✅ livré — chaque étape est **constatée**, jamais déclarée, et la carte disparaît d'elle-même une fois les quatre franchies |
-| SAS-4 | **Supervision de la plateforme** : exploitants actifs, routeurs joignables, volumétrie | ⭐⭐ | 🟡 | ⬜ |
+| SAS-4 | **Supervision de la plateforme** : exploitants actifs, routeurs joignables, volumétrie | ⭐⭐ | 🟡 | ✅ livré — trois alertes en clair (routeurs muets, abonnement échu, exploitant actif sans routeur) au-dessus du tableau. **Aucune lecture du routeur** : interroger vingt routeurs ferait attendre la page sur le plus lent |
 | SAS-5 | **Prise en main d'un compte** (impersonation) pour l'assistance, tracée | ⭐ | 🟡 | ✅ livré — bandeau permanent pendant la prise en main, et chaque ligne du journal porte la marque : le cloisonnement ignore qui agit, le journal non |
 
 ---
@@ -372,7 +379,7 @@ Le client paie et se connecte seul, sans intervention. C'est le différenciateur
 
 ### P2 — La plateforme comme produit
 
-> SAS-4 · RTR-13 · SECU-8/10/13 · TIC-11 — *SAS-2/3, SOC-9, STAT-1/2/5 et TIC-9 livrés*
+> RTR-13 · SECU-8/10/13 · TIC-11 — *SAS-2/3/4, SOC-9, STAT-1/2/5 et TIC-9 livrés*
 
 Facturer les exploitants, piloter plusieurs routeurs pour de bon, atteindre un routeur sans IP publique.
 
@@ -1894,6 +1901,171 @@ elle n'a **pas** été publiée sur le routeur réel — elle remplacerait celle
 clients, et c'est une décision d'exploitant. **PUB-9** : la résolution par domaine est faite,
 le DNS et le certificat ne sont pas dans ce dépôt. **ABO-4** : il faut une passerelle SMS
 (COM-1) qui n'existe pas.
+
+### 2026-09-21 — Le projet ne s'installait plus depuis une copie propre
+
+Trouvé en voulant ajouter une dépendance, et c'est le plus grave du lot :
+`npm install` échouait, et `npm ci` aussi. Pas à cause du paquet ajouté — à
+cause du dépôt.
+
+`packages/mikrotik-service` est en **1.0.0** ; le backend exigeait **^0.1.0**.
+Les deux ne s'accordent pas, npm renonce à lier l'espace de travail et va
+chercher `@wifitati/mikrotik-service` sur le registre public, où il n'existe
+pas. `npm error 404`.
+
+Cette machine marchait parce que ses liens dataient d'avant la dérive. **Aucune
+autre ne l'aurait fait** : ni une intégration continue, ni un serveur, ni un
+poste neuf. Le verrou retenait encore `0.1.0`, donc il était déjà désaccordé du
+source. C'était le blocage de mise en production du dépôt, et il ne se voit que
+le jour où l'on installe ailleurs — c'est-à-dire trop tard.
+
+### 2026-09-21 — Le client qui revient retape son nom, rien de plus
+
+Un réabonnement avait d'abord eu son propre bouton et son propre formulaire.
+Supprimé le jour même : il obligeait le client à savoir d'avance dans quelle
+catégorie il tombe, et celui qui se trompe de bouton se fait refuser sans
+comprendre.
+
+Un seul formulaire désormais. Nom déjà pris : ce n'est plus un refus, c'est lui
+qui revient. Son accès est prolongé, son identifiant ne bouge pas, et son mot
+de passe devient la nouvelle référence — celle qu'il vient de taper, plutôt
+qu'une ancienne qui dort dans un SMS d'il y a un mois.
+
+**Le numéro de téléphone sert de preuve, et il n'y en a pas d'autre.** Sans
+lui, il suffirait de taper le nom de son voisin et de payer 500 Ar pour le
+mettre dehors : son mot de passe deviendrait une référence qu'il ne connaît
+pas. Même nom mais autre numéro : l'ancien refus s'applique, inchangé.
+
+Côté base, `renewsVoucherId` et non `voucherId` — celui-là est unique, parce
+qu'un ticket ne se vend qu'une fois. Racheter du temps n'est pas une seconde
+vente, et cela peut arriver tous les mois.
+
+### 2026-09-21 — « Synchroniser » écrivait sur le mauvais routeur
+
+`plansApi.syncUserManager` ne transmettait pas `routerId`, et le serveur
+retombait sur le routeur par défaut. Avec plusieurs routeurs, l'écran de
+rapprochement comparait celui qu'on avait sélectionné et le bouton écrivait sur
+un autre : l'écart restait affiché, on repoussait, il restait encore — et on
+cherchait du côté du matériel, qui n'y était pour rien.
+
+Invisible sur un parc à un routeur, où les deux sont le même. C'est pour cela
+que le défaut a tenu si longtemps, et c'est aussi pourquoi il ne peut pas être
+vérifié ici.
+
+### 2026-09-22 — Une cloche, et l'heure qui ne s'échappe plus
+
+**L'heure du routeur était en pied de page**, donc sous l'écran dès qu'on
+faisait défiler une liste — c'est-à-dire presque toujours. Or c'est elle qui
+décide des expirations : une console dont la pendule avance de dix minutes
+annonce des coupures qui n'ont pas eu lieu, et on ne peut pas s'en apercevoir
+si le chiffre n'est pas sous les yeux au moment où on lit l'échéance. Elle est
+montée dans la barre fixe.
+
+**La cloche rassemble ce qui demande une décision.** L'information existait —
+tableau de bord, Paiements, Abonnements — mais il fallait ouvrir le bon écran.
+Relevé au premier essai : *2 paiements à vérifier, le plus ancien depuis 3
+jours*. Deux clients avaient payé et n'avaient rien reçu.
+
+Deux choix décident si elle sera encore lue dans six mois. **Rien n'est
+stocké** : une table demanderait une tâche de fond — il n'y en a pas — et
+surtout elle vieillirait. **Aucune lecture du routeur** : une cloche se
+consulte souvent, et certaines vérifications coûtent cinq appels.
+
+### 2026-09-22 — Tous les réglages au même endroit, et le thème par les variables
+
+La marque était dans Paramètres, le modèle de ticket dans sa propre entrée du
+menu, la page du portail au fond des onglets HotSpot, le mot de passe au bas
+d'une longue page. On ne cherche pas un réglage dans le menu où il a été rangé.
+
+**Le mode sombre sans toucher une seule page.** Tailwind v4 compile `bg-white`
+en `var(--color-white)` : redéfinir ces variables sous `.sombre` retourne toute
+l'application. La passe manuelle aurait demandé **838 retouches sur 62
+fichiers**, et il en serait resté.
+
+Trois décisions comptent plus que le mécanisme. **La page de paiement du client
+reste claire**, quel que soit le réglage de son téléphone : elle se lit au
+soleil, par quelqu'un qui n'a rien choisi et qui va engager son argent.
+**L'impression reste claire** — trente tickets videraient une cartouche pour
+rien. Et **le choix vit dans le navigateur** : la console du comptoir se lit en
+plein jour, celle du bureau le soir.
+
+*Un lien mort évité de justesse* en retirant l'onglet HotSpot : le bandeau qui
+annonce que les clients ne peuvent pas acheter pointait encore dessus. La seule
+issue offerte à une alerte urgente aurait mené nulle part.
+
+### 2026-09-22 — Le modèle de ticket repris de la planche réelle
+
+L'exploitant a partagé la planche qu'il imprime depuis des mois. Elle n'a pas
+été réinventée : bande de prix verticale à gauche, identifiants en grand, QR à
+droite, coordonnées en pied. Un vendeur qui trie des tickets les prend par la
+tranche — c'est la bande colorée qui lui dit le prix sans qu'il lise.
+
+Tout ce qui distingue un exploitant d'un autre est un marqueur. Cinq variables
+manquaient, dont `password` : un accès acheté en ligne a un nom **et** une
+référence distincts, et n'imprimer que le code laissait le client devant un
+champ qu'il ne pouvait pas remplir.
+
+*Deux défauts trouvés en regardant l'aperçu.* Sans logo configuré,
+`<img src="">` fait afficher l'icône d'image cassée — trente petits carrés
+barrés par planche, découpés et donnés aux clients. Et le moteur refusait le
+modèle avec « du contenu non autorisé » sans rien nommer : il compare le modèle
+à sa version nettoyée, et `sanitize-html` décode `&middot;` en caractère, donc
+la comparaison échoue toujours.
+
+### 2026-09-22 — L'envoi de courriel, et la trace de ce qui n'est pas parti
+
+Un SMTP par exploitant : le message part de son adresse, à sa marque. Un compte
+unique de plateforme ferait écrire à ses clients depuis une adresse qui n'est
+pas la sienne, et une réputation abîmée par un seul les toucherait tous.
+
+**Rien ne part tant que l'exploitant n'a pas coché.** `smtpActif` est faux par
+défaut et séparé du reste du formulaire : enregistrer une configuration ne doit
+pas suffire à déclencher des messages. Éprouvé — un essai demandé sans
+activation répond, et n'envoie rien.
+
+**Chaque tentative laisse une ligne**, réussie ou non. Le refus ci-dessus
+figure au journal avec sa raison, sinon on chercherait longtemps pourquoi rien
+n'arrive sans soupçonner la case décochée. Et **un courriel raté n'emporte
+jamais ce qui l'a déclenché** : un paiement vérifié qu'on annulerait parce que
+la confirmation n'est pas partie serait absurde.
+
+### 2026-09-22 — SAS-4, et le « dernier signe de vie » qui datait de la veille
+
+Le SUPER_ADMIN avait la liste de ses exploitants, et rien d'autre. Pour savoir
+si l'un d'eux était en panne il fallait se mettre à sa place, un par un — donc
+savoir d'avance lequel regarder, ce qui est justement l'information qui
+manquait.
+
+**`lastSeenAt` n'était écrit que par le bouton « Tester la connexion ».** Il
+signifiait donc « dernier test manuel », pas « dernier signe de vie », et tout
+ce qui s'y fiait mentait. Relevé : le routeur répondait depuis des heures — son
+horloge s'affichait en tête de la console — et la colonne datait de la veille à
+13:53. Le disjoncteur tenait pourtant la vraie date en mémoire ; elle est
+maintenant inscrite, au plus une fois par minute et par routeur.
+
+*Défaut dans le code de supervision lui-même, révélé par les vraies données* :
+le filtre portait sur `status === 'JOIGNABLE'` — le vocabulaire du disjoncteur,
+en mémoire — alors que la colonne porte celui de la base, `online`. Zéro
+routeur joignable sur un parc qui répondait. Le test encodait la même erreur et
+passait donc en la confirmant. **Deux vocabulaires pour une seule idée finissent
+toujours par se croiser** : la date tranche désormais seule.
+
+### 2026-09-22 — État au terme de cette série
+
+Dix-huit livraisons depuis la relecture précédente. Passent à ✅ : SAS-4,
+PUB-10 (racheter du temps), COM-5 et COM-6 (courriel), SOC-10, SOC-11 et
+SOC-12 (réglages, thème, notifications). OFF-8 passe à 🟡 — son défaut concret
+est corrigé, le reste demande un second site pour être éprouvé.
+
+**Ce qui n'a pas bougé, et pourquoi.** PUB-7 attend que l'exploitant publie la
+page captive : elle remplace celle que voient ses clients. ABO-4 attend COM-1.
+COM-7 — prévenir le client par courriel — attend une décision : il faudrait lui
+demander son adresse sur la page de paiement, et les seize fiches de ce parc
+n'en portent aucune.
+
+**Rien n'a été écrit sur le routeur de tout ce lot.** Les trois gestes qui le
+feraient — publier la page, ouvrir le Walled Garden, réserver l'adresse de la
+console — restent à l'exploitant, et la console les propose à un clic.
 
 ---
 
