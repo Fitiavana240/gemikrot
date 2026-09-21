@@ -33,6 +33,7 @@ export function PageConnexionTab() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<ReglagesPageConnexion | null>(null);
   const [confirmer, setConfirmer] = useState(false);
+  const [autorisation, setAutorisation] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [compteRendu, setCompteRendu] = useState<string | null>(null);
 
@@ -111,6 +112,48 @@ export function PageConnexionTab() {
       setErreur(e instanceof ApiError ? e.message : 'Le téléchargement a échoué.'),
   });
 
+  /**
+   * Ouvre l'adresse de paiement dans le Walled Garden.
+   *
+   * Sans elle, un client non connecte qui presse le bouton d'achat ne voit
+   * pas une page vide : RouterOS **rejette** sa connexion avec un TCP reset --
+   * la chaine `hs-unauth` est ainsi faite -- et le navigateur affiche
+   * << ERR_CONNECTION_REFUSED >>. Rien dans ce message ne mene au Walled
+   * Garden ; on cherche du cote du serveur, qui n'y est pour rien.
+   *
+   * C'est une **ecriture sur le routeur**, et elle ouvre un passage vers une
+   * machine pour tous les clients non authentifies : elle se demande, elle ne
+   * se fait pas toute seule.
+   */
+  const autoriser = useMutation({
+    mutationFn: () => {
+      const u = new URL(
+        (form?.portailUrl ?? '').includes('://')
+          ? (form?.portailUrl ?? '')
+          : `http://${form?.portailUrl ?? ''}`,
+      );
+      return hotspotApi.addIp(
+        {
+          dstAddress: u.hostname,
+          // Le port est repris de l'adresse : ouvrir tous les ports d'une
+          // machine pour servir une page serait ouvrir bien plus large que
+          // necessaire.
+          dstPort: u.port || undefined,
+          comment: 'Page de paiement GeMikrot',
+        },
+        currentId,
+      );
+    },
+    onSuccess: () => {
+      setErreur(null);
+      setAutorisation(false);
+      setCompteRendu('Adresse autorisée dans le Walled Garden. Le bouton d’achat peut désormais aboutir.');
+      queryClient.invalidateQueries({ queryKey: ['page-connexion-etat'] });
+      queryClient.invalidateQueries({ queryKey: ['walled-garden'] });
+    },
+    onError: (e) => setErreur(e instanceof ApiError ? e.message : 'Le routeur a refusé.'),
+  });
+
   const publier = useMutation({
     mutationFn: () => hotspotApi.publierPageConnexion(currentId),
     onSuccess: (r) => {
@@ -156,12 +199,21 @@ export function PageConnexionTab() {
         </p>
       ))}
       {d?.avertissements.map((m) => (
-        <p
+        <div
           key={m}
           className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
         >
           {m}
-        </p>
+          {/* Un avertissement qu'on ne peut pas lever depuis l'ecran ou il
+              s'affiche envoie chercher ailleurs. Celui-la se leve ici. */}
+          {canWrite && m.includes('Walled Garden') && !m.includes('logo') && (
+            <div className="mt-2">
+              <Button variant="secondary" onClick={() => setAutorisation(true)}>
+                Autoriser cette adresse
+              </Button>
+            </div>
+          )}
+        </div>
       ))}
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -484,6 +536,34 @@ export function PageConnexionTab() {
             ))}
           </ul>
         </Card>
+      )}
+
+      {autorisation && (
+        <Confirmation
+          titre="Autoriser cette adresse dans le Walled Garden ?"
+          libelléConfirmer="Oui, autoriser"
+          enCours={autoriser.isPending}
+          erreur={autoriser.isError ? erreur : null}
+          onAnnuler={() => {
+            setErreur(null);
+            setAutorisation(false);
+          }}
+          onConfirmer={() => autoriser.mutate()}
+        >
+          <p>
+            Une règle est ajoutée sur le routeur pour laisser passer{' '}
+            <span className="font-mono text-xs">{form?.portailUrl}</span>{' '}
+            <strong>avant toute connexion</strong>. C&apos;est ce qui manque aujourd&apos;hui :
+            RouterOS rejette la connexion d&apos;un client non authentifié, et son navigateur
+            affiche « ERR_CONNECTION_REFUSED » — un message qui ne parle jamais du Walled
+            Garden.
+          </p>
+          <p className="mt-2">
+            Elle ouvre ce port <strong>sur cette machine uniquement</strong>, pour tous les
+            appareils connectés au Wi-Fi, même sans code. Elle se retire dans
+            l&apos;onglet <em>Walled Garden</em>.
+          </p>
+        </Confirmation>
       )}
 
       {confirmer && (

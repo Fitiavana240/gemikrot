@@ -40,7 +40,15 @@ export class PublicController {
     // l'en-tete transmise par le proxy est donc lue en premier, et elle peut
     // contenir une liste -- le premier element est le client.
     const transmis = String(req.headers['x-forwarded-host'] ?? '').split(',')[0];
-    return (await this.publicService.slugParHote(hote || transmis || req.hostname)) ?? { slug: null };
+    // `req.headers.host` plutot que `req.hostname` : le second retire le port,
+    // et c'est justement lui qui distingue la page de paiement de la console
+    // quand les deux repondent sur la meme machine.
+    const brut = String(req.headers.host ?? '');
+    return (
+      (await this.publicService.slugParHote(hote || transmis || brut || req.hostname)) ?? {
+        slug: null,
+      }
+    );
   }
 
   @Get(':slug')

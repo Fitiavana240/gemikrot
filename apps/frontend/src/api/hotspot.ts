@@ -217,7 +217,10 @@ export const hotspotApi = {
     api.post<WalledGardenEntry>(`/hotspot/walled-garden${routerQuery(routerId)}`, input),
   removeHost: (id: string, routerId?: string) =>
     api.delete<void>(`/hotspot/walled-garden/${encodeURIComponent(id)}${routerQuery(routerId)}`),
-  addIp: (input: { dstAddress: string; comment?: string }, routerId?: string) =>
+  addIp: (
+    input: { dstAddress: string; dstPort?: string; comment?: string },
+    routerId?: string,
+  ) =>
     api.post<WalledGardenIpEntry>(`/hotspot/walled-garden/ip${routerQuery(routerId)}`, input),
   removeIp: (id: string, routerId?: string) =>
     api.delete<void>(`/hotspot/walled-garden/ip/${encodeURIComponent(id)}${routerQuery(routerId)}`),

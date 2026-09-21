@@ -14,6 +14,8 @@ export interface MobileMoneyAccount {
 
 export interface Tenant {
   id: string;
+  /** L'identifiant public, celui qui se lit dans `/p/<slug>`. */
+  slug: string;
   name: string;
   wifiName: string;
   domains: string[];
@@ -31,6 +33,7 @@ export interface Tenant {
 }
 
 export interface UpdateTenantInput {
+  slug?: string;
   name?: string;
   wifiName?: string;
   domains?: string[];

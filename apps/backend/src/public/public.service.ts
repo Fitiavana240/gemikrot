@@ -24,6 +24,23 @@ import {
  * la console de developpement repond sur `localhost`, et la laisser resoudre
  * vers une vitrine rendrait l'ecran de connexion inatteignable.
  */
+/**
+ * L'hôte d'une adresse, port compris : `192.168.88.135:5173`.
+ *
+ * Le port est gardé, contrairement à `normaliserHote` : une déclaration
+ * d'adresse de paiement le porte presque toujours, et l'ignorer ferait
+ * répondre la page de paiement sur n'importe quel autre service de la même
+ * machine — à commencer par la console.
+ */
+export function hoteAvecPort(url: string): string {
+  try {
+    const u = new URL(url.includes('://') ? url : `http://${url}`);
+    return u.host.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
 export function normaliserHote(hote: string | undefined | null): string {
   const brut = (hote ?? '').trim().toLowerCase();
   // Le port d'abord : `[::1]:5173` doit perdre son port avant tout test.
@@ -113,6 +130,35 @@ export class PublicService {
    * recopier, mettre en favori, ou coller dans le Walled Garden.
    */
   async slugParHote(hote: string): Promise<{ slug: string } | null> {
+    /**
+     * D'abord l'adresse que l'exploitant a **déclarée** comme sa page de
+     * paiement, dans les réglages du portail captif.
+     *
+     * Elle est très souvent une adresse IP, que la résolution par domaine
+     * écarte à raison — le portail captif sert la console par son adresse, et
+     * la laisser résoudre toute seule rendrait l'écran de connexion
+     * inatteignable. Ici c'est différent : l'exploitant a désigné cette
+     * adresse comme étant sa page de paiement. Ce n'est plus une supposition,
+     * c'est une déclaration, et c'est ce qui permet au bouton du portail de
+     * pointer sur une adresse nue — sans `/p/<identifiant>` à la traîne.
+     *
+     * Comparée **avec son port** : deux services sur la même machine ne sont
+     * pas le même site, et la console elle-même en est un.
+     */
+    const complet = (hote ?? '').trim().toLowerCase().replace(/\/+$/, '');
+    if (complet) {
+      const declarations = await this.prisma.hotspotLoginPage.findMany({
+        where: { portailUrl: { not: null } },
+        select: { portailUrl: true, tenant: { select: { slug: true, status: true } } },
+      });
+      const declare = declarations.find(
+        (d) =>
+          d.tenant.status === TenantStatus.ACTIVE &&
+          hoteAvecPort(d.portailUrl ?? '') === complet,
+      );
+      if (declare) return { slug: declare.tenant.slug };
+    }
+
     const normalisé = normaliserHote(hote);
     if (!normalisé) return null;
 

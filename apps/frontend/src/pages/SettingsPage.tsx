@@ -41,6 +41,7 @@ export function SettingsPage() {
   useEffect(() => {
     if (tenant.data) {
       setForm({
+        slug: tenant.data.slug,
         name: tenant.data.name,
         wifiName: tenant.data.wifiName,
         domains: tenant.data.domains,
@@ -156,6 +157,28 @@ export function SettingsPage() {
               ))}
             </Select>
           </FormField>
+          {/* Le mot que lit le client dans l'adresse de sa page de paiement.
+              Il derivait du nom de l'exploitant a l'inscription -- rarement
+              celui qu'il aurait choisi, et il s'affiche a l'ecran d'un
+              telephone. */}
+          <FormField
+            label="Identifiant public"
+            aide={
+              <>
+                Votre page de paiement répond à{' '}
+                <span className="font-mono">/p/{form.slug || '…'}</span>. Minuscules, chiffres
+                et tirets. <strong>Le changer casse les liens déjà distribués</strong> et
+                oblige à republier la page du portail captif, qui le contient.
+              </>
+            }
+          >
+            <Input
+              value={form.slug ?? ''}
+              onChange={(e) => setForm({ ...form, slug: e.target.value })}
+              className="font-mono"
+            />
+          </FormField>
+
           {/* Ils servaient deja au QR des tickets, mais rien ne s'en servait
               pour repondre : un client qui tapait l'adresse tombait sur
               l'ecran de connexion de la console. */}

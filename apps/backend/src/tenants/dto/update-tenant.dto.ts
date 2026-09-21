@@ -1,6 +1,25 @@
 import { ArrayMaxSize, IsArray, IsOptional, IsString, Length, Matches } from 'class-validator';
 
 export class UpdateTenantDto {
+  /**
+   * L'identifiant public, celui qui se lit dans l'adresse de la page de
+   * paiement : `/p/zone-wifi-tati`.
+   *
+   * Modifiable, parce qu'il s'affiche au client et que le mot derive du nom
+   * de l'exploitant a l'inscription -- rarement celui qu'il aurait choisi.
+   *
+   * Minuscules, chiffres et tirets : il voyage dans une adresse, et une
+   * majuscule ou un espace y devient illisible une fois encode.
+   */
+  @IsOptional()
+  @IsString()
+  @Length(3, 40)
+  @Matches(/^[a-z0-9]+(-[a-z0-9]+)*$/, {
+    message:
+      'L\u2019identifiant public ne prend que des minuscules, des chiffres et des tirets : zone-wifi-tati',
+  })
+  slug?: string;
+
   @IsOptional()
   @IsString()
   name?: string;

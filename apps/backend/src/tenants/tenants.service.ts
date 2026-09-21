@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { MobileMoneyAccount, Tenant, TenantStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -38,9 +38,28 @@ export class TenantsService {
       throw new ForbiddenException("Le SUPER_ADMIN n'est rattaché à aucun exploitant");
     }
 
+    /**
+     * Le slug est unique sur toute la plateforme, pas par exploitant : deux
+     * reseaux ne peuvent pas repondre a la meme adresse publique. Prisma
+     * leverait bien la contrainte, mais avec un message qui ne nomme ni le
+     * champ ni le concurrent.
+     */
+    if (dto.slug) {
+      const pris = await this.prisma.tenant.findFirst({
+        where: { slug: dto.slug, id: { not: tenantId } },
+        select: { id: true },
+      });
+      if (pris) {
+        throw new ConflictException(
+          `L'identifiant public « ${dto.slug} » est déjà utilisé par un autre exploitant.`,
+        );
+      }
+    }
+
     await this.prisma.tenant.update({
       where: { id: tenantId },
       data: {
+        slug: dto.slug,
         name: dto.name,
         wifiName: dto.wifiName,
         domains: dto.domains,

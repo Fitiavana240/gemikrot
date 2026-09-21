@@ -36,14 +36,53 @@ describe('normaliserHote', () => {
   });
 });
 
-function service(trouvé: { slug: string } | null) {
+function service(
+  trouvé: { slug: string } | null,
+  declarations: unknown[] = [],
+) {
   const findFirst = vi.fn(async () => trouvé);
-  const prisma: any = { tenant: { findFirst } };
+  const prisma: any = {
+    tenant: { findFirst },
+    hotspotLoginPage: { findMany: vi.fn(async () => declarations) },
+  };
   return {
     service: new PublicService(prisma, {} as never),
     findFirst,
   };
 }
+
+/** Ce que l'exploitant a déclaré comme adresse de sa page de paiement. */
+const declare = (portailUrl: string, slug = 'zone-wifi-tati', status = 'ACTIVE') => ({
+  portailUrl,
+  tenant: { slug, status },
+});
+
+describe('l’adresse déclarée comme page de paiement', () => {
+  it('résout une adresse IP, que la voie des domaines écarte', async () => {
+    // C'est ce qui permet au bouton du portail captif de pointer sur une
+    // adresse nue, sans `/p/<identifiant>` à la traîne. Ce n'est plus une
+    // supposition sur une IP : l'exploitant l'a désignée dans ses réglages.
+    const { service: s } = service(null, [declare('http://192.168.88.135:5173')]);
+
+    expect(await s.slugParHote('192.168.88.135:5173')).toEqual({ slug: 'zone-wifi-tati' });
+  });
+
+  it('distingue le port', async () => {
+    // La console et la page de paiement vivent sur la même machine. Sans le
+    // port, ouvrir la console renverrait sur la page de paiement.
+    const { service: s } = service(null, [declare('http://192.168.88.135:5173')]);
+
+    expect(await s.slugParHote('192.168.88.135:3000')).toBeNull();
+  });
+
+  it('ignore un exploitant suspendu', async () => {
+    const { service: s } = service(null, [
+      declare('http://192.168.88.135:5173', 'zone-wifi-tati', 'SUSPENDED'),
+    ]);
+
+    expect(await s.slugParHote('192.168.88.135:5173')).toBeNull();
+  });
+});
 
 describe('PublicService.slugParHote', () => {
   it('rend le slug de l’exploitant', async () => {
