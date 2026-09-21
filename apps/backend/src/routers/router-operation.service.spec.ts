@@ -68,7 +68,7 @@ describe('RouterOperationQueue', () => {
   let clients: Record<string, ReturnType<typeof vi.fn>>;
 
   beforeEach(() => {
-    health = new RouterHealthService();
+    health = new RouterHealthService({ router: { update: async () => ({}) } } as never);
     mikrotik = {
       setUserManagerUserDisabled: vi.fn(async () => ({})),
       getHotspotCookies: vi.fn(async () => []),
@@ -230,7 +230,7 @@ describe('RouterOperationQueue', () => {
  */
 describe('RouterOperationQueue, reprise au démarrage', () => {
   function monter(prisma: any, mikrotik: Record<string, any>) {
-    const health = new RouterHealthService();
+    const health = new RouterHealthService({ router: { update: async () => ({}) } } as never);
     const queue = new RouterOperationQueue(
       prisma,
       { forRouter: vi.fn(async () => mikrotik) } as never,

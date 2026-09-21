@@ -6,6 +6,7 @@ import type { AuthenticatedUser } from '../auth/jwt.strategy.js';
 import { TenantsService } from './tenants.service.js';
 import { MiseEnRouteService } from './mise-en-route.service.js';
 import { AbonnementPlateformeService } from './abonnement-plateforme.service.js';
+import { SupervisionService } from './supervision.service.js';
 import { UpdateTenantDto } from './dto/update-tenant.dto.js';
 import { MobileMoneyAccountDto } from './dto/mobile-money-account.dto.js';
 
@@ -15,6 +16,7 @@ export class TenantsController {
     private readonly tenants: TenantsService,
     private readonly miseEnRoute: MiseEnRouteService,
     private readonly abonnement: AbonnementPlateformeService,
+    private readonly superviser: SupervisionService,
   ) {}
 
   /**
@@ -93,6 +95,18 @@ export class TenantsController {
   @Get()
   findAll() {
     return this.tenants.findAll();
+  }
+
+  /**
+   * SAS-4 : la plateforme vue d'en haut.
+   *
+   * Declaree **avant** `:id`, sinon Nest lirait << supervision >> comme un
+   * identifiant d'exploitant et rendrait un 404 qui ne dirait rien.
+   */
+  @Roles(AdminRole.SUPER_ADMIN)
+  @Get('supervision')
+  supervision() {
+    return this.superviser.apercu();
   }
 
   @Roles(AdminRole.SUPER_ADMIN)

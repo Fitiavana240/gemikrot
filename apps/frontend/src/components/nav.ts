@@ -103,6 +103,12 @@ export const NAV_GROUPS: NavGroup[] = [
         hint: 'Marque, paiement, tickets, portail, apparence',
       },
       { to: '/audit', label: 'Journal', roles: ADMIN, hint: 'Qui a fait quoi, et quand' },
+      {
+        to: '/supervision',
+        label: 'Supervision',
+        roles: ['SUPER_ADMIN'],
+        hint: 'Qui vend, qui est en panne, qui doit',
+      },
       { to: '/tenants', label: 'Exploitants', roles: ['SUPER_ADMIN'], hint: 'Comptes de la plateforme' },
     ],
   },

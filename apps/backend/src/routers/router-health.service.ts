@@ -1,4 +1,5 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service.js';
 import { MikrotikError } from '@wifitati/mikrotik-service';
 
 /** Ce que la console doit pouvoir distinguer pour orienter un dépannage. */
@@ -55,11 +56,53 @@ const COOLDOWN_MS = 30_000;
  * couperait l'accès à un routeur parfaitement joignable dont on aurait mal
  * saisi les identifiants — et masquerait la vraie cause.
  */
+/**
+ * Au plus une écriture par minute et par routeur.
+ *
+ * Le succès se compte par centaines dans une session : écrire à chaque fois
+ * ferait une transaction par appel RouterOS, pour une colonne qu'on lit à la
+ * minute. Une minute de retard sur « dernier signe de vie » ne change aucune
+ * décision.
+ */
+const PERIODE_ECRITURE_MS = 60_000;
+
 @Injectable()
 export class RouterHealthService {
   private readonly logger = new Logger(RouterHealthService.name);
   private readonly health = new Map<string, RouterHealth>();
   private readonly recoveryListeners: ((routerId: string) => void)[] = [];
+  /** Dernière écriture en base, par routeur — pour ne pas la refaire trop tôt. */
+  private readonly derniereEcriture = new Map<string, number>();
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Inscrit le signe de vie en base, sans faire attendre l'appel qui a réussi.
+   *
+   * `lastSeenAt` n'était écrit que par le bouton « Tester la connexion ». Il
+   * signifiait donc « dernier test manuel », pas « dernier signe de vie » — et
+   * tout ce qui s'y fiait mentait : un routeur qui répondait depuis des heures
+   * était compté muet parce que personne n'avait pressé le bouton depuis la
+   * veille. Constaté sur ce parc, à un jour d'écart.
+   *
+   * L'échec est avalé : un souci d'écriture ne doit pas faire échouer un appel
+   * qui, lui, a marché.
+   */
+  private toucher(routerId: string): void {
+    const maintenant = Date.now();
+    const precedente = this.derniereEcriture.get(routerId) ?? 0;
+    if (maintenant - precedente < PERIODE_ECRITURE_MS) return;
+    this.derniereEcriture.set(routerId, maintenant);
+
+    // Client brut : ce service tourne aussi hors requête HTTP — file
+    // d'opérations différées, travaux de fond — où le cloisonnement n'a pas de
+    // contexte et ne rendrait rien.
+    void this.prisma.router
+      .update({ where: { id: routerId }, data: { status: 'online', lastSeenAt: new Date() } })
+      .catch((error: unknown) => {
+        this.logger.debug(`Signe de vie non inscrit pour ${routerId} : ${String(error)}`);
+      });
+  }
 
   /**
    * Prévient quand un routeur redevient joignable après avoir été déclaré
@@ -119,6 +162,7 @@ export class RouterHealthService {
     health.state = 'JOIGNABLE';
     health.consecutiveFailures = 0;
     health.lastSuccessAt = new Date();
+    this.toucher(routerId);
     health.lastErrorCode = null;
     health.lastErrorMessage = null;
     health.openUntil = null;

@@ -16,6 +16,7 @@ import { BatchesPage } from './pages/BatchesPage';
 import { CustomerSheetPage } from './pages/CustomerSheetPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { TenantsPage } from './pages/TenantsPage';
+import { SupervisionPage } from './pages/SupervisionPage';
 import { PppoePage } from './pages/PppoePage';
 import { UserManagerPage } from './pages/UserManagerPage';
 import { HotspotPage } from './pages/HotspotPage';
@@ -74,6 +75,7 @@ export function App() {
                 de ticket, le portail captif, le compte et l'apparence. */}
             <Route path="/settings/:tab" element={<SettingsPage />} />
             <Route path="/tenants" element={<TenantsPage />} />
+            <Route path="/supervision" element={<SupervisionPage />} />
             <Route path="/plans" element={<PlansPage />} />
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/customers/:id" element={<CustomerSheetPage />} />

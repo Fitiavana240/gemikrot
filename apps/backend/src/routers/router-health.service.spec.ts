@@ -18,7 +18,7 @@ describe('RouterHealthService', () => {
   let health: RouterHealthService;
 
   beforeEach(() => {
-    health = new RouterHealthService();
+    health = new RouterHealthService({ router: { update: async () => ({}) } } as never);
   });
 
   afterEach(() => {

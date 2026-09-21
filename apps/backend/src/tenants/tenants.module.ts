@@ -4,11 +4,12 @@ import { TenantsService } from './tenants.service.js';
 import { TenantsController } from './tenants.controller.js';
 import { MiseEnRouteService } from './mise-en-route.service.js';
 import { AbonnementPlateformeService } from './abonnement-plateforme.service.js';
+import { SupervisionService } from './supervision.service.js';
 
 @Module({
   imports: [AuditModule],
   controllers: [TenantsController],
-  providers: [TenantsService, MiseEnRouteService, AbonnementPlateformeService],
+  providers: [TenantsService, MiseEnRouteService, AbonnementPlateformeService, SupervisionService],
   exports: [TenantsService, AbonnementPlateformeService],
 })
 export class TenantsModule {}
