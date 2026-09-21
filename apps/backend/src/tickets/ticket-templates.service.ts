@@ -10,17 +10,66 @@ import {
 import { contenuQr, qrDataUri } from './qr.util.js';
 
 /**
- * Gabarit livré d'origine, calibré pour 30 tickets par A4 — une cellule de
- * 64,6 × 28,1 mm, soit le tiers d'une carte de visite. Logo, code, prix et
- * validité y tiennent ; des conditions de vente, non.
+ * Le gabarit par défaut, repris de la planche que ce parc imprime déjà.
+ *
+ * Il n'a pas été inventé : il reproduit celle qui tourne depuis des mois, et
+ * qui a donc fait ses preuves au comptoir — bande de prix verticale sur la
+ * gauche, identifiants en grand au centre, QR à droite, coordonnées en pied.
+ * Un vendeur qui trie des tickets les prend par la tranche : c'est la bande
+ * colorée qui lui dit le prix sans lire, et c'est pour cela qu'elle est là.
+ *
+ * **Tout ce qui distingue un exploitant d'un autre est un marqueur.** Le nom
+ * du réseau, le logo, le prix, la durée, le site, les numéros, la page
+ * Facebook : rien n'est écrit en dur. Le même gabarit sert le voisin sans
+ * qu'une ligne change.
+ *
+ * `User` et `Md pass` portent des valeurs distinctes quand elles le sont —
+ * un accès acheté en ligne a un nom et une référence — et la même des deux
+ * côtés sur un ticket imprimé, où le client n'a qu'une chose à recopier.
+ *
+ * Tout le style est en ligne : le moteur n'accepte pas de balise `<style>`,
+ * et c'est ce qui empêche un modèle de déborder sur la page entière.
  */
-const DEFAULT_TEMPLATE = `<div style="text-align:center">
-  <img src="{{logoUrl}}" alt="" />
-  <div style="font-size:7pt;color:#64748b">{{wifiName}}</div>
-  <div style="font-family:monospace;font-size:13pt;font-weight:bold;letter-spacing:1px;margin:1mm 0">{{code}}</div>
-  <div style="font-size:7pt">{{planName}} · {{price}}</div>
-  <div style="font-size:6pt;color:#94a3b8">valable {{validity}}</div>
-</div>`;
+/**
+ * Un pixel transparent, quand l'exploitant n'a pas encore de logo.
+ *
+ * `<img src="">` fait afficher au navigateur son icone d'image cassee : sur
+ * une planche de trente tickets, cela fait trente petits carres barres qu'on
+ * decoupe et qu'on donne au client. Un pixel invisible ne se voit pas, et la
+ * mise en page ne bouge pas le jour ou le logo arrive.
+ */
+const PIXEL_VIDE =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+const DEFAULT_TEMPLATE = `<table style="width:100%;border-collapse:collapse;font-family:Segoe UI,Arial,sans-serif;color:#0f2b5b">
+  <tr>
+    <td style="width:9mm;background:#12539f;border-radius:3mm 0 0 3mm;text-align:center;vertical-align:middle;padding:1mm 0">
+      <div style="color:#ffffff;font-size:11pt;font-weight:bold;white-space:nowrap;writing-mode:vertical-rl;transform:rotate(180deg)">{{price}}</div>
+    </td>
+    <td style="padding:1.5mm 2mm;vertical-align:top">
+      <table style="width:100%;border-collapse:collapse">
+        <tr>
+          <td style="width:7mm;vertical-align:middle"><img src="{{logoUrl}}" alt="" style="width:6mm;height:6mm" /></td>
+          <td style="vertical-align:middle;padding-left:1mm">
+            <div style="font-size:8pt;font-weight:bold;letter-spacing:0.2pt">{{wifiName}}</div>
+            <div style="font-size:5.5pt;color:#2f6fbf">{{tagline}}</div>
+          </td>
+        </tr>
+      </table>
+      <div style="font-size:11pt;font-weight:bold;margin-top:1mm">User : {{code}}</div>
+      <div style="font-size:11pt;font-weight:bold">Md pass : {{password}}</div>
+      <div style="font-size:6pt;color:#475569;margin-top:0.5mm">{{planName}} · {{validity}}</div>
+      <hr style="border:0;border-top:0.2mm solid #d7e2f2;margin:1mm 0 0.7mm" />
+      <div style="font-size:5.5pt;color:#334155;line-height:1.5">
+        {{site}}<br />{{reseauSocial}}<br />{{telephones}}
+      </div>
+    </td>
+    <td style="width:17mm;text-align:center;vertical-align:middle;padding:1mm">
+      <img src="{{qrUrl}}" alt="" style="width:15mm;height:15mm" />
+      <div style="font-size:4.5pt;color:#15803d;font-weight:bold;line-height:1.3">Scannez pour<br />vous connecter</div>
+    </td>
+  </tr>
+</table>`;
 
 /**
  * Second gabarit, 10 par page : de la place pour des mentions — et pour un
@@ -168,7 +217,12 @@ export class TicketTemplatesService {
       currency: 'MGA',
       validity: '1 j',
       wifiName: 'Zone WIFI-TATI',
-      logoUrl: '',
+      logoUrl: PIXEL_VIDE,
+      password: String(6000 + i * 37).slice(0, 4),
+      tagline: 'Restez connectés',
+      site: 'wifitati.net',
+      telephones: '+261 34 72 818 91',
+      reseauSocial: 'Zone Wifi-TATI',
       createdAt: new Date().toLocaleDateString('fr-FR'),
       ticketIndex: String(i + 1),
       ticketTotal: String(perPage),
@@ -194,15 +248,31 @@ export class TicketTemplatesService {
         ...(filter.voucherIds?.length ? {} : { status: VoucherStatus.CREATED }),
       },
       include: { plan: { select: { name: true, validityDurationSeconds: true } } },
+      // `accessPassword` sert au ticket : un accès acheté en ligne a un nom et
+      // une référence distincts, et n'imprimer que le code laisserait le
+      // client devant un champ qu'il ne peut pas remplir.
       orderBy: { createdAt: 'asc' },
     });
     if (vouchers.length === 0) {
       throw new NotFoundException('Aucun ticket à imprimer pour cette sélection');
     }
 
+    const tenantId = this.tenantContext.requireTenantId();
     const tenant = await this.prisma.tenant.findUniqueOrThrow({
-      where: { id: this.tenantContext.requireTenantId() },
+      where: { id: tenantId },
       select: { wifiName: true, logoUrl: true, currency: true, domains: true },
+    });
+    /**
+     * Les coordonnées viennent des réglages du portail captif.
+     *
+     * Le même exploitant, les mêmes numéros, la même page Facebook : les
+     * redemander ici ferait deux endroits à tenir à jour, et un ticket
+     * imprimé avec un ancien numéro ne se rattrape pas — il est déjà dans la
+     * poche du client.
+     */
+    const coordonnees = await this.prisma.hotspotLoginPage.findUnique({
+      where: { tenantId },
+      select: { telephones: true, reseauSocial: true, sousTitre: true },
     });
     const money = new Intl.NumberFormat('fr-FR', {
       style: 'currency',
@@ -217,7 +287,15 @@ export class TicketTemplatesService {
       currency: tenant.currency,
       validity: humanDuration(voucher.plan.validityDurationSeconds),
       wifiName: tenant.wifiName,
-      logoUrl: tenant.logoUrl ?? '',
+      logoUrl: tenant.logoUrl || PIXEL_VIDE,
+      // Le code vaut des deux côtés sur un ticket imprimé : les deux lignes
+      // portent alors la même chose, et c'est voulu — le client n'a qu'une
+      // chose à recopier.
+      password: voucher.accessPassword ?? voucher.code,
+      tagline: coordonnees?.sousTitre ?? '',
+      site: tenant.domains[0] ?? '',
+      telephones: coordonnees?.telephones ?? '',
+      reseauSocial: coordonnees?.reseauSocial ?? '',
       createdAt: voucher.createdAt.toLocaleDateString('fr-FR'),
       ticketIndex: String(index + 1),
       ticketTotal: String(vouchers.length),

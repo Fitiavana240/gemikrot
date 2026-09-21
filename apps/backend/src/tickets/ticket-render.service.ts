@@ -10,6 +10,23 @@ export interface TicketPlaceholders {
   validity: string;
   wifiName: string;
   logoUrl: string;
+  /**
+   * Le mot de passe du ticket, quand il diffère du code.
+   *
+   * Sur un ticket imprimé, le code vaut des deux côtés et les deux lignes
+   * portent alors la même chose. Un accès acheté en ligne, lui, a un nom et
+   * une référence distincts : imprimer le seul code laisserait le client
+   * devant un champ « mot de passe » qu'il ne peut pas remplir.
+   */
+  password: string;
+  /** La phrase sous le nom du réseau. Vide, la ligne ne s'affiche pas. */
+  tagline: string;
+  /** Le premier domaine déclaré, tel qu'on l'écrit sur un ticket. */
+  site: string;
+  /** Les numéros de l'exploitant, tels qu'ils se composent. */
+  telephones: string;
+  /** Page Facebook ou autre, en toutes lettres. */
+  reseauSocial: string;
   createdAt: string;
   ticketIndex: string;
   ticketTotal: string;
