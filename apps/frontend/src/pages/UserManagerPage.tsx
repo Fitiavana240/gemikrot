@@ -391,6 +391,10 @@ function LimitationsTab() {
   const { error, setError, onError } = useActionError();
   const [àModifier, setÀModifier] = useState<UserManagerLimitation | null>(null);
   const [nonceFormulaire, setNonceFormulaire] = useState(0);
+  // Derrière un bouton, comme le « New » de WinBox. Le formulaire était
+  // déplié en permanence ; avec les neuf champs de réglage fin, il occuperait
+  // l'écran avant qu'on ait vu la liste.
+  const [créer, setCréer] = useState(false);
 
   const { currentId } = useRouterSelection();
   const limitations = useQuery({
@@ -411,6 +415,7 @@ function LimitationsTab() {
       // que de le vider de l'extérieur, ce qui demanderait de dupliquer ici la
       // liste de ses champs — et de l'oublier au prochain champ ajouté.
       setNonceFormulaire((n) => n + 1);
+      setCréer(false);
       refresh();
     },
     onError,
@@ -459,10 +464,17 @@ function LimitationsTab() {
         />
       )}
 
-      {canWrite && (
+      {canWrite && !créer && !àModifier && (
+        <div>
+          <Button onClick={() => setCréer(true)}>Nouvelle limitation</Button>
+        </div>
+      )}
+
+      {canWrite && créer && (
         <FormulaireLimitation
           key={nonceFormulaire}
           enCours={create.isPending}
+          onAnnuler={() => setCréer(false)}
           onValider={(valeurs) => {
             if (!valeurs.name.trim()) {
               setError('Indiquez le nom de la limitation');

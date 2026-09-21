@@ -55,6 +55,11 @@ export interface UserManagerLimitation {
   /** Date à partir de laquelle les périodes se comptent. */
   resetCountersStartTime: string | null;
   profileNames: string[];
+  rateLimitMin: { rxBitsPerSecond: number | null; txBitsPerSecond: number | null };
+  rateLimitPriority: number | null;
+  rateLimitBurst: { rxBitsPerSecond: number | null; txBitsPerSecond: number | null };
+  rateLimitBurstThreshold: { rxBitsPerSecond: number | null; txBitsPerSecond: number | null };
+  rateLimitBurstTimeSeconds: { rx: number | null; tx: number | null };
 }
 
 export interface UserManagerAccount {
@@ -92,6 +97,18 @@ export interface CreateProfileInput {
 
 export interface CreateLimitationInput {
   name: string;
+  /** Débit garanti : servi d'abord, avant que le reste ne soit distribué. */
+  rateLimitMinRxBitsPerSecond?: number | null;
+  rateLimitMinTxBitsPerSecond?: number | null;
+  /** 0 = le plus prioritaire quand le lien sature. */
+  rateLimitPriority?: number | null;
+  /** Pointe au-dessus du plafond ; sans durée elle ne s'applique jamais. */
+  rateLimitBurstRxBitsPerSecond?: number | null;
+  rateLimitBurstTxBitsPerSecond?: number | null;
+  rateLimitBurstThresholdRxBitsPerSecond?: number | null;
+  rateLimitBurstThresholdTxBitsPerSecond?: number | null;
+  rateLimitBurstTimeRxSeconds?: number | null;
+  rateLimitBurstTimeTxSeconds?: number | null;
   rateLimitRxBitsPerSecond?: number | null;
   rateLimitTxBitsPerSecond?: number | null;
   transferLimitBytes?: number | null;

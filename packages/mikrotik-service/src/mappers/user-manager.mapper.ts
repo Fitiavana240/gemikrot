@@ -78,6 +78,25 @@ export function mapUserManagerLimitation(raw: any): UserManagerLimitationDto {
       raw?.['reset-counters-start-time'] && !String(raw['reset-counters-start-time']).startsWith('1970-01-01')
         ? String(raw['reset-counters-start-time'])
         : null,
+    // Neuf champs que le routeur porte et que la console jetait. `0` y veut
+    // dire « pas de réglage » — d'où `parsePositiveAmount`, qui rend `null`.
+    rateLimitMin: {
+      rxBitsPerSecond: parsePositiveAmount(raw?.['rate-limit-min-rx']),
+      txBitsPerSecond: parsePositiveAmount(raw?.['rate-limit-min-tx']),
+    },
+    rateLimitPriority: parsePositiveAmount(raw?.['rate-limit-priority']),
+    rateLimitBurst: {
+      rxBitsPerSecond: parsePositiveAmount(raw?.['rate-limit-burst-rx']),
+      txBitsPerSecond: parsePositiveAmount(raw?.['rate-limit-burst-tx']),
+    },
+    rateLimitBurstThreshold: {
+      rxBitsPerSecond: parsePositiveAmount(raw?.['rate-limit-burst-threshold-rx']),
+      txBitsPerSecond: parsePositiveAmount(raw?.['rate-limit-burst-threshold-tx']),
+    },
+    rateLimitBurstTimeSeconds: {
+      rx: parsePositiveDuration(raw?.['rate-limit-burst-time-rx']),
+      tx: parsePositiveDuration(raw?.['rate-limit-burst-time-tx']),
+    },
   };
 }
 

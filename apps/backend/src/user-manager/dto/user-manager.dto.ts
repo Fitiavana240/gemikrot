@@ -151,6 +151,59 @@ export class CreateLimitationDto {
   @IsOptional()
   @IsString()
   resetCountersStartTime?: string | null;
+
+  /** Débit garanti, servi avant que le reste ne soit distribué. */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitMinRxBitsPerSecond?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitMinTxBitsPerSecond?: number | null;
+
+  /**
+   * Qui passe en premier quand le lien sature. **Zéro est la plus forte**,
+   * d'où `@Min(0)` et non `@IsPositive` — c'est la valeur que portent les
+   * deux limitations de ce parc.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(8)
+  rateLimitPriority?: number | null;
+
+  /** Pointe tolérée au-dessus du plafond. Sans durée, elle ne s'applique jamais. */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitBurstRxBitsPerSecond?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitBurstTxBitsPerSecond?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitBurstThresholdRxBitsPerSecond?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitBurstThresholdTxBitsPerSecond?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitBurstTimeRxSeconds?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitBurstTimeTxSeconds?: number | null;
 }
 
 export class UpdateLimitationDto {
@@ -194,6 +247,53 @@ export class UpdateLimitationDto {
   @IsOptional()
   @IsString()
   resetCountersStartTime?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitMinRxBitsPerSecond?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitMinTxBitsPerSecond?: number | null;
+
+  /** Zéro est la priorité la plus forte : `@Min(0)`, pas `@IsPositive`. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(8)
+  rateLimitPriority?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitBurstRxBitsPerSecond?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitBurstTxBitsPerSecond?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitBurstThresholdRxBitsPerSecond?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitBurstThresholdTxBitsPerSecond?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitBurstTimeRxSeconds?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  rateLimitBurstTimeTxSeconds?: number | null;
 }
 
 export class AttachLimitationDto {

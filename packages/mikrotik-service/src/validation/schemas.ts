@@ -57,6 +57,17 @@ export const createLimitationSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/, 'Date attendue au format AAAA-MM-JJ HH:MM:SS')
     .nullable()
     .optional(),
+  rateLimitMinRxBitsPerSecond: z.number().int().positive().nullable().optional(),
+  rateLimitMinTxBitsPerSecond: z.number().int().positive().nullable().optional(),
+  // La priorité admet **zéro**, qui est la plus forte : `positive()` la
+  // refuserait, et c'est la valeur que portent les deux limitations du parc.
+  rateLimitPriority: z.number().int().min(0).max(8).nullable().optional(),
+  rateLimitBurstRxBitsPerSecond: z.number().int().positive().nullable().optional(),
+  rateLimitBurstTxBitsPerSecond: z.number().int().positive().nullable().optional(),
+  rateLimitBurstThresholdRxBitsPerSecond: z.number().int().positive().nullable().optional(),
+  rateLimitBurstThresholdTxBitsPerSecond: z.number().int().positive().nullable().optional(),
+  rateLimitBurstTimeRxSeconds: z.number().int().positive().nullable().optional(),
+  rateLimitBurstTimeTxSeconds: z.number().int().positive().nullable().optional(),
 });
 
 export const updateLimitationSchema = createLimitationSchema.partial().extend({

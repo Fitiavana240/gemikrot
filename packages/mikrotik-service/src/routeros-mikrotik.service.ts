@@ -104,6 +104,36 @@ function buildLimitationPayload(data: Partial<CreateLimitationDto>): Record<stri
   if (data.resetCountersStartTime !== undefined) {
     payload['reset-counters-start-time'] = data.resetCountersStartTime ?? '1970-01-01 00:00:00';
   }
+  // Les neuf champs que WinBox propose et que la console ignorait. Même règle
+  // que ci-dessus : `0` est la valeur qui veut dire « pas de réglage », et
+  // c'est elle qu'il faut écrire pour effacer un réglage existant.
+  if (data.rateLimitMinRxBitsPerSecond !== undefined) {
+    payload['rate-limit-min-rx'] = data.rateLimitMinRxBitsPerSecond ?? 0;
+  }
+  if (data.rateLimitMinTxBitsPerSecond !== undefined) {
+    payload['rate-limit-min-tx'] = data.rateLimitMinTxBitsPerSecond ?? 0;
+  }
+  if (data.rateLimitPriority !== undefined) {
+    payload['rate-limit-priority'] = data.rateLimitPriority ?? 0;
+  }
+  if (data.rateLimitBurstRxBitsPerSecond !== undefined) {
+    payload['rate-limit-burst-rx'] = data.rateLimitBurstRxBitsPerSecond ?? 0;
+  }
+  if (data.rateLimitBurstTxBitsPerSecond !== undefined) {
+    payload['rate-limit-burst-tx'] = data.rateLimitBurstTxBitsPerSecond ?? 0;
+  }
+  if (data.rateLimitBurstThresholdRxBitsPerSecond !== undefined) {
+    payload['rate-limit-burst-threshold-rx'] = data.rateLimitBurstThresholdRxBitsPerSecond ?? 0;
+  }
+  if (data.rateLimitBurstThresholdTxBitsPerSecond !== undefined) {
+    payload['rate-limit-burst-threshold-tx'] = data.rateLimitBurstThresholdTxBitsPerSecond ?? 0;
+  }
+  if (data.rateLimitBurstTimeRxSeconds !== undefined) {
+    payload['rate-limit-burst-time-rx'] = `${data.rateLimitBurstTimeRxSeconds ?? 0}s`;
+  }
+  if (data.rateLimitBurstTimeTxSeconds !== undefined) {
+    payload['rate-limit-burst-time-tx'] = `${data.rateLimitBurstTimeTxSeconds ?? 0}s`;
+  }
   return payload;
 }
 

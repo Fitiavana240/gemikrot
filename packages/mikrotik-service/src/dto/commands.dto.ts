@@ -60,6 +60,18 @@ export interface CreateLimitationDto {
   resetCountersIntervalSeconds?: number | null;
   /** `AAAA-MM-JJ HH:MM:SS`, la forme que RouterOS écrit lui-même. */
   resetCountersStartTime?: string | null;
+  /** Débit garanti, servi avant que le reste ne soit distribué. */
+  rateLimitMinRxBitsPerSecond?: number | null;
+  rateLimitMinTxBitsPerSecond?: number | null;
+  /** Qui passe en premier quand le lien sature. 0 = le plus prioritaire. */
+  rateLimitPriority?: number | null;
+  /** Pointe tolérée au-dessus du plafond ; sans `burstTime`, elle ne s'applique jamais. */
+  rateLimitBurstRxBitsPerSecond?: number | null;
+  rateLimitBurstTxBitsPerSecond?: number | null;
+  rateLimitBurstThresholdRxBitsPerSecond?: number | null;
+  rateLimitBurstThresholdTxBitsPerSecond?: number | null;
+  rateLimitBurstTimeRxSeconds?: number | null;
+  rateLimitBurstTimeTxSeconds?: number | null;
 }
 
 export interface UpdateLimitationDto extends Partial<CreateLimitationDto> {

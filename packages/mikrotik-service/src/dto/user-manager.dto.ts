@@ -71,6 +71,34 @@ export interface UserManagerLimitationDto {
   resetCountersIntervalSeconds: number | null;
   /** Date à partir de laquelle les périodes se comptent. */
   resetCountersStartTime: string | null;
+  /**
+   * Débit **garanti**, par opposition au plafond.
+   *
+   * RouterOS sert d'abord ce minimum à tout le monde, puis distribue ce qui
+   * reste jusqu'au plafond. Sans lui, un seul gros consommateur peut affamer
+   * les autres alors que chacun a « son » plafond : le plafond ne promet
+   * rien, il borne.
+   */
+  rateLimitMin: RateLimitDto;
+  /**
+   * Qui passe en premier quand le lien est saturé. 0 = le plus prioritaire.
+   *
+   * N'a d'effet qu'en concurrence : à lien libre, tout le monde a son débit.
+   */
+  rateLimitPriority: number | null;
+  /**
+   * Le débit toléré en pointe, au-dessus du plafond.
+   *
+   * C'est ce qui rend une navigation vive tout en tenant un forfait bas :
+   * les premières secondes passent à `burst`, puis le débit retombe au
+   * plafond. Les trois vont ensemble et ne veulent rien dire séparément —
+   * `burst` sans `burstTime` ne s'applique jamais.
+   */
+  rateLimitBurst: RateLimitDto;
+  /** Moyenne au-dessus de laquelle la pointe cesse d'être accordée. */
+  rateLimitBurstThreshold: RateLimitDto;
+  /** Combien de temps la pointe peut durer. */
+  rateLimitBurstTimeSeconds: { rx: number | null; tx: number | null };
 }
 
 /**
