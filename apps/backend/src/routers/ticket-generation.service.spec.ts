@@ -33,6 +33,10 @@ class RouteurDeLabo {
   async getHotspotProfiles() {
     return this.profilsHotspot;
   }
+  /** Le routeur vit en +03:00 ; le serveur de test, en UTC. */
+  async getClock() {
+    return { date: '2026-09-21', time: '03:00:51', timeZone: 'Indian/Antananarivo', gmtOffset: '+03:00' };
+  }
   async createUserManagerUsers(inputs: { username: string }[]) {
     this.comptesUm.push(...inputs.map((i) => i.username));
     return [];
@@ -66,8 +70,11 @@ describe('TicketGenerationService', () => {
       // La planche est écrite sur le routeur, pas ici : ces dépendances sont
       // réduites au strict nécessaire pour que les tests portent sur la
       // génération des comptes, qui est leur sujet.
-      { tenant: { findUniqueOrThrow: async () => ({ wifiName: 'Labo', domains: [] }) } } as never,
-      { requireTenantId: () => 'labo' } as never,
+      {
+        tenant: { findUniqueOrThrow: async () => ({ wifiName: 'Labo', domains: [] }) },
+        router: { findUniqueOrThrow: async () => ({ tenantId: 'labo' }) },
+      } as never,
+      { get: () => ({ tenantId: 'labo', isSuperAdmin: false }) } as never,
       { findAll: async () => [{ perPage: 30, isDefault: true }] } as never,
       planches as never,
     );
@@ -245,5 +252,52 @@ describe('TicketGenerationService', () => {
 
     expect(résultat.plafondCumule).toBeNull();
     expect(mikrotik.creationsHotspot[0].limitUptimeSeconds).toBeUndefined();
+  });
+});
+
+/**
+ * Le cas du SUPER_ADMIN, qui n'a pas d'exploitant à lui.
+ *
+ * Constaté sur une vraie génération : `requireTenantId()` levait, la planche
+ * n'était pas produite, et l'écran n'affichait qu'un avertissement discret
+ * alors que les comptes, eux, étaient bien créés sur le routeur. La consigne
+ * « un PDF A4 à chaque génération » tombait donc en silence pour ce rôle.
+ */
+describe('TicketGenerationService, sans exploitant dans le contexte', () => {
+  it('produit quand même la planche, en lisant l’exploitant du routeur', async () => {
+    const mikrotik = new RouteurDeLabo();
+    const planches = {
+      écrire: vi.fn(async (_mikrotik: unknown, _demande: { réseau: string; étiquette: string }) => ({
+        planches: [],
+        échecs: [],
+        emplacement: 'usb1-part1',
+      })),
+    };
+    const service = new TicketGenerationService(
+      { forRouter: async () => mikrotik } as never,
+      { log: vi.fn().mockResolvedValue(undefined) } as never,
+      {
+        tenant: { findUniqueOrThrow: async () => ({ wifiName: 'Tati', domains: ['portail.mg'] }) },
+        router: { findUniqueOrThrow: async () => ({ tenantId: 'exploitant-du-routeur' }) },
+      } as never,
+      // Un SUPER_ADMIN : contexte présent, exploitant nul.
+      { get: () => ({ tenantId: null, isSuperAdmin: true }) } as never,
+      { findAll: async () => [{ perPage: 30, isDefault: true }] } as never,
+      planches as never,
+    );
+
+    const r = await service.generer(
+      ROUTEUR,
+      { cible: 'hotspot', profileName: '2Heure-500Ar', quantite: 2 },
+      'super-admin',
+    );
+
+    expect(r.planchesEnEchec).toEqual([]);
+    expect(planches.écrire).toHaveBeenCalledOnce();
+    // Le nom imprimé est celui de l'exploitant à qui le routeur appartient.
+    expect(planches.écrire.mock.calls[0][1]).toMatchObject({ réseau: 'Tati' });
+    // Et l'étiquette porte l'heure DU ROUTEUR (03:00), pas celle du serveur
+    // qui tourne en UTC : c'est celle que WinBox affichera à côté du fichier.
+    expect(planches.écrire.mock.calls[0][1].étiquette).toBe('2Heure-500Ar-202609210300');
   });
 });

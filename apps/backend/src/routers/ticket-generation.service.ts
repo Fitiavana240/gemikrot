@@ -159,7 +159,7 @@ export class TicketGenerationService {
         ? plafondCumule
         : (profilsUm.find((p) => p.name === demande.profileName)?.validityDurationSeconds ?? null);
 
-    const planches = await this.déposerPlanches(mikrotik, resultat.codes, demande, validité);
+    const planches = await this.déposerPlanches(mikrotik, routerId, resultat.codes, demande, validité);
 
     await this.audit.log({
       adminUserId,
@@ -194,6 +194,7 @@ export class TicketGenerationService {
    */
   private async déposerPlanches(
     mikrotik: Awaited<ReturnType<MikrotikClientFactory['forRouter']>>,
+    routerId: string,
     codes: string[],
     demande: GenerationDemande,
     validitéSecondes: number | null,
@@ -202,8 +203,18 @@ export class TicketGenerationService {
     if (codes.length === 0) return vide;
 
     try {
+      // L'exploitant se lit sur le ROUTEUR, pas dans le contexte de la
+      // requête. `requireTenantId()` lève pour un SUPER_ADMIN, qui n'a pas
+      // d'exploitant à lui : la planche n'était alors pas produite du tout,
+      // en silence, alors que les comptes, eux, étaient bien créés. Constaté
+      // sur une vraie génération, pas déduit.
+      //
+      // Ce n'est pas la faille de l'import corrigée par ailleurs : on ne se
+      // donne pas ici l'accès à un routeur, il est déjà résolu et autorisé.
+      // On demande seulement quel nom de réseau imprimer sur la feuille — et
+      // la bonne réponse est celui de l'exploitant à qui le routeur appartient.
       const tenant = await this.prisma.tenant.findUniqueOrThrow({
-        where: { id: this.tenantContext.requireTenantId() },
+        where: { id: await this.exploitantDuRouteur(routerId) },
         select: { wifiName: true, domains: true },
       });
       const modèles = await this.modèles.findAll();
@@ -211,7 +222,13 @@ export class TicketGenerationService {
 
       // L'horodatage dans le nom plutôt qu'un numéro : deux lots du même
       // profil le même jour ne doivent pas s'écraser l'un l'autre sur la clé.
-      const horodatage = new Date().toISOString().slice(0, 16).replace(/[:T-]/g, '');
+      //
+      // Il vient de l'horloge du ROUTEUR, et non de celle du serveur. Les
+      // deux ne coïncident pas : le serveur datait en UTC, le routeur vit en
+      // +03:00, et WinBox affiche ses fichiers à l'heure locale. Une planche
+      // écrite à 3 h du matin s'appelait donc « 0001 » à côté d'une date de
+      // modification à 03:01 — et, passé minuit, portait carrément la veille.
+      const horodatage = await this.horodatageDuRouteur(mikrotik);
       const étiquette = `${demande.profileName}-${horodatage}`.replace(/[^A-Za-z0-9_.-]/g, '_');
 
       return await this.planches.écrire(mikrotik, {
@@ -226,6 +243,45 @@ export class TicketGenerationService {
       this.logger.warn(`Planches non produites : ${String(error)}`);
       return { ...vide, échecs: [{ chemin: '', motif: error instanceof Error ? error.message : String(error) }] };
     }
+  }
+
+  /**
+   * `202609210300`, à l'heure du routeur.
+   *
+   * Si l'horloge est illisible, on retombe sur celle du serveur plutôt que
+   * de perdre la planche : un nom approximatif vaut mieux que pas de feuille.
+   */
+  private async horodatageDuRouteur(
+    mikrotik: Awaited<ReturnType<MikrotikClientFactory['forRouter']>>,
+  ): Promise<string> {
+    try {
+      const { date, time } = await mikrotik.getClock();
+      const brut = `${date}${time.slice(0, 5)}`.replace(/[:\-]/g, '');
+      if (/^\d{12}$/.test(brut)) return brut;
+    } catch {
+      // Horloge injoignable : la suite s'en passe.
+    }
+    return new Date().toISOString().slice(0, 16).replace(/[:T-]/g, '');
+  }
+
+  /**
+   * À quel exploitant appartient ce routeur.
+   *
+   * Le contexte de requête suffit pour un ADMIN, et ne dit rien pour un
+   * SUPER_ADMIN. Le routeur, lui, porte toujours son `tenantId` : c'est la
+   * source qui répond dans les deux cas.
+   */
+  private async exploitantDuRouteur(routerId: string): Promise<string> {
+    const contexte = this.tenantContext.get()?.tenantId;
+    if (contexte) return contexte;
+    // Client non cloisonné à dessein : `forRouter` a déjà résolu ce routeur
+    // par le client cloisonné, donc l'appelant y a droit. On ne fait que lire
+    // à qui il appartient.
+    const routeur = await this.prisma.router.findUniqueOrThrow({
+      where: { id: routerId },
+      select: { tenantId: true },
+    });
+    return routeur.tenantId;
   }
 
   /**
