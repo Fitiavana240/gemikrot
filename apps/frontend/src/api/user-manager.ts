@@ -18,6 +18,13 @@ export interface UserManagerProfile {
   /** Offre correspondante, quand ce profil est piloté par l'application. */
   planId: string | null;
   planName: string | null;
+  /**
+   * `rattachee` : l'offre pointe sur ce profil User Manager.
+   * `meme-nom`  : une offre porte ce nom, mais par son profil HotSpot.
+   * `aucune`    : rien ne vend ce profil.
+   */
+  planLien: 'rattachee' | 'meme-nom' | 'aucune';
+  planKind: 'TICKET' | 'SUBSCRIPTION' | null;
   limitationNames: string[];
   accountCount: number;
   /**

@@ -153,6 +153,21 @@ export interface ProfileView extends UserManagerProfileDto {
   /** Offre correspondante, quand ce profil est piloté par l'application. */
   planId: string | null;
   planName: string | null;
+  /**
+   * Comment l'offre est reliee a ce profil.
+   *
+   * `rattachee` : l'offre pointe explicitement sur ce profil User Manager.
+   * `meme-nom`  : une offre porte ce nom, mais par son profil HotSpot -- elle
+   *               n'a jamais ete poussee vers User Manager.
+   * `aucune`    : rien ne vend ce profil.
+   *
+   * Les confondre faisait lire "hors offre" sur des profils que vend un
+   * abonnement bien reel, et c'est ce qui rendait les deux listes
+   * incomprehensibles cote a cote.
+   */
+  planLien: 'rattachee' | 'meme-nom' | 'aucune';
+  /** Un abonnement ne s'achete pas seul : il n'apparait pas sur la page publique. */
+  planKind: 'TICKET' | 'SUBSCRIPTION' | null;
   limitationNames: string[];
   accountCount: number;
   /** Attributions désignant un compte disparu du routeur. */
@@ -259,20 +274,29 @@ export class UserManagerService {
       mikrotik.getUserManagerProfileLimitations(),
       mikrotik.getUserManagerUserProfiles(),
       this.prisma.scopedStrict.plan.findMany({
-        select: { id: true, name: true, umProfileName: true },
+        select: { id: true, name: true, kind: true, umProfileName: true, mikrotikProfileName: true },
       }),
     ]);
 
-    const planByProfile = new Map(
+    // Deux tables, et l'ordre compte. Le rattachement explicite prime ; le
+    // simple homonyme ne vient qu'apres, et ne se presente pas comme un
+    // rattachement -- il dit qu'une offre existe mais n'a jamais ete poussee
+    // vers User Manager.
+    const parProfilUm = new Map(
       plans.filter((p) => p.umProfileName).map((p) => [p.umProfileName!, p]),
     );
+    const parNomHotspot = new Map(plans.map((p) => [p.mikrotikProfileName, p]));
 
     return profiles.map((profile) => {
-      const plan = planByProfile.get(profile.name) ?? null;
+      const rattachee = parProfilUm.get(profile.name) ?? null;
+      const homonyme = rattachee ? null : (parNomHotspot.get(profile.name) ?? null);
+      const plan = rattachee ?? homonyme;
       return {
         ...profile,
         planId: plan?.id ?? null,
         planName: plan?.name ?? null,
+        planLien: rattachee ? ('rattachee' as const) : homonyme ? ('meme-nom' as const) : ('aucune' as const),
+        planKind: plan ? (plan.kind as 'TICKET' | 'SUBSCRIPTION') : null,
         limitationNames: junctions
           .filter((j) => j.profileName === profile.name)
           .map((j) => j.limitationName),

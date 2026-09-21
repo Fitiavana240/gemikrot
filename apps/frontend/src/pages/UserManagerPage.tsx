@@ -388,8 +388,17 @@ function ProfilesTab() {
                 )}
               </td>
               <td className="px-3 py-2">
-                {profile.planName ? (
+                {/* Trois etats, et non deux. Une offre d'abonnement reliee par
+                    son nom HotSpot s'affichait "hors offre" alors qu'elle
+                    existe : c'est ce qui rendait cette liste et la page
+                    publique incomprehensibles cote a cote. */}
+                {profile.planLien === 'rattachee' ? (
                   <Badge tone="green">{profile.planName}</Badge>
+                ) : profile.planLien === 'meme-nom' ? (
+                  <span className="inline-flex flex-wrap items-center gap-1">
+                    <Badge tone="amber">{profile.planName}</Badge>
+                    <span className="text-xs text-amber-800">non rattachee</span>
+                  </span>
                 ) : (
                   <Badge tone="slate">hors offre</Badge>
                 )}
@@ -423,6 +432,24 @@ function ProfilesTab() {
           )}
         </Table>
       )}
+
+      {/* La question se pose des qu'on met cette liste a cote de la page
+          publique : pourquoi ne montrent-elles pas la meme chose ? La
+          reponse tient en deux regles, et elle a sa place ici. */}
+      <p className="max-w-3xl text-xs text-slate-500">
+        Cette liste est celle du <strong>routeur</strong> : ce qu&apos;il sait appliquer. La
+        page de paiement de vos clients, elle, ne montre que les{' '}
+        <strong>offres à ticket actives</strong> — un abonnement se vend au comptoir, pas en
+        libre-service, et n&apos;y apparaît donc jamais. Les deux listes ne peuvent pas
+        coïncider, et ce n&apos;est pas un défaut.
+        <br />
+        Ce qui en est un : une offre marquée{' '}
+        <span className="text-amber-800">non rattachée</span> porte le même nom qu&apos;un
+        profil sans y être reliée — elle n&apos;a jamais été poussée vers User Manager.
+        « Synchroniser », dans l&apos;écran Offres, referme l&apos;écart. Et une offre à
+        ticket absente d&apos;ici se vend sans que le routeur ait le profil correspondant : il
+        sera créé à la première vente en ligne, mais un lot généré au comptoir échouerait.
+      </p>
     </div>
   );
 }
