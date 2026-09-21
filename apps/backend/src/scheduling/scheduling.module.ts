@@ -5,6 +5,7 @@ import { JobLockService } from './job-lock.service.js';
 import { ExpiryJobService } from './expiry-job.service.js';
 import { PurgeJobService } from './purge-job.service.js';
 import { SchedulerService } from './scheduler.service.js';
+import { SchedulingController } from './scheduling.controller.js';
 
 /**
  * Les travaux de fond. `RoutersModule` est global, d'où l'absence d'import :
@@ -13,6 +14,7 @@ import { SchedulerService } from './scheduler.service.js';
  */
 @Module({
   imports: [ConfigModule, VouchersModule],
+  controllers: [SchedulingController],
   providers: [JobLockService, ExpiryJobService, PurgeJobService, SchedulerService],
   exports: [JobLockService, ExpiryJobService, PurgeJobService],
 })

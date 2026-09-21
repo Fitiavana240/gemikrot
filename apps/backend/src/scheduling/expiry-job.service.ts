@@ -98,6 +98,52 @@ export class ExpiryJobService {
     return total;
   }
 
+  /**
+   * Ce que le travail ferait, sans rien faire.
+   *
+   * Décider d'allumer l'ordonnanceur suppose de savoir ce qu'il coupera à la
+   * première minute. Sans cela on l'allume en fermant les yeux sur un parc
+   * qui sert des clients — ou, plus probablement, on ne l'allume jamais.
+   *
+   * Les deux critères sont **repris mot pour mot** de `runForTenant` et de
+   * `suspendExhausted`. Les réécrire autrement ferait mentir l'aperçu le jour
+   * où l'un des deux changerait, et c'est précisément ce genre d'écart qui
+   * rend un aperçu pire que pas d'aperçu du tout.
+   */
+  async apercu(): Promise<{
+    ticketsAExpirer: { code: string; expiresAt: Date | null }[];
+    abonnesASuspendre: { username: string; graceEndsAt: Date }[];
+  }> {
+    const now = new Date();
+
+    const échus = await this.prisma.scopedStrict.voucher.findMany({
+      where: {
+        expiresAt: { not: null, lte: now },
+        status: { in: [VoucherStatus.SOLD, VoucherStatus.ACTIVE] },
+        umUsername: { not: null },
+      },
+      select: { code: true, expiresAt: true },
+      take: 500,
+    });
+
+    const dépassés = await this.prisma.scopedStrict.subscription.findMany({
+      where: {
+        graceEndsAt: { lte: now },
+        status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.GRACE] },
+      },
+      select: { hotspotUsername: true, graceEndsAt: true },
+      take: 200,
+    });
+
+    return {
+      ticketsAExpirer: échus,
+      abonnesASuspendre: dépassés.map((a) => ({
+        username: a.hotspotUsername,
+        graceEndsAt: a.graceEndsAt,
+      })),
+    };
+  }
+
   private async runForTenant(): Promise<ExpiryReport> {
     const report: ExpiryReport = {
       vouchersExpired: 0,

@@ -9,6 +9,7 @@ import { useRouterSelection } from '../routers/RouterContext';
 import { mikrotikApi } from '../api/mikrotik';
 import { hotspotApi } from '../api/hotspot';
 import { tenantsApi } from '../api/tenants';
+import { schedulingApi } from '../api/scheduling';
 import { Stat, Gauge } from '../components/Stat';
 import {
   Badge,
@@ -64,6 +65,18 @@ export function DashboardPage() {
    */
   const exploitant = useQuery({ queryKey: ['tenant-me'], queryFn: tenantsApi.mine });
   const sansEncaissement = (exploitant.data?.mobileMoneyAccounts?.length ?? 0) === 0;
+  /**
+   * Ce que l'ordonnanceur ferait s'il tournait.
+   *
+   * Lu seulement quand il est éteint : c'est là que la question se pose. Deux
+   * requêtes sur la base, aucune sur le routeur.
+   */
+  const apercu = useQuery({
+    queryKey: ['scheduling-apercu'],
+    queryFn: schedulingApi.apercu,
+    enabled: resume.data?.ordonnanceurActif === false,
+    retry: false,
+  });
   /**
    * Lu séparément du résumé, exprès.
    *
@@ -143,6 +156,41 @@ export function DashboardPage() {
           <em> Suspendre</em> des Abonnements font le travail à la main. Pour les activer,
           il faut poser <span className="font-mono text-xs">SCHEDULER_ENABLED=&quot;true&quot;</span>{' '}
           dans la configuration du serveur, puis le redémarrer.
+          {/* La question qu'on se pose avant d'allumer : qu'est-ce que cela
+              coupe tout de suite ? Sans la réponse, on n'allume jamais. */}
+          {apercu.data && (
+            <p className="mt-2">
+              {apercu.data.ticketsAExpirer.length === 0 &&
+              apercu.data.abonnesASuspendre.length === 0 ? (
+                <>
+                  <strong>Les activer maintenant ne couperait rien</strong> : aucun ticket
+                  n&apos;a dépassé son échéance et aucun abonné n&apos;est hors tolérance.
+                </>
+              ) : (
+                <>
+                  <strong>
+                    Les activer maintenant couperait{' '}
+                    {apercu.data.ticketsAExpirer.length > 0 &&
+                      `${apercu.data.ticketsAExpirer.length} ticket(s)`}
+                    {apercu.data.ticketsAExpirer.length > 0 &&
+                      apercu.data.abonnesASuspendre.length > 0 &&
+                      ' et '}
+                    {apercu.data.abonnesASuspendre.length > 0 &&
+                      `${apercu.data.abonnesASuspendre.length} abonné(s)`}
+                    , dès la minute suivante.
+                  </strong>{' '}
+                  {[
+                    ...apercu.data.ticketsAExpirer.map((t) => t.code),
+                    ...apercu.data.abonnesASuspendre.map((a) => a.username),
+                  ]
+                    .slice(0, 8)
+                    .join(', ')}
+                  {apercu.data.ticketsAExpirer.length + apercu.data.abonnesASuspendre.length > 8 &&
+                    '…'}
+                </>
+              )}
+            </p>
+          )}
         </div>
       )}
 

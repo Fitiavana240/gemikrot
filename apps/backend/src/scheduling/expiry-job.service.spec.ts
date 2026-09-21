@@ -174,3 +174,62 @@ describe('ExpiryJobService', () => {
     expect(report.vouchersExpired).toBe(0);
   });
 });
+
+/**
+ * L'aperçu doit dire exactement ce que le travail ferait.
+ *
+ * Sa raison d'être est de permettre d'allumer l'ordonnanceur en connaissance
+ * de cause. Un aperçu qui diverge du travail qu'il annonce est pire que pas
+ * d'aperçu : il autorise une décision sur une fausse promesse.
+ */
+describe('ExpiryJobService.apercu', () => {
+  const clients = {
+    forRouter: vi.fn(async () => ({})),
+    getDefaultRouterId: vi.fn(async () => 'routeur-1'),
+  };
+  const build = (prisma: any) =>
+    new ExpiryJobService(
+      prisma,
+      clients as never,
+      new RouterAccessService(),
+      { enqueue: vi.fn(), pending: vi.fn() } as never,
+      tenantContext as never,
+    );
+
+  it('n’écrit rien', async () => {
+    // La propriété qui compte : on consulte l'aperçu pour décider, pas pour
+    // déclencher.
+    const prisma = createFakePrisma({
+      vouchers: [{ id: 'v-1', code: 'KF77', expiresAt: new Date(0), status: 'SOLD' }],
+      subscriptions: [{ id: 's-1', hotspotUsername: 'Mario', graceEndsAt: new Date(0) }],
+    });
+
+    await build(prisma).apercu();
+
+    expect(prisma.voucher.update).not.toHaveBeenCalled();
+    expect(prisma.subscription.update).not.toHaveBeenCalled();
+  });
+
+  it('interroge sur les mêmes critères que le travail', async () => {
+    // Les deux `where` sont recopiés du travail : ce test les fige, pour que
+    // l'un ne dérive pas de l'autre sans qu'on s'en aperçoive.
+    const prisma = createFakePrisma();
+
+    await build(prisma).apercu();
+
+    const oùTickets = prisma.voucher.findMany.mock.calls[0][0].where;
+    expect(oùTickets.expiresAt.not).toBeNull();
+    expect(oùTickets.status.in).toEqual(['SOLD', 'ACTIVE']);
+    expect(oùTickets.umUsername.not).toBeNull();
+
+    const oùAbonnés = prisma.subscription.findMany.mock.calls[0][0].where;
+    expect(oùAbonnés.status.in).toEqual(['ACTIVE', 'GRACE']);
+    expect(oùAbonnés.graceEndsAt.lte).toBeInstanceOf(Date);
+  });
+
+  it('rend les deux listes vides quand rien n’est échu', async () => {
+    const r = await build(createFakePrisma()).apercu();
+
+    expect(r).toEqual({ ticketsAExpirer: [], abonnesASuspendre: [] });
+  });
+});
