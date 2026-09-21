@@ -76,6 +76,10 @@ export const customersApi = {
   list: () => api.get<Customer[]>('/customers'),
   get: (id: string) => api.get<Customer>(`/customers/${id}`),
   fiche: (id: string) => api.get<CustomerSheet>(`/customers/${id}/fiche`),
+  consommation: (id: string, routerId?: string) =>
+    api.get<Consommation>(
+      `/customers/${id}/consommation${routerId ? `?routerId=${routerId}` : ''}`,
+    ),
   create: (input: CreateCustomerInput) => api.post<Customer>('/customers', input),
   /** Corriger un nom ou un numéro sans recréer la fiche. */
   update: (id: string, input: Partial<CreateCustomerInput>) =>
@@ -86,3 +90,36 @@ export const customersApi = {
   registerDevice: (id: string, input: RegisterDeviceInput) =>
     api.post<Device>(`/customers/${id}/devices`, input),
 };
+
+/**
+ * Ce qu'un client a réellement consommé, depuis la comptabilité RADIUS.
+ *
+ * Deux sources. Les compteurs du compte sont cumulés depuis sa création et
+ * ne s'effacent jamais : c'est le total juste. Le journal RADIUS donne le
+ * détail — quand, combien de fois — mais le routeur en efface les plus
+ * anciennes. `partiel` dit si une ligne repose sur ce seul journal, auquel
+ * cas le total est un plancher.
+ */
+export interface Consommation {
+  comptes: number;
+  sessions: number;
+  dureeSecondes: number;
+  octetsRecus: number;
+  octetsEnvoyes: number;
+  premiere: string | null;
+  derniere: string | null;
+  partiel: boolean;
+  parCompte: {
+    compte: string;
+    origine: 'ticket' | 'abonnement';
+    /** `compteur` = total juste ; `sessions` = plancher ; `aucune` = rien lu. */
+    source: 'compteur' | 'sessions' | 'aucune';
+    sessions: number;
+    dureeSecondes: number;
+    octetsRecus: number;
+    octetsEnvoyes: number;
+    premiere: string | null;
+    derniere: string | null;
+  }[];
+  sessionsDansLeJournal: number;
+}

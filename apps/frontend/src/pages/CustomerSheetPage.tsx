@@ -20,6 +20,7 @@ import {
   Table,
   TableSkeleton,
 } from '../components/ui';
+import { ConsommationClient } from '../components/ConsommationClient';
 
 function date(valeur: string | null | undefined): string {
   return valeur ? new Date(valeur).toLocaleDateString('fr-FR') : '—';
@@ -111,6 +112,11 @@ export function CustomerSheetPage() {
           </p>
         )}
       </Card>
+
+      {/* Après l'accès en cours, avant l'historique des achats : « combien
+          a-t-il consommé » se pose juste après « a-t-il encore accès », et
+          bien avant « qu'a-t-il acheté ». */}
+      <ConsommationClient customerId={client.id} />
 
       <section className="space-y-2">
         <h2 className="text-sm font-medium text-slate-700">Tickets</h2>
