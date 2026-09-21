@@ -118,6 +118,26 @@ export interface ReglagesPageConnexion {
   reseauSocial: string;
   /** Le tableau des tarifs, calculé depuis les offres actives à ticket. */
   afficherTarifs: boolean;
+  titreTarifs: string;
+  /** Les offres retirées de l'affiche — pas de la vente. */
+  tarifsMasques: string[];
+}
+
+/** Une offre, telle que l'écran propose de la montrer ou non. */
+export interface LigneTarif {
+  id: string;
+  nom: string;
+  prix: string;
+  duree: string;
+  appareils: number | null;
+  visible: boolean;
+}
+
+/** Une adresse que le client captif pourrait atteindre, déduite. */
+export interface AdresseCandidate {
+  url: string;
+  source: 'reseau-local' | 'domaine';
+  autorisee: boolean;
 }
 
 /** Un dossier que sert au moins un serveur HotSpot actif de ce routeur. */
@@ -132,6 +152,8 @@ export interface CiblePublication {
 export interface EtatPageConnexion {
   reglages: ReglagesPageConnexion;
   parDefaut: boolean;
+  tarifs: LigneTarif[];
+  adresses: AdresseCandidate[];
   cibles: CiblePublication[];
   /** Ce qui empêche de publier. Vide, la publication est possible. */
   empechements: string[];
@@ -145,28 +167,25 @@ export const hotspotApi = {
    * Les réglages en cours de saisie sont passés tels quels : l'aperçu suit ce
    * qu'on tape, sans que rien ne soit enregistré.
    */
-  apercuPageConnexion: (reglages: Partial<ReglagesPageConnexion>) => {
-    const q = new URLSearchParams();
-    for (const [clef, valeur] of Object.entries(reglages)) {
-      if (typeof valeur === 'string' && valeur !== '') q.set(clef, valeur);
-      // Le booléen voyage en toutes lettres : filtré comme une chaîne vide,
-      // « ne pas afficher les tarifs » n'aurait jamais atteint l'aperçu.
-      if (typeof valeur === 'boolean') q.set(clef, String(valeur));
-    }
-    return api.get<{ contenu: string; octets: number }>(`/hotspot/page-connexion?${q}`);
-  },
+  apercuPageConnexion: (reglages: Partial<ReglagesPageConnexion>) =>
+    api.post<{ contenu: string; octets: number }>('/hotspot/page-connexion/apercu', reglages),
   /**
    * Les réglages enregistrés, et où la page doit aller sur ce routeur.
    *
    * `portailUrl` permet de faire suivre l'adresse en cours de saisie : sans
    * elle, le refus ne se révélerait qu'après enregistrement.
    */
-  etatPageConnexion: (routerId?: string, portailUrl?: string) =>
-    api.get<EtatPageConnexion>(
-      `/hotspot/page-connexion/etat${routerQuery(routerId)}${
-        portailUrl ? `${routerId ? '&' : '?'}portailUrl=${encodeURIComponent(portailUrl)}` : ''
-      }`,
-    ),
+  etatPageConnexion: (routerId?: string, portailUrl?: string) => {
+    const q = new URLSearchParams();
+    if (routerId) q.set('routerId', routerId);
+    if (portailUrl) q.set('portailUrl', portailUrl);
+    // Le port par lequel la console est consultée : le serveur ne le connaît
+    // pas — en développement le navigateur parle à Vite sur 5173, qui relaie
+    // vers l'API sur 3000. C'est lui qui rend les adresses proposées
+    // utilisables telles quelles plutôt qu'à compléter de tête.
+    if (window.location.port) q.set('portConsole', window.location.port);
+    return api.get<EtatPageConnexion>(`/hotspot/page-connexion/etat?${q}`);
+  },
   /** Enregistre les réglages. Rien n'est envoyé au routeur. */
   enregistrerPageConnexion: (reglages: Partial<ReglagesPageConnexion>) =>
     api.patch<{ reglages: ReglagesPageConnexion; parDefaut: boolean }>(
@@ -180,13 +199,8 @@ export const hotspotApi = {
    * routeur — ce qui sera le cas de la plupart des exploitants tant qu'il n'y
    * a ni tunnel ni adresse publique.
    */
-  telechargerPageConnexion: (portailUrl?: string) =>
-    telecharger(
-      `/hotspot/page-connexion/fichier${
-        portailUrl ? `?portailUrl=${encodeURIComponent(portailUrl)}` : ''
-      }`,
-      'login.html',
-    ),
+  telechargerPageConnexion: (reglages: Partial<ReglagesPageConnexion>) =>
+    telecharger('/hotspot/page-connexion/fichier', 'login.html', reglages),
   /** Écrit la page sur chaque dossier réellement servi par le routeur. */
   publierPageConnexion: (routerId?: string) =>
     api.post<{ ecrits: { chemin: string; octets: number }[] }>(

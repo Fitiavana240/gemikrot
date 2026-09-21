@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Header,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -44,11 +45,18 @@ export class HotspotController {
    * le routeur, et plus personne ne se connecte -- ni les clients deja
    * payants, ni ceux qui viennent d'acheter.
    */
-  @Get('page-connexion')
-  apercuPageConnexion(@Query() q: Record<string, string>) {
-    // Les reglages en cours de saisie priment sur ceux enregistres : c'est ce
-    // qui rend l'apercu vivant pendant qu'on tape, sans rien ecrire en base.
-    return this.pageConnexion.apercu(q as never);
+  /**
+   * L'apercu, reglages en cours de saisie compris.
+   *
+   * En POST alors qu'il ne change rien, et c'est deliberе : un logo embarque
+   * pese une dizaine de milliers de caracteres, et une URL de cette longueur
+   * se fait refuser par Node avant meme d'atteindre le controleur -- releve,
+   * HTTP 431. Le corps de requete n'a pas cette limite.
+   */
+  @Post('page-connexion/apercu')
+  @HttpCode(200)
+  apercuPageConnexion(@Body() body: Record<string, unknown>) {
+    return this.pageConnexion.apercu(body as never);
   }
 
   /**
@@ -63,8 +71,13 @@ export class HotspotController {
   etatPageConnexion(
     @Query('routerId') routerId?: string,
     @Query('portailUrl') portailUrl?: string,
+    // Le port par lequel la console est consultee en ce moment meme. Le
+    // serveur ne le connait pas : en developpement le navigateur parle a Vite
+    // sur 5173, qui relaie vers l'API sur 3000. C'est donc au navigateur de
+    // le dire, et c'est la seule facon de proposer une adresse qui marche.
+    @Query('portConsole') portConsole?: string,
   ) {
-    return this.pageConnexion.etat(routerId, portailUrl);
+    return this.pageConnexion.etat(routerId, portailUrl, portConsole);
   }
 
   /**
@@ -79,16 +92,15 @@ export class HotspotController {
    * En piece jointe, jamais affiche : un HTML rendu dans l'onglet donnerait
    * une page qui ressemble a la vraie et qu'on ne peut pas enregistrer.
    */
-  @Get('page-connexion/fichier')
+  @Post('page-connexion/fichier')
+  @HttpCode(200)
   @Header('Content-Type', 'text/html; charset=utf-8')
   async fichierPageConnexion(
     @Res({ passthrough: true }) res: Response,
-    @Query('portailUrl') portailUrl?: string,
+    @Body() body: Record<string, unknown>,
   ) {
     res.setHeader('Content-Disposition', 'attachment; filename="login.html"');
-    const { contenu } = await this.pageConnexion.apercu(
-      portailUrl ? ({ portailUrl } as never) : undefined,
-    );
+    const { contenu } = await this.pageConnexion.apercu(body as never);
     return contenu;
   }
 

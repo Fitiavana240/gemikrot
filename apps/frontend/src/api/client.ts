@@ -115,14 +115,30 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
  * Le nom vient de `Content-Disposition` quand le serveur en donne un : c'est
  * lui qui sait sur quelles dates porte l'export.
  */
-export async function telecharger(path: string, nomParDefaut: string): Promise<void> {
+export async function telecharger(
+  path: string,
+  nomParDefaut: string,
+  /**
+   * Corps de requête facultatif — le téléchargement passe alors en POST.
+   *
+   * Une page de connexion portant un logo embarqué pèse des dizaines de
+   * milliers de caractères : passés en paramètres d'adresse, Node refuse la
+   * requête avant qu'elle n'atteigne le serveur (HTTP 431).
+   */
+  corps?: unknown,
+): Promise<void> {
   const token = getToken();
   const headers = new Headers();
   if (token) headers.set('Authorization', `Bearer ${token}`);
   const tenantCible = getTenantCible();
   if (tenantCible) headers.set('X-Tenant-Id', tenantCible);
+  if (corps !== undefined) headers.set('Content-Type', 'application/json');
 
-  const res = await fetch(`/api${path}`, { headers });
+  const res = await fetch(`/api${path}`, {
+    headers,
+    method: corps === undefined ? 'GET' : 'POST',
+    body: corps === undefined ? undefined : JSON.stringify(corps),
+  });
   if (!res.ok) throw new ApiError(res.status, `Téléchargement refusé (${res.status})`);
 
   const disposition = res.headers.get('content-disposition') ?? '';

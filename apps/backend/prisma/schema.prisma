@@ -117,6 +117,16 @@ model HotspotLoginPage {
   /// d'achat garde la sienne -- le laisser recolorer permettrait de le
   /// rendre invisible, ce que toute cette mecanique sert a empecher.
   couleur          String?
+  /// Le logo, sous deux formes possibles.
+  ///
+  /// Une adresse `http(s)` : chargee depuis le reseau, donc son hote doit
+  /// figurer dans le Walled Garden, sinon rien ne s'affiche.
+  ///
+  /// Ou une image embarquee `data:image/...;base64,...` : elle voyage dans la
+  /// page, ne depend d'aucun reseau, et s'affiche meme si le serveur est
+  /// arrete. C'est la seule forme qui tienne la promesse d'une page de
+  /// connexion sans mode de panne, et c'est donc celle que produit l'envoi
+  /// depuis la console -- l'image y est reduite avant d'etre encodee.
   logoUrl          String? @map("logo_url")
   /// Adresse de la page de paiement, telle qu'un client captif peut
   /// l'atteindre : sans Internet, et donc jamais le `dns-name` du portail.
@@ -145,6 +155,18 @@ model HotspotLoginPage {
   /// 30 000 Ar qui n'existe pas, et passait sous silence les 4 h a 1 000 Ar.
   /// Calcule, il ne peut plus diverger.
   afficherTarifs Boolean @default(true) @map("afficher_tarifs")
+  /// Le titre du tableau. La page de ce parc disait << SARANY (Tarifs) >>.
+  titreTarifs    String? @map("titre_tarifs")
+  /// Les offres que l'exploitant ne veut pas montrer sur le portail.
+  ///
+  /// Par identifiant d'offre, et non par nom : renommer une offre ne doit pas
+  /// la faire reapparaitre a l'insu de celui qui l'avait retiree. Une offre
+  /// supprimee laisse un identifiant orphelin, sans effet.
+  ///
+  /// Masquer n'est pas retirer de la vente : l'offre reste achetable sur la
+  /// page de paiement. C'est l'affiche du portail qu'on allege, pour ne pas
+  /// noyer un client devant dix lignes.
+  tarifsMasques  String[] @default([]) @map("tarifs_masques")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

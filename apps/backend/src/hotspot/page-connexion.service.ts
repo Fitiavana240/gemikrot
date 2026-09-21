@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { networkInterfaces } from 'node:os';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
@@ -59,6 +60,19 @@ const DOSSIER_PAR_DEFAUT = 'hotspot';
  */
 const METHODE_REQUISE = 'http-pap';
 
+/**
+ * Ce qu'un logo embarqué a le droit de peser, en caractères.
+ *
+ * La page fait environ 9 400 octets et l'API du routeur en refuse plus de
+ * 61 440 : il reste donc de la marge, mais pas infiniment. 40 000 caractères
+ * de base64 valent à peu près 30 Ko d'image — largement de quoi loger une
+ * vignette de 128 px, et pas de quoi faire passer une photo.
+ *
+ * La console réduit l'image avant de l'envoyer ; ce plafond n'est là que pour
+ * le cas où elle serait contournée.
+ */
+const LOGO_MAX_CARACTERES = 40_000;
+
 export interface ReglagesPageConnexion {
   titre: string;
   sousTitre: string;
@@ -78,6 +92,37 @@ export interface ReglagesPageConnexion {
   reseauSocial: string;
   /** Afficher le tableau des tarifs, calculé depuis les offres réelles. */
   afficherTarifs: boolean;
+  /** Le titre du tableau. La page de ce parc disait « SARANY (Tarifs) ». */
+  titreTarifs: string;
+  /** Les offres retirées de l'affiche — pas de la vente. */
+  tarifsMasques: string[];
+}
+
+/** Une offre, telle que l'écran de réglage la propose de montrer ou non. */
+export interface LigneTarif {
+  id: string;
+  nom: string;
+  prix: string;
+  duree: string;
+  appareils: number | null;
+  visible: boolean;
+}
+
+/**
+ * Une adresse que le client captif pourrait atteindre.
+ *
+ * L'exploitant la tapait à la main, et personne ne lui disait laquelle. Elle
+ * se déduit pourtant : la console connaît ses propres cartes réseau, le
+ * routeur annonce l'adresse de son portail, et il suffit de garder celles qui
+ * sont sur le même réseau — les cartes virtuelles d'un poste de travail
+ * tombent d'elles-mêmes.
+ */
+export interface AdresseCandidate {
+  url: string;
+  /** D'où elle vient, pour que le choix se fasse en connaissance de cause. */
+  source: 'reseau-local' | 'domaine';
+  /** Le Walled Garden la laisse-t-il déjà passer ? */
+  autorisee: boolean;
 }
 
 /** Une cible réelle : un dossier que sert au moins un serveur HotSpot. */
@@ -97,6 +142,10 @@ export interface EtatPageConnexion {
   reglages: ReglagesPageConnexion;
   /** `true` tant que l'exploitant n'a rien enregistré : tout vient des défauts. */
   parDefaut: boolean;
+  /** Les offres à ticket actives, et si l'affiche les montre. */
+  tarifs: LigneTarif[];
+  /** Les adresses que le client captif pourrait atteindre, déduites. */
+  adresses: AdresseCandidate[];
   cibles: CiblePublication[];
   /** Ce qui empêche de publier. Vide, la publication est possible. */
   empechements: string[];
@@ -166,6 +215,8 @@ export class PageConnexionService {
         // Vrai par défaut : une page de connexion sans prix oblige le client
         // à demander, ce qui est exactement ce qu'on cherche à supprimer.
         afficherTarifs: ligne?.afficherTarifs ?? true,
+        titreTarifs: ligne?.titreTarifs ?? 'Tarifs',
+        tarifsMasques: ligne?.tarifsMasques ?? [],
       },
     };
   }
@@ -180,6 +231,7 @@ export class PageConnexionService {
     if (dto.couleur !== undefined && dto.couleur !== null) {
       exigerCouleurLisible(dto.couleur);
     }
+    if (dto.logoUrl) exigerLogoUtilisable(dto.logoUrl);
 
     const donnees = {
       titre: dto.titre ?? null,
@@ -197,6 +249,8 @@ export class PageConnexionService {
       // Le formulaire envoie « true »/« false » en chaîne quand il passe par
       // la requête : un test de vérité brut ferait de « false » un oui.
       afficherTarifs: dto.afficherTarifs === undefined ? true : `${dto.afficherTarifs}` !== 'false',
+      titreTarifs: dto.titreTarifs ?? null,
+      tarifsMasques: Array.isArray(dto.tarifsMasques) ? dto.tarifsMasques : [],
     };
 
     await this.prisma.hotspotLoginPage.upsert({
@@ -243,7 +297,19 @@ export class PageConnexionService {
       remplace?.afficherTarifs === undefined
         ? reglages.afficherTarifs
         : `${remplace.afficherTarifs}` !== 'false';
-    const r = { ...reglages, ...nettoyer(remplace), afficherTarifs: tarifsDemandes };
+    // Meme raison pour la liste des offres masquees : c'est un tableau, et
+    // `nettoyer` ne garde que des chaines. Sans cette ligne, decocher une
+    // ligne ne changerait rien a l'apercu -- on decoche, le tableau ne bouge
+    // pas, et on conclut que le reglage ne marche pas.
+    const masquees = Array.isArray(remplace?.tarifsMasques)
+      ? remplace.tarifsMasques
+      : reglages.tarifsMasques;
+    const r = {
+      ...reglages,
+      ...nettoyer(remplace),
+      afficherTarifs: tarifsDemandes,
+      tarifsMasques: masquees,
+    };
 
     /**
      * Les tarifs, lus là où ils se vendent.
@@ -255,11 +321,19 @@ export class PageConnexionService {
      * 30 000 Ar qui n'existe pas, et taisait les 4 h à 1 000 Ar.
      */
     const offres = r.afficherTarifs
-      ? await this.prisma.scopedStrict.plan.findMany({
-          where: { status: 'ACTIVE', kind: 'TICKET' },
-          select: { name: true, price: true, validityDurationSeconds: true, maxSharedUsers: true },
-          orderBy: { price: 'asc' },
-        })
+      ? (
+          await this.prisma.scopedStrict.plan.findMany({
+            where: { status: 'ACTIVE', kind: 'TICKET' },
+            select: {
+              id: true,
+              name: true,
+              price: true,
+              validityDurationSeconds: true,
+              maxSharedUsers: true,
+            },
+            orderBy: { price: 'asc' },
+          })
+        ).filter((o) => !r.tarifsMasques.includes(o.id))
       : [];
 
     // Une barre finale se glisse une fois sur deux dans un champ d'adresse,
@@ -275,7 +349,7 @@ export class PageConnexionService {
       .replaceAll('__AIDE_ACHAT__', echapper(r.aideAchat))
       .replaceAll('__COULEUR__', couleurSure(r.couleur))
       .replaceAll('__BLOC_LOGO__', blocLogo(r.logoUrl))
-      .replaceAll('__BLOC_TARIFS__', blocTarifs(offres, tenant.currency))
+      .replaceAll('__BLOC_TARIFS__', blocTarifs(offres, tenant.currency, r.titreTarifs))
       .replaceAll('__BLOC_PIED__', blocPied(r))
       .replaceAll('__LIEU__', echapper(r.piedDePage))
       .replaceAll('__PORTAIL__', echapper(portail))
@@ -295,7 +369,11 @@ export class PageConnexionService {
    * affiché pour un geste sans effet est la pire panne possible : on cherche
    * la cause partout sauf là.
    */
-  async etat(routerId?: string, portailSaisi?: string): Promise<EtatPageConnexion> {
+  async etat(
+    routerId?: string,
+    portailSaisi?: string,
+    portConsole?: string,
+  ): Promise<EtatPageConnexion> {
     const tenantId = this.tenantContext.requireTenantId();
     const { reglages: enregistres, parDefaut } = await this.reglages();
     // L'adresse en cours de saisie prime sur celle enregistree : sans cela,
@@ -309,7 +387,8 @@ export class PageConnexionService {
       ? await this.clients.forRouter(routerId)
       : await this.clients.forDefaultRouter();
 
-    const [serveurs, profils, fichiers, wgHotes, wgAdresses, publications] = await Promise.all([
+    const [serveurs, profils, fichiers, wgHotes, wgAdresses, publications, offres, exploitant] =
+      await Promise.all([
       mikrotik.getHotspotServers(),
       mikrotik.getHotspotServerProfiles(),
       mikrotik.getRouterFiles(),
@@ -321,6 +400,21 @@ export class PageConnexionService {
       routerId
         ? this.prisma.hotspotLoginPublication.findMany({ where: { tenantId, routerId } })
         : Promise.resolve([]),
+      this.prisma.scopedStrict.plan.findMany({
+        where: { status: 'ACTIVE', kind: 'TICKET' },
+        select: {
+          id: true,
+          name: true,
+          price: true,
+          validityDurationSeconds: true,
+          maxSharedUsers: true,
+        },
+        orderBy: { price: 'asc' },
+      }),
+      this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { currency: true, domains: true },
+      }),
     ]);
 
     const profilPar = new Map(profils.map((p) => [p.name, p]));
@@ -355,6 +449,22 @@ export class PageConnexionService {
       };
     });
 
+    /**
+     * Les noms et adresses par lesquels le routeur se designe lui-meme.
+     *
+     * Pour un client non connecte, ils menent au portail captif. Une page de
+     * paiement logee derriere l'un d'eux renverrait le client sur l'ecran
+     * qu'il vient de quitter, en boucle : ils sont donc refuses comme
+     * adresse, et jamais proposes -- proposer ce qu'on refuse ensuite est une
+     * facon de faire perdre son temps a quelqu'un.
+     */
+    const nomsDuPortail = new Set(
+      profils
+        .flatMap((p) => [p.dnsName, p.hotspotAddress])
+        .filter((n): n is string => Boolean(n) && n !== '0.0.0.0')
+        .map((n) => n.toLowerCase()),
+    );
+
     const empechements: string[] = [];
     const avertissements: string[] = [];
 
@@ -376,15 +486,7 @@ export class PageConnexionService {
       );
     } else {
       const hote = hoteDe(portail);
-      const noms = profils
-        .map((p) => p.dnsName)
-        .filter((n): n is string => Boolean(n))
-        .map((n) => n.toLowerCase());
-      const adresses = profils
-        .map((p) => p.hotspotAddress)
-        .filter((a): a is string => Boolean(a) && a !== '0.0.0.0');
-
-      if (hote && (noms.includes(hote) || adresses.includes(hote))) {
+      if (hote && nomsDuPortail.has(hote)) {
         empechements.push(
           `« ${hote} » est l'adresse du portail captif lui-même : pour un client non connecté, ce nom mène au routeur. Le bouton d'achat le renverrait sur la page qu'il vient de quitter, en boucle.`,
         );
@@ -415,7 +517,56 @@ export class PageConnexionService {
       }
     }
 
-    return { reglages, parDefaut, cibles, empechements, avertissements };
+    /**
+     * Les adresses que le client captif pourrait atteindre.
+     *
+     * L'exploitant les tapait à la main, et rien ne lui disait laquelle
+     * prendre — alors qu'elles se déduisent. La console connaît ses propres
+     * cartes réseau ; le routeur annonce l'adresse de son portail ; on garde
+     * celles qui sont sur le même réseau. Les cartes virtuelles d'un poste de
+     * travail (Hyper-V, WSL) tombent d'elles-mêmes, et c'est bien le but :
+     * elles sont injoignables depuis le Wi-Fi.
+     */
+    const reseauxPortail = profils
+      .map((p) => p.hotspotAddress)
+      .filter((a): a is string => Boolean(a) && a !== '0.0.0.0');
+
+    const port = portConsole && /^\d+$/.test(portConsole) ? `:${portConsole}` : '';
+    const adresses: AdresseCandidate[] = [
+      ...adressesLocales()
+        .filter((ip) => reseauxPortail.some((portail) => memeReseau24(ip, portail)))
+        .map((ip) => ({ url: `http://${ip}${port}`, source: 'reseau-local' as const })),
+      // Le domaine de l'exploitant marche aussi, s'il pointe vers la console
+      // et qu'il est autorisé : c'est la forme qui survit à un changement
+      // d'adresse, puisque la page n'en porte plus aucune.
+      ...(exploitant?.domains ?? [])
+        // Le domaine de ce parc, `wifitati.net`, est aussi le `dns-name` du
+        // profil HotSpot : le proposer reviendrait a proposer le routeur.
+        .filter((d) => !nomsDuPortail.has(d.toLowerCase()))
+        .map((d) => ({ url: `http://${d}`, source: 'domaine' as const })),
+    ].map((c) => ({
+      ...c,
+      autorisee: autoriseParLeWalledGarden(c.url, wgHotes, wgAdresses).autorise,
+    }));
+
+    return {
+      reglages,
+      parDefaut,
+      cibles,
+      empechements,
+      avertissements,
+      adresses,
+      tarifs: offres.map((o) => ({
+        id: o.id,
+        nom: o.name,
+        prix: `${Number(o.price).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' ')} ${
+          exploitant?.currency ?? ''
+        }`.trim(),
+        duree: duree(o.validityDurationSeconds),
+        appareils: o.maxSharedUsers,
+        visible: !reglages.tarifsMasques.includes(o.id),
+      })),
+    };
   }
 
   /**
@@ -506,6 +657,7 @@ const CHAMPS = [
   'adresse',
   'telephones',
   'reseauSocial',
+  'titreTarifs',
 ] as const;
 
 /**
@@ -532,6 +684,32 @@ function nettoyer(
     }
   }
   return gardes;
+}
+
+/** Les adresses IPv4 de la machine, cartes internes exclues. */
+function adressesLocales(): string[] {
+  const trouvees: string[] = [];
+  for (const liste of Object.values(networkInterfaces())) {
+    for (const carte of liste ?? []) {
+      if (carte.family === 'IPv4' && !carte.internal) trouvees.push(carte.address);
+    }
+  }
+  return trouvees;
+}
+
+/**
+ * Deux adresses sur le même /24 ?
+ *
+ * Le masque réel n'est pas lu : celui de la console ne dit rien de celui du
+ * routeur, et un HotSpot de quartier tient dans un /24. Une supposition, mais
+ * une supposition qui ne décide de rien — elle ne fait que **proposer** une
+ * adresse, que l'exploitant confirme ou remplace.
+ */
+export function memeReseau24(a: string, b: string): boolean {
+  const ta = a.split('.');
+  const tb = b.split('.');
+  if (ta.length !== 4 || tb.length !== 4) return false;
+  return ta[0] === tb[0] && ta[1] === tb[1] && ta[2] === tb[2];
 }
 
 /**
@@ -635,17 +813,52 @@ function couleurSure(couleur: string): string {
   return /^#[0-9a-fA-F]{6}$/.test(couleur.trim()) ? couleur.trim() : '#0284c7';
 }
 
+/** Les formes d'image qu'on accepte d'embarquer, et rien d'autre. */
+const LOGO_EMBARQUE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+
 /**
  * Le logo, ou rien du tout.
  *
- * Seuls `http://` et `https://` sont acceptés : une adresse `javascript:`
- * dans un attribut `src` ne s'exécute pas, mais rien ne justifie de laisser
- * passer autre chose sur la page qu'on ne peut pas se permettre de casser.
+ * Deux formes, et une seule est sans risque. Une adresse `http(s)` dépend du
+ * réseau : si son hôte n'est pas dans le Walled Garden, le client voit un
+ * cadre vide. Une image embarquée voyage dans la page et s'affiche toujours —
+ * c'est celle que produit l'envoi depuis la console.
+ *
+ * Tout le reste est écarté : `javascript:` dans un `src` ne s'exécute pas,
+ * mais rien ne justifie de laisser passer autre chose sur la page qu'on ne
+ * peut justement pas se permettre de casser.
  */
 function blocLogo(url: string | null): string {
   if (!url) return '';
-  if (!/^https?:\/\//i.test(url.trim())) return '';
-  return `<img class="logo" src="${echapper(url.trim())}" alt="" />`;
+  const propre = url.trim();
+  const accepte = /^https?:\/\//i.test(propre) || LOGO_EMBARQUE.test(propre);
+  if (!accepte) return '';
+  return `<img class="logo" src="${echapper(propre)}" alt="" />`;
+}
+
+/**
+ * Refuse un logo qu'on ne saurait pas servir, ou qui ferait exploser la page.
+ *
+ * Le plafond ne concerne que la forme embarquée : une adresse `http` ne pèse
+ * que sa longueur. La console réduit l'image avant l'envoi ; ce contrôle est
+ * là pour le cas où elle serait contournée, pas pour corriger son travail.
+ */
+export function exigerLogoUtilisable(url: string): void {
+  const propre = url.trim();
+  if (/^https?:\/\//i.test(propre)) return;
+
+  if (!LOGO_EMBARQUE.test(propre)) {
+    throw new BadRequestException(
+      "Le logo doit être une adresse http(s) ou une image PNG, JPEG ou WebP envoyée depuis cet écran.",
+    );
+  }
+  if (propre.length > LOGO_MAX_CARACTERES) {
+    throw new BadRequestException(
+      `L'image est trop lourde une fois embarquée dans la page (${Math.round(
+        propre.length / 1024,
+      )} Ko, maximum ${Math.round(LOGO_MAX_CARACTERES / 1024)} Ko). Le routeur refuse une page de plus de 61 440 octets.`,
+    );
+  }
 }
 
 /**
@@ -657,6 +870,7 @@ function blocLogo(url: string | null): string {
 function blocTarifs(
   offres: { name: string; price: unknown; validityDurationSeconds: number; maxSharedUsers: number | null }[],
   devise: string,
+  titre: string,
 ): string {
   if (offres.length === 0) return '';
 
@@ -672,7 +886,7 @@ function blocTarifs(
     .join('\n');
 
   return `<div class="tarifs">
-        <h2>Tarifs</h2>
+        <h2>${echapper(titre)}</h2>
         <table>
 ${lignes}
         </table>

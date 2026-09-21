@@ -6,6 +6,7 @@ import { useRouterSelection } from '../routers/RouterContext';
 import { ApiError } from '../api/client';
 import { Confirmation } from '../components/Edition';
 import { Button, Card, FormField, Input } from '../components/ui';
+import { LogoPortail } from '../components/LogoPortail';
 
 /**
  * La page que voit un client connecté au Wi-Fi mais pas encore à Internet.
@@ -99,7 +100,7 @@ export function PageConnexionTab() {
   });
 
   const telecharger = useMutation({
-    mutationFn: () => hotspotApi.telechargerPageConnexion(form?.portailUrl),
+    mutationFn: () => hotspotApi.telechargerPageConnexion(form ?? {}),
     onSuccess: () => {
       setErreur(null);
       setCompteRendu(
@@ -264,16 +265,18 @@ export function PageConnexionTab() {
                   </div>
                 </FormField>
               </div>
-              <FormField
-                label="Logo (adresse d'une image)"
-                aide="Chargé depuis le réseau : son adresse doit aussi être autorisée dans le Walled Garden, sinon il ne s'affiche pas. Laissez vide pour ne pas en mettre."
-              >
-                <Input
-                  value={form.logoUrl ?? ''}
-                  placeholder="https://…/logo.png"
-                  onChange={(e) => champ('logoUrl', e.target.value)}
+              <FormField label="Logo">
+                <LogoPortail
+                  valeur={form.logoUrl}
+                  onChange={(v) => champ('logoUrl', v)}
                 />
               </FormField>
+              {/* Elle se tapait a la main, et rien ne disait laquelle prendre.
+                  Elle se deduit pourtant : la console connait ses cartes
+                  reseau, le routeur annonce l'adresse de son portail, et on
+                  garde celles qui sont sur le meme reseau. Les cartes
+                  virtuelles d'un poste de travail tombent d'elles-memes --
+                  elles sont injoignables depuis le Wi-Fi. */}
               <FormField
                 label="Adresse de la page de paiement"
                 aide="C'est elle que le bouton d'achat ouvrira. Elle doit être joignable depuis le Wi-Fi seul, sans Internet — donc jamais le nom du portail captif lui-même."
@@ -284,6 +287,35 @@ export function PageConnexionTab() {
                   onChange={(e) => champ('portailUrl', e.target.value)}
                 />
               </FormField>
+              {(d?.adresses.length ?? 0) > 0 && (
+                <div className="-mt-1 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-slate-500">Détectées&nbsp;:</span>
+                  {d?.adresses.map((a) => (
+                    <button
+                      key={a.url}
+                      type="button"
+                      onClick={() => champ('portailUrl', a.url)}
+                      className={`rounded-full border px-2.5 py-1 font-mono ${
+                        form.portailUrl === a.url
+                          ? 'border-sky-300 bg-sky-50 text-sky-800'
+                          : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                      }`}
+                      title={
+                        a.source === 'domaine'
+                          ? 'Votre domaine — il doit pointer vers cette console'
+                          : 'Adresse de cette machine sur le réseau du portail'
+                      }
+                    >
+                      {a.url}
+                      {/* Autorisée ou non : c'est ce qui décide si le bouton
+                          mènera quelque part, et c'est lu sur le routeur. */}
+                      <span className={a.autorisee ? 'text-emerald-700' : 'text-amber-700'}>
+                        {a.autorisee ? ' ✓' : ' ⚠'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Calcule, jamais saisi : l'affiche ecrite a la main de ce parc
                   annoncait « 1 Ora » pour 500 Ar quand le routeur en donne
@@ -307,6 +339,63 @@ export function PageConnexionTab() {
                   </span>
                 </span>
               </label>
+
+              {form.afficherTarifs && (
+                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <FormField label="Titre du tableau">
+                    <Input
+                      value={form.titreTarifs}
+                      placeholder="SARANY (Tarifs)"
+                      onChange={(e) => champ('titreTarifs', e.target.value)}
+                    />
+                  </FormField>
+                  {/* Chaque exploitant a ses offres, et n'a pas forcement envie
+                      de toutes les afficher : dix lignes sur un telephone
+                      noient celle qu'on cherche. Decocher retire de
+                      l'affiche, jamais de la vente -- l'offre reste achetable
+                      sur la page de paiement. */}
+                  <div className="space-y-1">
+                    {(d?.tarifs ?? []).map((t) => (
+                      <label
+                        key={t.id}
+                        className="flex items-center gap-2 text-sm text-slate-700"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!form.tarifsMasques.includes(t.id)}
+                          onChange={(e) =>
+                            setForm((f) =>
+                              f
+                                ? {
+                                    ...f,
+                                    tarifsMasques: e.target.checked
+                                      ? f.tarifsMasques.filter((x) => x !== t.id)
+                                      : [...f.tarifsMasques, t.id],
+                                  }
+                                : f,
+                            )
+                          }
+                        />
+                        <span className="tabular-nums font-medium">{t.prix}</span>
+                        <span className="text-slate-500">
+                          {t.duree}
+                          {t.appareils && t.appareils > 1 ? ` (${t.appareils} appareils)` : ''}
+                        </span>
+                        <span className="truncate text-xs text-slate-400">{t.nom}</span>
+                      </label>
+                    ))}
+                    {(d?.tarifs.length ?? 0) === 0 && (
+                      <p className="text-xs text-slate-500">
+                        Aucune offre a ticket active : le tableau ne s&apos;affichera pas.
+                      </p>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Decocher retire la ligne de l&apos;affiche, <strong>pas de la vente</strong> :
+                    l&apos;offre reste achetable sur la page de paiement.
+                  </p>
+                </div>
+              )}
 
               {canWrite && (
                 <div className="flex flex-wrap gap-2 pt-1">

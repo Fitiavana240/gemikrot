@@ -3,6 +3,8 @@ import {
   autoriseParLeWalledGarden,
   contrasteAvecBlanc,
   duree,
+  exigerLogoUtilisable,
+  memeReseau24,
   exigerCouleurLisible,
   hoteDe,
   PageConnexionService,
@@ -28,10 +30,17 @@ const TENANT = {
 
 /** Les offres de ce parc, telles qu'elles sont en base. */
 const OFFRES = [
-  { name: '2Heure-500Ar', price: 500, validityDurationSeconds: 7200, maxSharedUsers: 1 },
-  { name: '4Heure-1000Ar', price: 1000, validityDurationSeconds: 14400, maxSharedUsers: 1 },
-  { name: '1Jour-2000Ar', price: 2000, validityDurationSeconds: 86400, maxSharedUsers: 1 },
+  { id: 'p1', name: '2Heure-500Ar', price: 500, validityDurationSeconds: 7200, maxSharedUsers: 1 },
   {
+    id: 'p2',
+    name: '4Heure-1000Ar',
+    price: 1000,
+    validityDurationSeconds: 14400,
+    maxSharedUsers: 1,
+  },
+  { id: 'p3', name: '1Jour-2000Ar', price: 2000, validityDurationSeconds: 86400, maxSharedUsers: 1 },
+  {
+    id: 'p4',
     name: 'Abo-25000Ar-2Appareils',
     price: 25000,
     validityDurationSeconds: 2592000,
@@ -68,7 +77,7 @@ function service(options: {
   };
 
   const prisma: any = {
-    tenant: { findUnique: vi.fn(async () => TENANT) },
+    tenant: { findUnique: vi.fn(async () => ({ ...TENANT, domains: ['wifitati.net'] })) },
     hotspotLoginPage: {
       findUnique: vi.fn(async () => options.reglages ?? null),
       upsert: vi.fn(async () => ({})),
@@ -379,6 +388,120 @@ describe('les emoji', () => {
     expect(contenu).toContain('&#128246;');
     expect(contenu).not.toContain('&#55357;');
     expect([...contenu].find((c) => (c.codePointAt(0) ?? 0) > 127)).toBeUndefined();
+  });
+});
+
+describe('les tarifs choisis', () => {
+  it('retire de l’affiche l’offre masquée, et elle seule', async () => {
+    // Dix lignes sur un téléphone noient celle qu'on cherche. Masquer retire
+    // de l'affiche, jamais de la vente : l'offre reste achetable sur la page
+    // de paiement, et c'est ce que dit l'écran.
+    const { service: s } = service({
+      reglages: { portailUrl: 'http://10.0.0.2:5173', tarifsMasques: ['p2', 'p4'] },
+    });
+
+    const { contenu } = await s.apercu();
+
+    expect(contenu).toContain('500 MGA');
+    expect(contenu).not.toContain('1 000 MGA');
+    expect(contenu).not.toContain('25 000 MGA');
+  });
+
+  it('porte le titre choisi', async () => {
+    const { service: s } = service({
+      reglages: { portailUrl: 'http://10.0.0.2:5173', titreTarifs: 'SARANY (Tarifs)' },
+    });
+
+    const { contenu } = await s.apercu();
+
+    expect(contenu).toContain('SARANY (Tarifs)');
+  });
+
+  it('dit à l’écran ce qui est montré et ce qui ne l’est pas', async () => {
+    const { service: s } = service({
+      serveurs: [{ name: 'hs1', profileName: 'p', disabled: false }],
+      profils: [profil('p', 'hotspot')],
+      reglages: { portailUrl: 'http://192.168.88.135:5173', tarifsMasques: ['p2'] },
+    });
+
+    const { tarifs } = await s.etat('r1');
+
+    expect(tarifs.find((t) => t.id === 'p1')?.visible).toBe(true);
+    expect(tarifs.find((t) => t.id === 'p2')?.visible).toBe(false);
+    expect(tarifs.find((t) => t.id === 'p1')?.duree).toBe('2 h');
+  });
+});
+
+describe('les adresses proposées', () => {
+  it('ne garde que celles du réseau du portail', async () => {
+    // Un poste de travail porte des cartes virtuelles -- Hyper-V, WSL --
+    // injoignables depuis le Wi-Fi. Les proposer enverrait l'exploitant
+    // publier une adresse que ses clients ne peuvent pas atteindre.
+    expect(memeReseau24('192.168.88.135', '192.168.88.1')).toBe(true);
+    expect(memeReseau24('172.20.128.1', '192.168.88.1')).toBe(false);
+    expect(memeReseau24('pas-une-adresse', '192.168.88.1')).toBe(false);
+  });
+
+  it('propose le domaine de l’exploitant', async () => {
+    const { service: s } = service({
+      serveurs: [{ name: 'hs1', profileName: 'p', disabled: false }],
+      profils: [profil('p', 'hotspot')],
+      reglages: { portailUrl: 'http://192.168.88.135:5173' },
+    });
+
+    const { adresses } = await s.etat('r1');
+
+    expect(adresses.some((a) => a.url === 'http://wifitati.net')).toBe(true);
+  });
+
+  it('ne propose pas le nom du portail lui-même', async () => {
+    // `wifitati.net` est a la fois le domaine de cet exploitant et le
+    // `dns-name` de son profil HotSpot. Le proposer puis le refuser est une
+    // facon de faire perdre son temps a quelqu'un.
+    const { service: s } = service({
+      serveurs: [{ name: 'hs1', profileName: 'p', disabled: false }],
+      profils: [profil('p', 'hotspot', { dnsName: 'wifitati.net' })],
+      reglages: { portailUrl: 'http://192.168.88.135:5173' },
+    });
+
+    const { adresses } = await s.etat('r1');
+
+    expect(adresses.some((a) => a.url.includes('wifitati.net'))).toBe(false);
+  });
+});
+
+describe('le logo', () => {
+  it('accepte une image embarquée et l’affiche', async () => {
+    // Elle voyage dans la page : elle s'affiche sans réseau, donc sans
+    // dépendre du Walled Garden. C'est la seule forme tenable pour une page
+    // qui ne doit avoir aucun mode de panne.
+    const image = 'data:image/png;base64,iVBORw0KGgo=';
+    const { service: s } = service({
+      reglages: { portailUrl: 'http://10.0.0.2:5173', logoUrl: image },
+    });
+
+    const { contenu } = await s.apercu();
+
+    expect(contenu).toContain('class="logo"');
+    expect(contenu).toContain('iVBORw0KGgo=');
+  });
+
+  it('refuse ce qui n’est ni une adresse ni une image', () => {
+    expect(() => exigerLogoUtilisable('javascript:alert(1)')).toThrow();
+    expect(() => exigerLogoUtilisable('data:text/html;base64,PHNjcmlwdD4=')).toThrow();
+  });
+
+  it('refuse une image trop lourde pour la page', () => {
+    // Le routeur refuse une page de plus de 61 440 octets : une photo
+    // embarquée la ferait dépasser, et l'échec ne surviendrait qu'à la
+    // publication, après tous les réglages.
+    const lourde = 'data:image/png;base64,' + 'A'.repeat(40_001);
+
+    expect(() => exigerLogoUtilisable(lourde)).toThrow(/trop lourde/);
+  });
+
+  it('laisse passer une adresse http', () => {
+    expect(() => exigerLogoUtilisable('https://exemple.mg/logo.png')).not.toThrow();
   });
 });
 
