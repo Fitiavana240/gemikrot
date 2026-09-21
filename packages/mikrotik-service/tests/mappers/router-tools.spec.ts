@@ -547,3 +547,50 @@ describe('mapChangementRouteur', () => {
     expect(mapChangementRouteur({ ...CHANGEMENT, trace: '' }).origine).toBeNull();
   });
 });
+
+/**
+ * Les services d'accès au routeur.
+ *
+ * Relevés exacts du hAP. Deux lectures manquaient : ce que le service coûte
+ * par nature, et s'il est réglable. Sans la seconde, `www-ssl` apparaissait
+ * deux fois — la vôtre, restreinte et certifiée, et celle du portail, qui
+ * n'a ni l'une ni l'autre — de quoi croire à une porte ouverte.
+ */
+describe('mapIpService — risque et origine', () => {
+  it('signale les services qui font voyager les mots de passe en clair', () => {
+    // Restreindre l'adresse limite qui s'y connecte, pas ce qu'on lit sur le
+    // lien — et les clients du hotspot partagent ce lien.
+    expect(mapIpService({ '.id': '*1', name: 'telnet', port: '23' }).risque).toBe('clair');
+    expect(mapIpService({ '.id': '*2', name: 'ftp', port: '21' }).risque).toBe('clair');
+    expect(mapIpService({ '.id': '*3', name: 'www', port: '80' }).risque).toBe('clair');
+    // SSH chiffre : il a d'autres défauts, pas celui-là.
+    expect(mapIpService({ '.id': '*4', name: 'ssh', port: '22' }).risque).toBeNull();
+    expect(mapIpService({ '.id': '*5', name: 'api-ssl', port: '8729' }).risque).toBeNull();
+  });
+
+  it('distingue les autres coûts du chiffrement', () => {
+    expect(mapIpService({ '.id': '*6', name: 'btest' }).risque).toBe('debit');
+    expect(mapIpService({ '.id': '*7', name: 'discover' }).risque).toBe('annonce');
+  });
+
+  it('sépare ce qui se règle de ce que le routeur ouvre seul', () => {
+    // Relevé : neuf entrées portent `dynamic: false`, quatorze `true`.
+    const reglable = mapIpService({
+      '.id': '*6',
+      name: 'www-ssl',
+      port: '443',
+      dynamic: 'false',
+      'available-from': '192.168.88.0/24',
+      certificate: 'wifitati-api-cert',
+    });
+    const duPortail = mapIpService({ '.id': '*2C', name: 'www-ssl', port: '443', dynamic: 'true' });
+
+    expect(reglable.dynamique).toBe(false);
+    expect(duPortail.dynamique).toBe(true);
+    // Celle du portail n'a ni restriction ni certificat : la montrer à côté de
+    // l'autre sans dire son origine ferait croire à un défaut de réglage.
+    expect(duPortail.availableFrom).toEqual([]);
+    expect(duPortail.certificate).toBeNull();
+  });
+});
+

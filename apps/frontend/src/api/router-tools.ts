@@ -61,6 +61,13 @@ export interface IpService {
   disabled: boolean;
   certificate: string | null;
   maxSessions: number | null;
+  /**
+   * Ce que le service coûte par nature, adresse mise à part. `clair` = les
+   * identifiants voyagent en clair sur le lien.
+   */
+  risque: 'clair' | 'debit' | 'annonce' | null;
+  /** Vrai quand le routeur ouvre ce port de lui-même : portail, DHCP, NTP… */
+  dynamique: boolean;
 }
 
 export interface IpCloud {

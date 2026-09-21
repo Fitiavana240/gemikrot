@@ -93,6 +93,26 @@ export interface IpServiceDto {
   disabled: boolean;
   certificate: string | null;
   maxSessions: number | null;
+  /**
+   * Ce que ce service coûte, indépendamment de son adresse.
+   *
+   * La colonne « depuis » dit qui peut entrer ; celle-ci dit ce qu'il trouve
+   * en entrant. Telnet et FTP transmettent les mots de passe **en clair** :
+   * les restreindre à une adresse réduit le risque sans le supprimer, car
+   * quiconque écoute le lien les lit. `null` pour un service sans danger
+   * propre.
+   */
+  risque: 'clair' | 'debit' | 'annonce' | null;
+  /**
+   * Vrai quand le routeur ouvre ce port de lui-même.
+   *
+   * Les neuf services configurables portent `dynamic: false` ; les quatorze
+   * autres — portail, DHCP, NTP, RADIUS, WireGuard — sont ouverts par les
+   * fonctions activées et ne se règlent pas ici. Les mélanger faisait
+   * apparaître `www-ssl` deux fois, dont une sans restriction ni certificat :
+   * de quoi croire à une porte ouverte, alors que c'est l'écouteur du portail.
+   */
+  dynamique: boolean;
 }
 
 /** L'état du service DDNS de MikroTik — `/ip/cloud`. */

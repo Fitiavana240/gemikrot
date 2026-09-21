@@ -158,6 +158,14 @@ function AccesTab() {
   });
 
   const actifs = (services.data ?? []).filter((s) => !s.disabled);
+  // Séparés, parce qu'ils ne se règlent pas au même endroit : les premiers
+  // s'ouvrent et se ferment ici, les seconds sont ouverts par les fonctions
+  // activées (portail, DHCP, RADIUS) et suivent leur sort.
+  const reglables = actifs.filter((s) => !s.dynamique);
+  const ouvertsParLeRouteur = actifs.filter((s) => s.dynamique);
+  // Les services qui font voyager les identifiants en clair. Les restreindre
+  // à une adresse ne supprime pas le risque : quiconque écoute le lien les lit.
+  const enClair = reglables.filter((s) => s.risque === 'clair');
 
   return (
     <div className="space-y-4">
@@ -189,13 +197,25 @@ function AccesTab() {
 
       <div className="space-y-2">
         <p className="max-w-3xl text-sm text-slate-600">
-          Les portes d'administration du routeur. La colonne <em>Depuis</em> est celle qui compte :
-          vide, elle autorise <strong>toutes</strong> les adresses — ce qui n'est pas la même chose
-          qu'aucune, et c'est la confusion qui a déjà coupé l'accès à cette application.
+          Les portes d'administration du routeur. La colonne <em>Depuis</em> dit qui peut
+          entrer : vide, elle autorise <strong>toutes</strong> les adresses — ce qui n'est pas
+          la même chose qu'aucune, et c'est la confusion qui a déjà coupé l'accès à cette
+          application. La colonne <em>Risque</em> dit ce qu'on trouve en entrant.
         </p>
+        {enClair.length > 0 && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <strong>
+              {enClair.map((s) => s.name).join(', ')} {enClair.length === 1 ? 'fait' : 'font'}{' '}
+              voyager les mots de passe en clair.
+            </strong>{' '}
+            Restreindre leur adresse limite qui peut s'y connecter, mais pas ce qu'on lit sur
+            le lien — et vos clients partagent ce lien. SSH et l'API chiffrée rendent les mêmes
+            services ; couper ceux-ci ne retire donc rien.
+          </div>
+        )}
         <ListeDuRouteur
-          requête={{ ...services, data: actifs }}
-          colonnes={['Service', 'Port', 'Depuis', 'Certificat', 'Sessions']}
+          requête={{ ...services, data: reglables }}
+          colonnes={['Service', 'Port', 'Depuis', 'Risque', 'Certificat', 'Sessions']}
           vide={{ titre: 'Aucun service actif' }}
           ligne={(s) => (
             <tr key={s.id}>
@@ -213,11 +233,32 @@ function AccesTab() {
                   </span>
                 )}
               </td>
+              <td className="px-3 py-2 text-sm">
+                {s.risque === 'clair' ? (
+                  <Badge tone="red">mots de passe en clair</Badge>
+                ) : s.risque === 'debit' ? (
+                  <Badge tone="amber">consomme le débit</Badge>
+                ) : s.risque === 'annonce' ? (
+                  <Badge tone="slate">annonce le routeur</Badge>
+                ) : (
+                  <span className="text-xs text-slate-400">—</span>
+                )}
+              </td>
               <td className="px-3 py-2 text-xs text-slate-500">{s.certificate ?? '—'}</td>
               <td className="px-3 py-2 tabular-nums text-slate-500">{s.maxSessions ?? '—'}</td>
             </tr>
           )}
         />
+
+        {ouvertsParLeRouteur.length > 0 && (
+          <p className="max-w-3xl text-xs text-slate-500">
+            {ouvertsParLeRouteur.length} autre(s) port(s) sont ouverts par le routeur
+            lui-même — {[...new Set(ouvertsParLeRouteur.map((s) => s.name))].join(', ')} — et
+            se ferment en désactivant la fonction correspondante, pas ici. C'est aussi
+            pourquoi <span className="font-mono">www-ssl</span> apparaît deux fois : l'un est
+            le vôtre, l'autre celui du portail.
+          </p>
+        )}
       </div>
     </div>
   );

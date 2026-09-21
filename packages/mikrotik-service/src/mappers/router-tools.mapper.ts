@@ -125,6 +125,22 @@ export function mapNetworkInterfaceStats(raw: any): NetworkInterfaceStatsDto {
   };
 }
 
+/**
+ * Ce qu'un service expose par nature, adresse mise à part.
+ *
+ * `telnet` et `ftp` font voyager les identifiants en clair — les restreindre
+ * à une adresse réduit qui peut s'y connecter, pas ce qu'on lit sur le lien.
+ * `www` est dans le même cas quand il sert l'administration. `btest` laisse
+ * n'importe qui consommer la bande passante du routeur pour un test, et
+ * `discover` l'annonce à tout le segment.
+ */
+function risqueDuService(nom: string): IpServiceDto['risque'] {
+  if (nom === 'telnet' || nom === 'ftp' || nom === 'www') return 'clair';
+  if (nom === 'btest') return 'debit';
+  if (nom === 'discover') return 'annonce';
+  return null;
+}
+
 export function mapIpService(raw: any): IpServiceDto {
   const depuis = orNull(raw?.['available-from']);
   return {
@@ -138,6 +154,8 @@ export function mapIpService(raw: any): IpServiceDto {
     disabled: flag(raw?.disabled),
     certificate: orNull(raw?.certificate),
     maxSessions: nombreOuNull(raw?.['max-sessions']),
+    risque: risqueDuService(raw?.name ?? ''),
+    dynamique: flag(raw?.dynamic),
   };
 }
 
