@@ -21,6 +21,7 @@ import { ETAT_COMPTE_UM, libellé } from '../api/libelles';
 import { FormulaireLimitation } from '../components/FormulaireLimitation';
 import { Modale } from '../components/Modale';
 import { BarreSelection, CaseLigne, useSelection } from '../components/Selection';
+import { MenuAction } from '../components/MenuAction';
 import { phraseCoupure } from '../api/coupure';
 import { PanneDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
@@ -29,7 +30,6 @@ import {
   ChampDuree,
   Confirmation,
   EditionDuree,
-  EditionUnChamp,
 } from '../components/Edition';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
@@ -605,8 +605,14 @@ function AccountsTab() {
   const { error, setError, onError } = useActionError();
   const [form, setForm] = useState<CreateAccountInput>(EMPTY_ACCOUNT);
   const [sourceFilter, setSourceFilter] = useState<AccountSource | ''>('');
-  const [àRecoder, setÀRecoder] = useState<string | null>(null);
-  const [àSupprimer, setÀSupprimer] = useState<string | null>(null);
+  /**
+   * Le compte sur lequel on agit, quand la fenêtre d'action est ouverte.
+   *
+   * Un seul état pour les trois gestes : ils sont exclusifs, et c'est tout le
+   * propos du choix par boutons radio. Trois états séparés autorisaient trois
+   * fenêtres à la fois, ce que rien n'empêchait.
+   */
+  const [actionSur, setActionSur] = useState<string | null>(null);
   const [créer, setCréer] = useState(false);
 
   const { currentId } = useRouterSelection();
@@ -646,6 +652,7 @@ function AccountsTab() {
     onSuccess: (compte) => {
       setError(null);
       setCoupure(phraseCoupure(compte.coupure));
+      setActionSur(null);
       refresh();
     },
     onError,
@@ -663,6 +670,7 @@ function AccountsTab() {
       userManagerApi.updateAccount(username, { password }, currentId),
     onSuccess: () => {
       setError(null);
+      setActionSur(null);
       refresh();
     },
     onError,
@@ -674,7 +682,7 @@ function AccountsTab() {
     // la réponse du routeur faisait lire « c'est fait » sur un refus.
     onSuccess: () => {
       setError(null);
-      setÀSupprimer(null);
+      setActionSur(null);
       refresh();
     },
     onError,
@@ -784,45 +792,71 @@ function AccountsTab() {
         </p>
       )}
 
-      {àRecoder && (
-        <EditionUnChamp
-          titre={`Nouveau code pour « ${àRecoder} »`}
-          description={
-            <>
-              Le compte garde son nom, ses attributions et sa validité déjà courue : seul le code
-              à saisir change. C'est ce qu'il faut quand un ticket a été lu à voix haute ou
-              recopié par quelqu'un d'autre.
-            </>
-          }
-          libellé="Nouveau code"
-          placeholder="celui que le client saisira"
-          enCours={changerCode.isPending}
-          onAnnuler={() => setÀRecoder(null)}
-          onValider={(code) => {
-            if (!code.trim()) return 'Indiquez le nouveau code.';
-            changerCode.mutate({ username: àRecoder, password: code.trim() });
-            setÀRecoder(null);
-          }}
-        />
-      )}
+      {actionSur &&
+        (() => {
+          // L'état du compte décide de ce qu'on peut lui faire : proposer
+          // « Suspendre » sur un compte déjà suspendu ferait un choix sans
+          // effet, qu'on ne comprendrait qu'après l'avoir tenté.
+          const compte = lignes.find((a) => a.username === actionSur);
+          const suspendu = compte?.disabled === true;
+          const enCours =
+            toggle.isPending || changerCode.isPending || supprimer.isPending;
+          const refus =
+            toggle.isError || changerCode.isError || supprimer.isError ? error : null;
 
-      {àSupprimer && (
-        <Confirmation
-          titre={`Supprimer définitivement « ${àSupprimer} » ?`}
-          libelléConfirmer="Supprimer quand même"
-          enCours={supprimer.isPending}
-          erreur={supprimer.isError ? error : null}
-          onAnnuler={() => {
-            setError(null);
-            setÀSupprimer(null);
-          }}
-          onConfirmer={() => supprimer.mutate(àSupprimer)}
-        >
-          Son historique de sessions part avec, et rien ne le rendra. Pour couper l&apos;accès
-          sans rien perdre, <strong>Suspendre</strong> suffit — le compte reste, il ne répond
-          plus.
-        </Confirmation>
-      )}
+          return (
+            <MenuAction
+              titre={`Compte « ${actionSur} »`}
+              enCours={enCours}
+              erreur={refus}
+              onFermer={() => {
+                setError(null);
+                setActionSur(null);
+              }}
+              options={[
+                suspendu
+                  ? {
+                      clé: 'reactiver',
+                      libellé: 'Réactiver',
+                      aide: "Le compte répond de nouveau, avec la validité qu'il lui restait — la suspension ne l'a pas arrêtée.",
+                    }
+                  : {
+                      clé: 'suspendre',
+                      libellé: 'Suspendre',
+                      aide: "Le compte reste et garde tout ; il cesse de répondre. La session d'un client déjà connecté ne se ferme pas d'elle-même.",
+                    },
+                {
+                  clé: 'code',
+                  libellé: 'Changer le code',
+                  aide: "Le compte garde son nom, ses attributions et sa validité déjà courue : seul le code à saisir change. C'est ce qu'il faut quand un ticket a été lu à voix haute.",
+                  libelléBouton: 'Changer le code',
+                  champ: {
+                    libellé: 'Nouveau code',
+                    placeholder: 'celui que le client saisira',
+                    valider: (v) => (v.trim() === '' ? 'Indiquez le nouveau code.' : null),
+                  },
+                },
+                {
+                  clé: 'supprimer',
+                  libellé: 'Supprimer',
+                  aide: "Son historique de sessions part avec, et rien ne le rendra. Pour couper l'accès sans rien perdre, Suspendre suffit.",
+                  danger: true,
+                  libelléBouton: 'Supprimer définitivement',
+                },
+              ]}
+              onAppliquer={(clé, valeur) => {
+                setError(null);
+                if (clé === 'code') {
+                  changerCode.mutate({ username: actionSur, password: valeur });
+                } else if (clé === 'supprimer') {
+                  supprimer.mutate(actionSur);
+                } else {
+                  toggle.mutate({ username: actionSur, disabled: clé === 'suspendre' });
+                }
+              }}
+            />
+          );
+        })()}
 
       {canWrite && (
         <div>
@@ -1091,24 +1125,14 @@ function AccountsTab() {
                 )}
               </td>
               <td className="px-3 py-2">
+                {/* Un seul bouton, et il ne fait rien par lui-même : c'est la
+                    fenêtre qui porte le choix. Trois boutons côte à côte
+                    mettaient « Supprimer » à quelques pixels de « Suspendre »,
+                    alors que l'un se défait et l'autre non. */}
                 {canWrite && (
-                  <div className="flex justify-end gap-1">
-                    <Button variant="secondary" onClick={() => setÀRecoder(account.username)}>
-                      Changer le code
-                    </Button>
-                    <Button
-                      variant={account.disabled ? 'secondary' : 'danger'}
-                      onClick={() =>
-                        toggle.mutate({ username: account.username, disabled: !account.disabled })
-                      }
-                    >
-                      {account.disabled ? 'Réactiver' : 'Suspendre'}
-                    </Button>
-                    <Button
-                      variant="danger"
-                      onClick={() => setÀSupprimer(account.username)}
-                    >
-                      Supprimer
+                  <div className="flex justify-end">
+                    <Button variant="secondary" onClick={() => setActionSur(account.username)}>
+                      Action…
                     </Button>
                   </div>
                 )}
