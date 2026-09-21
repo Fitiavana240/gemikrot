@@ -7,7 +7,8 @@ import { formatBits } from '../api/router-tools';
 import { ListeDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { TabBar, type TabDef } from '../components/TabBar';
-import { Confirmation } from '../components/Edition';
+
+import { MenuAction } from '../components/MenuAction';
 import { Modale } from '../components/Modale';
 import {
   Badge,
@@ -172,7 +173,8 @@ function ComptesTab() {
   const routerId = useRouteur();
   const client = useQueryClient();
   const [formulaire, setFormulaire] = useState<'aucun' | 'creation' | PppSecret>('aucun');
-  const [àSupprimer, setÀSupprimer] = useState<string | null>(null);
+  /** Le compte sur lequel on agit : les gestes sont exclusifs, l'état l'est aussi. */
+  const [actionSur, setActionSur] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
 
   const comptes = useQuery({
@@ -226,7 +228,7 @@ function ComptesTab() {
     // La fenêtre se referme ici, et non au clic : fermer avant la réponse du
     // routeur faisait lire « c'est fait » sur un refus.
     onSuccess: () => {
-      setÀSupprimer(null);
+      setActionSur(null);
       rafraîchir();
     },
     onError: échouer,
@@ -242,22 +244,59 @@ function ComptesTab() {
         </div>
       )}
 
-      {àSupprimer && (
-        <Confirmation
-          titre={`Supprimer définitivement « ${àSupprimer} » ?`}
-          libelléConfirmer="Supprimer quand même"
-          enCours={supprimer.isPending}
-          erreur={supprimer.isError ? erreur : null}
-          onAnnuler={() => {
-            setErreur(null);
-            setÀSupprimer(null);
-          }}
-          onConfirmer={() => supprimer.mutate(àSupprimer)}
-        >
-          Son historique de connexions part avec, et le routeur ne le rejoue pas. Pour couper
-          l&apos;accès d&apos;un abonné sans rien perdre, <strong>Suspendre</strong> suffit.
-        </Confirmation>
-      )}
+      {actionSur &&
+        (() => {
+          const compte = (comptes.data ?? []).find((c) => c.username === actionSur);
+          if (!compte) return null;
+          return (
+            <MenuAction
+              titre={`Compte PPPoE « ${actionSur} »`}
+              enCours={suspendre.isPending || supprimer.isPending}
+              erreur={suspendre.isError || supprimer.isError ? erreur : null}
+              onFermer={() => {
+                setErreur(null);
+                setActionSur(null);
+              }}
+              options={[
+                compte.disabled
+                  ? {
+                      clé: 'reactiver',
+                      libellé: 'Réactiver',
+                      aide: "L'abonné pourra de nouveau ouvrir sa liaison, avec le même mot de passe.",
+                    }
+                  : {
+                      clé: 'suspendre',
+                      libellé: 'Suspendre',
+                      aide: "Le compte reste et garde tout ; il cesse d'être accepté. La session en cours ne se ferme pas — PPPoE ne revérifie qu'à la reconnexion, il faut aussi la fermer dans l'onglet Sessions.",
+                    },
+                {
+                  clé: 'modifier',
+                  libellé: 'Modifier',
+                  aide: 'Profil, service, adresse imposée, commentaire, mot de passe. Le nom, lui, ne se change pas : il identifie le compte côté routeur.',
+                  libelléBouton: 'Ouvrir le formulaire',
+                },
+                {
+                  clé: 'supprimer',
+                  libellé: 'Supprimer',
+                  aide: "Son historique de connexions part avec, et le routeur ne le rejoue pas. Pour couper l'accès sans rien perdre, Suspendre suffit.",
+                  danger: true,
+                  libelléBouton: 'Supprimer définitivement',
+                },
+              ]}
+              onAppliquer={(clé) => {
+                setErreur(null);
+                if (clé === 'modifier') {
+                  setActionSur(null);
+                  setFormulaire(compte);
+                } else if (clé === 'supprimer') {
+                  supprimer.mutate(actionSur);
+                } else {
+                  suspendre.mutate({ username: actionSur, disabled: clé === 'suspendre' });
+                }
+              }}
+            />
+          );
+        })()}
 
       {/* L'en-tête reste : c'est la fenêtre qui recouvre la liste, plus le
           formulaire qui la pousse hors de vue. */}
@@ -332,20 +371,10 @@ function ComptesTab() {
               <Badge tone={c.disabled ? 'red' : 'green'}>{c.disabled ? 'suspendu' : 'actif'}</Badge>
             </td>
             <td className="px-3 py-2">
-              <div className="flex justify-end gap-1">
-                <Button variant="secondary" onClick={() => setFormulaire(c)}>
-                  Modifier
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() =>
-                    suspendre.mutate({ username: c.username, disabled: !c.disabled })
-                  }
-                >
-                  {c.disabled ? 'Réactiver' : 'Suspendre'}
-                </Button>
-                <Button variant="danger" onClick={() => setÀSupprimer(c.username)}>
-                  Supprimer
+              {/* Un seul bouton : c'est la fenêtre qui porte le choix. */}
+              <div className="flex justify-end">
+                <Button variant="secondary" onClick={() => setActionSur(c.username)}>
+                  Action…
                 </Button>
               </div>
             </td>

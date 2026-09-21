@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { Confirmation } from '../components/Edition';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tenantsApi, type UpdateTenantInput } from '../api/tenants';
 import type { PaymentMethod } from '../api/types';
@@ -23,6 +24,8 @@ export function SettingsPage() {
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  /** La puce qu'on s'apprête à supprimer, tant que ce n'est pas confirmé. */
+  const [àSupprimer, setÀSupprimer] = useState<{ id: string; nom: string } | null>(null);
   const [form, setForm] = useState<UpdateTenantInput>({});
   const [account, setAccount] = useState({
     provider: 'MVOLA' as PaymentMethod,
@@ -72,7 +75,7 @@ export function SettingsPage() {
   });
   const removeAccount = useMutation({
     mutationFn: tenantsApi.removeMobileMoney,
-    onSuccess: () => { setError(null); refresh(); },
+    onSuccess: () => { setError(null); setÀSupprimer(null); refresh(); },
     onError,
   });
 
@@ -100,7 +103,26 @@ export function SettingsPage() {
         description="Votre marque, vos puces Mobile Money et vos comptes. Ce que le client voit sur la page de paiement vient d'ici."
       />
 
-      {error && (
+      {àSupprimer && (
+        <Confirmation
+          titre={`Supprimer la puce « ${àSupprimer.nom} » ?`}
+          libelléConfirmer="Supprimer cette puce"
+          enCours={removeAccount.isPending}
+          erreur={removeAccount.isError ? error : null}
+          onAnnuler={() => {
+            setError(null);
+            setÀSupprimer(null);
+          }}
+          onConfirmer={() => removeAccount.mutate(àSupprimer.id)}
+        >
+          Ce numéro disparaît de la page de paiement de vos clients. Si c&apos;est le dernier,
+          <strong> plus personne ne pourra payer en ligne</strong> : la page n&apos;aurait plus
+          aucun numéro à afficher. Pour le retirer sans le perdre,{' '}
+          <strong>Désactiver</strong> suffit.
+        </Confirmation>
+      )}
+
+      {error && !àSupprimer && (
         <Card>
           <p className="text-sm text-red-600">{error}</p>
         </Card>
@@ -188,7 +210,10 @@ export function SettingsPage() {
                     >
                       {acc.isActive ? 'Désactiver' : 'Réactiver'}
                     </Button>
-                    <Button variant="danger" onClick={() => removeAccount.mutate(acc.id)}>
+                    <Button
+                      variant="danger"
+                      onClick={() => setÀSupprimer({ id: acc.id, nom: acc.phoneNumber })}
+                    >
                       Supprimer
                     </Button>
                   </>

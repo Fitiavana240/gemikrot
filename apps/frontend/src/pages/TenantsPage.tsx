@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tenantsApi, type TenantStatus } from '../api/tenants';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, PageHeader, Table, TableSkeleton } from '../components/ui';
+import { Confirmation } from '../components/Edition';
 
 /** Propres a cet ecran : « en attente » ne veut rien dire ailleurs. */
 const STATUT_EXPLOITANT: Record<TenantStatus, { label: string; ton: 'green' | 'amber' | 'red' }> = {
@@ -15,6 +16,8 @@ const STATUT_EXPLOITANT: Record<TenantStatus, { label: string; ton: 'green' | 'a
 export function TenantsPage() {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  /** L'exploitant qu'on s'apprête à suspendre, tant que ce n'est pas confirmé. */
+  const [àSuspendre, setÀSuspendre] = useState<{ id: string; name: string } | null>(null);
   const tenants = useQuery({ queryKey: ['tenants'], queryFn: tenantsApi.list });
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['tenants'] });
@@ -28,7 +31,7 @@ export function TenantsPage() {
   });
   const suspend = useMutation({
     mutationFn: tenantsApi.suspend,
-    onSuccess: () => { setError(null); refresh(); },
+    onSuccess: () => { setError(null); setÀSuspendre(null); refresh(); },
     onError,
   });
 
@@ -41,7 +44,24 @@ export function TenantsPage() {
         description="Les réseaux Wi-Fi hébergés par la plateforme. Un compte inscrit reste bloqué tant qu'il n'est pas activé ici."
       />
 
-      {error && (
+      {àSuspendre && (
+        <Confirmation
+          titre={`Suspendre l’exploitant « ${àSuspendre.name} » ?`}
+          libelléConfirmer="Suspendre cet exploitant"
+          enCours={suspend.isPending}
+          erreur={suspend.isError ? error : null}
+          onAnnuler={() => {
+            setError(null);
+            setÀSuspendre(null);
+          }}
+          onConfirmer={() => suspend.mutate(àSuspendre.id)}
+        >
+          Ses comptes ne pourront plus entrer dans la console. Ce n&apos;est pas une
+          suppression : rien n&apos;est effacé et <strong>Activer</strong> rétablit tout.
+        </Confirmation>
+      )}
+
+      {error && !àSuspendre && (
         <Card>
           <p className="text-sm text-red-600">{error}</p>
         </Card>
@@ -76,7 +96,12 @@ export function TenantsPage() {
                 {tenant.status !== 'ACTIVE' ? (
                   <Button onClick={() => activate.mutate(tenant.id)}>Activer</Button>
                 ) : (
-                  <Button variant="danger" onClick={() => suspend.mutate(tenant.id)}>
+                  // Un clic coupait tout un réseau : la console de
+                  // l'exploitant et le service de ses clients.
+                  <Button
+                    variant="danger"
+                    onClick={() => setÀSuspendre({ id: tenant.id, name: tenant.name })}
+                  >
                     Suspendre
                   </Button>
                 )}

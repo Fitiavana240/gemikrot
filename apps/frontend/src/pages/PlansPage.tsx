@@ -10,6 +10,7 @@ import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import { Badge, Button, FormField, Input, PageHeader, PanneDeLecture, Select, Table, TableSkeleton } from '../components/ui';
 import { Modale } from '../components/Modale';
+import { Confirmation } from '../components/Edition';
 
 const EMPTY_FORM: CreatePlanInput = {
   name: '',
@@ -48,6 +49,8 @@ export function PlansPage() {
   const [form, setForm] = useState<CreatePlanInput>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
   const [créer, setCréer] = useState(false);
+  /** L'offre qu'on s'apprête à archiver, tant que ce n'est pas confirmé. */
+  const [àArchiver, setÀArchiver] = useState<{ id: string; name: string } | null>(null);
 
   const createMutation = useMutation({
     mutationFn: plansApi.create,
@@ -72,7 +75,10 @@ export function PlansPage() {
 
   const archiveMutation = useMutation({
     mutationFn: plansApi.archive,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['plans'] }),
+    onSuccess: () => {
+      setÀArchiver(null);
+      queryClient.invalidateQueries({ queryKey: ['plans'] });
+    },
   });
 
   function handleSubmit() {
@@ -85,6 +91,20 @@ export function PlansPage() {
         title="Offres"
         description="Ce que vous vendez : durée, prix, débit. Une offre créée ici se retrouve sur le routeur, et sur la page de paiement de vos clients."
       />
+
+      {àArchiver && (
+        <Confirmation
+          titre={`Archiver l’offre « ${àArchiver.name} » ?`}
+          libelléConfirmer="Archiver cette offre"
+          enCours={archiveMutation.isPending}
+          onAnnuler={() => setÀArchiver(null)}
+          onConfirmer={() => archiveMutation.mutate(àArchiver.id)}
+        >
+          Elle disparaît de la page de paiement et ne peut plus servir à générer un lot. Les
+          tickets déjà vendus <strong>continuent de fonctionner</strong> : le routeur ne
+          connaît que le profil, et le profil reste. Rien n&apos;est effacé.
+        </Confirmation>
+      )}
 
       {canWrite && (
         <div>
@@ -209,7 +229,10 @@ export function PlansPage() {
                     >
                       {syncMutation.isPending ? 'Envoi…' : 'Synchroniser'}
                     </Button>
-                    <Button variant="secondary" onClick={() => archiveMutation.mutate(plan.id)}>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setÀArchiver({ id: plan.id, name: plan.name })}
+                    >
                       Archiver
                     </Button>
                   </>

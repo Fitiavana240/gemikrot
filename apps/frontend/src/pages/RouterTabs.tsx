@@ -21,6 +21,8 @@ import { ListeDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { GenerationTickets } from '../components/GenerationTickets';
 import { ChampDuree } from '../components/Edition';
+import { MenuAction } from '../components/MenuAction';
+import { Confirmation } from '../components/Edition';
 import {
   Badge,
   Button,
@@ -251,7 +253,16 @@ export function HotspotUsersTab() {
   const queryClient = useQueryClient();
   const [erreur, setErreur] = useState<string | null>(null);
   const [compteRendu, setCompteRendu] = useState<string | null>(null);
-  const [àSupprimer, setÀSupprimer] = useState<string | null>(null);
+  /** Le compte sur lequel on agit : les gestes sont exclusifs, l'état l'est aussi. */
+  const [actionSur, setActionSur] = useState<string | null>(null);
+  /**
+   * La pose en masse des plafonds, tant qu'elle n'est pas confirmée.
+   *
+   * Ce bouton écrivait sur N comptes du routeur sur **un seul clic**. C'est
+   * exactement la forme qui a déjà fait partir 221 écritures par accident,
+   * effaçant au passage l'historique de configuration du routeur.
+   */
+  const [confirmerPlafonds, setConfirmerPlafonds] = useState(false);
   const [formulaire, setFormulaire] = useState<'aucun' | 'creation' | HotspotUser>('aucun');
 
   const requête = useQuery({
@@ -341,6 +352,7 @@ export function HotspotUsersTab() {
     },
     onSuccess: (faits) => {
       setPose(null);
+      setConfirmerPlafonds(false);
       setCompteRendu(`Plafond posé sur ${faits} compte(s).`);
       rafraîchir();
     },
@@ -351,6 +363,7 @@ export function HotspotUsersTab() {
     mutationFn: ({ username, disabled }: { username: string; disabled: boolean }) =>
       hotspotTabsApi.setUserDisabled(username, disabled, currentId),
     onSuccess: (compte) => {
+      setActionSur(null);
       rafraîchir();
       setCompteRendu(phraseCoupure(compte.coupure));
     },
@@ -359,7 +372,7 @@ export function HotspotUsersTab() {
   const supprimer = useMutation({
     mutationFn: (username: string) => hotspotTabsApi.deleteUser(username, currentId),
     onSuccess: () => {
-      setÀSupprimer(null);
+      setActionSur(null);
       rafraîchir();
     },
     onError,
@@ -487,7 +500,7 @@ export function HotspotUsersTab() {
               <Button
                 variant="danger"
                 disabled={poserLesPlafonds.isPending}
-                onClick={() => poserLesPlafonds.mutate(sansPlafond)}
+                onClick={() => setConfirmerPlafonds(true)}
               >
                 {poserLesPlafonds.isPending
                   ? `Écriture… ${pose?.faits ?? 0}/${pose?.total ?? sansPlafond.length}`
@@ -501,23 +514,79 @@ export function HotspotUsersTab() {
         </Card>
       )}
 
-      {/* Une suppression perd le trafic consommé et le nom porté par le
-          commentaire : la confirmer nomme ce qu'on perd, plutôt que de
-          demander « êtes-vous sûr ». */}
-      {àSupprimer && (
-        <ErrorNote>
-          Supprimer « {àSupprimer} » efface son trafic consommé et son commentaire, sans retour
-          possible. Le bloquer suffit le plus souvent.
-          <span className="ml-3 inline-flex gap-2">
-            <Button variant="danger" onClick={() => supprimer.mutate(àSupprimer)}>
-              Supprimer quand même
-            </Button>
-            <Button variant="secondary" onClick={() => setÀSupprimer(null)}>
-              Annuler
-            </Button>
-          </span>
-        </ErrorNote>
+      {confirmerPlafonds && (
+        <Confirmation
+          titre={`Écrire un plafond sur ${sansPlafond.length} compte(s) du routeur`}
+          libelléConfirmer={`Poser les ${sansPlafond.length} plafonds`}
+          enCours={poserLesPlafonds.isPending}
+          erreur={poserLesPlafonds.isError ? erreur : null}
+          onAnnuler={() => {
+            setErreur(null);
+            setConfirmerPlafonds(false);
+          }}
+          onConfirmer={() => poserLesPlafonds.mutate(sansPlafond)}
+        >
+          Chaque compte reçoit la durée de son profil en plafond de temps cumulé : il
+          s&apos;arrêtera pour de bon au bout, au lieu de se rejouer indéfiniment.{' '}
+          <strong>Ce sont {sansPlafond.length} écritures sur le routeur</strong>, une par
+          compte, et il n&apos;y a pas de retour en arrière automatique — défaire supposerait
+          de retirer le plafond compte par compte.
+        </Confirmation>
       )}
+
+      {actionSur &&
+        (() => {
+          const compte = (filtrés ?? []).find((u) => u.username === actionSur);
+          if (!compte) return null;
+          return (
+            <MenuAction
+              titre={`Compte HotSpot « ${actionSur} »`}
+              enCours={bloquer.isPending || supprimer.isPending}
+              erreur={bloquer.isError || supprimer.isError ? erreur : null}
+              onFermer={() => {
+                setErreur(null);
+                setActionSur(null);
+              }}
+              options={[
+                compte.disabled
+                  ? {
+                      clé: 'debloquer',
+                      libellé: 'Débloquer',
+                      aide: 'Le compte répond de nouveau. Son plafond de temps cumulé, lui, a continué de compter ce qui avait déjà été consommé.',
+                    }
+                  : {
+                      clé: 'bloquer',
+                      libellé: 'Bloquer',
+                      aide: "Le compte reste et garde son trafic consommé ; il cesse d'être accepté. C'est ce que montre la croix dans WinBox : un geste délibéré, pas une expiration.",
+                    },
+                {
+                  clé: 'modifier',
+                  libellé: 'Modifier',
+                  aide: 'Profil, plafonds, commentaire. Le nom du compte est le code que tape le client : il ne se change pas ici.',
+                  libelléBouton: 'Ouvrir le formulaire',
+                },
+                {
+                  clé: 'supprimer',
+                  libellé: 'Supprimer',
+                  aide: 'Son trafic consommé et son commentaire partent avec, sans retour possible. Le bloquer suffit le plus souvent.',
+                  danger: true,
+                  libelléBouton: 'Supprimer définitivement',
+                },
+              ]}
+              onAppliquer={(clé) => {
+                setErreur(null);
+                if (clé === 'modifier') {
+                  setActionSur(null);
+                  setFormulaire(compte);
+                } else if (clé === 'supprimer') {
+                  supprimer.mutate(actionSur);
+                } else {
+                  bloquer.mutate({ username: actionSur, disabled: clé === 'bloquer' });
+                }
+              }}
+            />
+          );
+        })()}
 
       <ListeDuRouteur
         requête={{ ...requête, data: filtrés }}
@@ -560,24 +629,11 @@ export function HotspotUsersTab() {
               </Badge>
             </td>
             <td className="space-x-2 whitespace-nowrap px-3 py-2 text-right">
+              {/* Un seul bouton : c'est la fenêtre qui porte le choix. */}
               {canWrite && (
-                <>
-                  <Button variant="secondary" onClick={() => setFormulaire(u)}>
-                    Modifier
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    disabled={bloquer.isPending}
-                    onClick={() =>
-                      bloquer.mutate({ username: u.username, disabled: !u.disabled })
-                    }
-                  >
-                    {u.disabled ? 'Débloquer' : 'Bloquer'}
-                  </Button>
-                  <Button variant="danger" onClick={() => setÀSupprimer(u.username)}>
-                    Supprimer
-                  </Button>
-                </>
+                <Button variant="secondary" onClick={() => setActionSur(u.username)}>
+                  Action…
+                </Button>
               )}
             </td>
           </tr>

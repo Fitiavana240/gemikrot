@@ -31,6 +31,8 @@ import {
   TableSkeleton,
 } from '../components/ui';
 import { Modale } from '../components/Modale';
+import { MenuAction } from '../components/MenuAction';
+import { Confirmation } from '../components/Edition';
 
 /**
  * Un onglet par façon de regarder les tickets, plus les deux écrans qui les
@@ -376,8 +378,20 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Erreur inconnue'),
   });
-  const disable = useMutation({ mutationFn: vouchersApi.disable, onSuccess: refresh });
-  const cancel = useMutation({ mutationFn: vouchersApi.cancel, onSuccess: refresh });
+  /** Le ticket sur lequel on agit : les deux gestes sont exclusifs. */
+  const [actionSur, setActionSur] = useState<Voucher | null>(null);
+  const fermerEtRafraichir = () => {
+    setActionSur(null);
+    refresh();
+  };
+  const disable = useMutation({
+    mutationFn: vouchersApi.disable,
+    onSuccess: fermerEtRafraichir,
+  });
+  const cancel = useMutation({
+    mutationFn: vouchersApi.cancel,
+    onSuccess: fermerEtRafraichir,
+  });
 
   function handleSubmit() {
     if (!form.planId) {
@@ -497,8 +511,37 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
           vouchers={vouchers.data ?? []}
           format={format}
           canWrite={canWrite}
-          onDisable={(id) => disable.mutate(id)}
-          onCancel={(id) => cancel.mutate(id)}
+          onAction={setActionSur}
+        />
+      )}
+
+      {actionSur && (
+        <MenuAction
+          titre={`Ticket « ${actionSur.code} »`}
+          enCours={disable.isPending || cancel.isPending}
+          onFermer={() => setActionSur(null)}
+          options={[
+            ...(actionSur.status === 'CREATED'
+              ? [
+                  {
+                    clé: 'annuler',
+                    libellé: 'Annuler le ticket',
+                    aide: "Pour un ticket jamais vendu : il sort du stock et ne pourra plus être attribué. À réserver aux planches imprimées perdues ou mal générées.",
+                  },
+                ]
+              : []),
+            {
+              clé: 'couper',
+              libellé: "Couper l'accès",
+              aide: "Le compte est bloqué sur le routeur et ses cookies effacés : le client est dehors tout de suite, même s'il lui restait de la validité. Le ticket reste dans l'historique, avec son paiement.",
+              danger: true,
+              libelléBouton: "Couper l'accès",
+            },
+          ]}
+          onAppliquer={(clé) => {
+            if (clé === 'annuler') cancel.mutate(actionSur.id);
+            else disable.mutate(actionSur.id);
+          }}
         />
       )}
     </div>
@@ -510,9 +553,13 @@ function ExpiredTab() {
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
   const expired = useQuery({ queryKey: ['vouchers', 'expired'], queryFn: vouchersApi.listExpired });
+  const [àCouper, setÀCouper] = useState<Voucher | null>(null);
   const disable = useMutation({
     mutationFn: vouchersApi.disable,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['vouchers'] }),
+    onSuccess: () => {
+      setÀCouper(null);
+      queryClient.invalidateQueries({ queryKey: ['vouchers'] });
+    },
   });
 
   if (expired.isLoading) return <TableSkeleton columns={4} />;
@@ -536,9 +583,23 @@ function ExpiredTab() {
         vouchers={expired.data ?? []}
         format={format}
         canWrite={canWrite}
-        onDisable={(id) => disable.mutate(id)}
+        onAction={setÀCouper}
         emptyLabel="Aucun ticket expiré."
       />
+
+      {àCouper && (
+        <Confirmation
+          titre={`Couper l’accès du ticket « ${àCouper.code} » ?`}
+          libelléConfirmer="Couper l’accès"
+          enCours={disable.isPending}
+          onAnnuler={() => setÀCouper(null)}
+          onConfirmer={() => disable.mutate(àCouper.id)}
+        >
+          Le compte est bloqué sur le routeur et ses cookies effacés. Ce ticket étant déjà
+          expiré, le routeur ne le servait plus : le geste ferme surtout une session qui
+          tiendrait encore par cookie.
+        </Confirmation>
+      )}
     </div>
   );
 }
@@ -548,15 +609,14 @@ function VoucherTable({
   vouchers,
   format,
   canWrite,
-  onDisable,
-  onCancel,
+  onAction,
   emptyLabel = 'Aucun ticket.',
 }: {
   vouchers: Voucher[];
   format: (value: string | number) => string;
   canWrite: boolean;
-  onDisable?: (id: string) => void;
-  onCancel?: (id: string) => void;
+  /** Ouvre la fenêtre d'action de l'appelant. Sans elle, la colonne est vide. */
+  onAction?: (voucher: Voucher) => void;
   emptyLabel?: string;
 }) {
   return (
@@ -574,15 +634,13 @@ function VoucherTable({
           <td className="px-3 py-2 text-slate-500">
             {new Date(voucher.createdAt).toLocaleDateString('fr-FR')}
           </td>
-          <td className="space-x-2 px-3 py-2 text-right">
-            {canWrite && onCancel && voucher.status === 'CREATED' && (
-              <Button variant="secondary" onClick={() => onCancel(voucher.id)}>
-                Annuler
-              </Button>
-            )}
-            {canWrite && onDisable && voucher.status !== 'DISABLED' && (
-              <Button variant="danger" onClick={() => onDisable(voucher.id)}>
-                Couper l'accès
+          <td className="px-3 py-2 text-right">
+            {/* « Annuler » et « Couper l'accès » étaient voisins et se
+                ressemblaient : c'est la fenêtre qui dit maintenant lequel
+                fait quoi, et aucun des deux ne part sur un clic. */}
+            {canWrite && onAction && voucher.status !== 'DISABLED' && (
+              <Button variant="secondary" onClick={() => onAction(voucher)}>
+                Action…
               </Button>
             )}
           </td>

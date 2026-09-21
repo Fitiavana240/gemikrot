@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MenuAction } from '../components/MenuAction';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { mikrotikApi } from '../api/mikrotik';
@@ -59,11 +60,14 @@ export function SessionsPage() {
   });
 
   const [compteRendu, setCompteRendu] = useState<string | null>(null);
+  /** La session sur laquelle on agit : les deux gestes sont exclusifs. */
+  const [actionSur, setActionSur] = useState<{ id: string; username: string } | null>(null);
 
   const disconnectMutation = useMutation({
     mutationFn: (sessionId: string) => mikrotikApi.disconnect(routerId!, sessionId),
     onSuccess: () => {
       setCompteRendu(null);
+      setActionSur(null);
       queryClient.invalidateQueries({ queryKey: ['mikrotik-active-sessions'] });
     },
   });
@@ -80,12 +84,39 @@ export function SessionsPage() {
     mutationFn: (username: string) => hotspotApi.cutAccess(username, routerId),
     onSuccess: (coupure) => {
       setCompteRendu(phraseCoupure(coupure));
+      setActionSur(null);
       queryClient.invalidateQueries({ queryKey: ['mikrotik-active-sessions'] });
     },
   });
 
   return (
     <div className="space-y-6">
+      {actionSur && (
+        <MenuAction
+          titre={`Session de « ${actionSur.username} »`}
+          enCours={disconnectMutation.isPending || couperMutation.isPending}
+          onFermer={() => setActionSur(null)}
+          options={[
+            {
+              clé: 'deconnecter',
+              libellé: 'Déconnecter',
+              aide: "Ferme la session en cours et libère la place. Le client garde son accès : s'il est entré par cookie, il revient seul en quelques secondes.",
+            },
+            {
+              clé: 'couper',
+              libellé: "Couper l'accès",
+              aide: "Ferme la session ET efface les cookies du compte, qui le ramèneraient tout seul. C'est la coupure qui tient — un client en règle devra retaper son code.",
+              danger: true,
+              libelléBouton: "Couper l'accès",
+            },
+          ]}
+          onAppliquer={(clé) => {
+            if (clé === 'couper') couperMutation.mutate(actionSur.username);
+            else disconnectMutation.mutate(actionSur.id);
+          }}
+        />
+      )}
+
       <PageHeader
         title="Connectés"
         description="Qui est en ligne en ce moment, lu en direct sur le routeur."
@@ -177,28 +208,20 @@ export function SessionsPage() {
                 <td className="px-3 py-2 text-slate-500">
                   {formatBytes(session.bytesIn)} / {formatBytes(session.bytesOut)}
                 </td>
-                <td className="space-x-2 whitespace-nowrap px-3 py-2 text-right">
+                <td className="whitespace-nowrap px-3 py-2 text-right">
+                  {/* Deux gestes qui ne veulent pas dire la même chose —
+                      déconnecter libère la place, couper empêche de revenir —
+                      et que deux boutons voisins ne distinguaient pas. La
+                      fenêtre dit lequel fait quoi avant qu'on choisisse. */}
                   {canWrite && (
-                    <>
-                      {/* Deux gestes, parce qu'ils ne veulent pas dire la même
-                          chose. Déconnecter libère la place ; couper empêche
-                          de revenir. Escalader l'un vers l'autre en silence
-                          forcerait un client en règle à retaper son code. */}
-                      <Button
-                        variant="secondary"
-                        disabled={disconnectMutation.isPending}
-                        onClick={() => disconnectMutation.mutate(session.id)}
-                      >
-                        Déconnecter
-                      </Button>
-                      <Button
-                        variant="danger"
-                        disabled={couperMutation.isPending}
-                        onClick={() => couperMutation.mutate(session.username)}
-                      >
-                        Couper l'accès
-                      </Button>
-                    </>
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        setActionSur({ id: session.id, username: session.username })
+                      }
+                    >
+                      Action…
+                    </Button>
                   )}
                 </td>
               </tr>

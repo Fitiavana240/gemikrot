@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Confirmation } from '../components/Edition';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { devicesApi, type Device, type DeviceType, type DiscoveredDevice } from '../api/devices';
@@ -69,6 +70,8 @@ export function DevicesPage() {
   const { current: router } = useRouterSelection();
   const [error, setError] = useState<string | null>(null);
   const [typeChoice, setTypeChoice] = useState<Record<string, DeviceType>>({});
+  /** L'appareil qu'on s'apprête à bloquer, tant que ce n'est pas confirmé. */
+  const [àBloquer, setÀBloquer] = useState<Device | null>(null);
 
   const devices = useQuery({ queryKey: ['devices'], queryFn: devicesApi.list });
   const discovered = useQuery({
@@ -98,7 +101,8 @@ export function DevicesPage() {
   });
   const block = useMutation({
     mutationFn: devicesApi.block,
-    onSuccess: () => { setError(null); refresh(); },
+    // La fenêtre se referme ici, pas au clic : un refus doit rester lisible.
+    onSuccess: () => { setError(null); setÀBloquer(null); refresh(); },
     onError,
   });
 
@@ -118,7 +122,26 @@ export function DevicesPage() {
         description="Ce qui se connecte au réseau. Le contournement du portail sert aux appareils incapables d'afficher une page de connexion — télévision, caméra, imprimante."
       />
 
-      {error && (
+      {àBloquer && (
+        <Confirmation
+          titre={`Bloquer « ${àBloquer.hostname ?? àBloquer.macAddress} » ?`}
+          libelléConfirmer="Bloquer l’appareil"
+          enCours={block.isPending}
+          erreur={block.isError ? error : null}
+          onAnnuler={() => {
+            setError(null);
+            setÀBloquer(null);
+          }}
+          onConfirmer={() => block.mutate(àBloquer.id)}
+        >
+          Son contournement du portail est retiré : l&apos;appareil devra désormais passer par
+          la page de connexion, ce dont une télévision ou une caméra est rarement capable —
+          en pratique, il n&apos;aura plus Internet. Le geste se défait avec{' '}
+          <strong>Rétablir</strong>, qui remet le contournement en place.
+        </Confirmation>
+      )}
+
+      {error && !àBloquer && (
         <Card>
           <p className="text-sm text-red-600">{error}</p>
         </Card>
@@ -231,7 +254,8 @@ export function DevicesPage() {
               <td className="whitespace-nowrap px-3 py-2 text-right">
                 {canWrite &&
                   (état === 'contourné' ? (
-                    <Button variant="danger" onClick={() => block.mutate(device.id)}>
+                    // Le clic coupait Internet à l'appareil sans rien demander.
+                    <Button variant="danger" onClick={() => setÀBloquer(device)}>
                       Bloquer
                     </Button>
                   ) : (

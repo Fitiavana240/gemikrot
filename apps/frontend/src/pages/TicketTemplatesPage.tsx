@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Confirmation } from '../components/Edition';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ticketTemplatesApi, type TicketTemplate } from '../api/ticket-templates';
 import { vouchersApi } from '../api/vouchers';
@@ -54,6 +55,8 @@ export function TicketTemplatesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ name: string; html: string; perPage: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Le modèle qu'on s'apprête à supprimer, tant que ce n'est pas confirmé. */
+  const [àSupprimer, setÀSupprimer] = useState(false);
   const [preview, setPreview] = useState<string>('');
   const [unknown, setUnknown] = useState<string[]>([]);
 
@@ -110,6 +113,7 @@ export function TicketTemplatesPage() {
     mutationFn: ticketTemplatesApi.remove,
     onSuccess: () => {
       setError(null);
+      setÀSupprimer(false);
       setSelectedId(null);
       setDraft(null);
       queryClient.invalidateQueries({ queryKey: ['ticket-templates'] });
@@ -169,7 +173,25 @@ export function TicketTemplatesPage() {
     <div className="space-y-6">
       {EN_TETE}
 
-      {error && (
+      {àSupprimer && selected && (
+        <Confirmation
+          titre={`Supprimer le modèle « ${selected.name} » ?`}
+          libelléConfirmer="Supprimer le modèle"
+          enCours={remove.isPending}
+          erreur={remove.isError ? error : null}
+          onAnnuler={() => {
+            setError(null);
+            setÀSupprimer(false);
+          }}
+          onConfirmer={() => remove.mutate(selected.id)}
+        >
+          Sa mise en page part avec — marges, police, nombre de tickets par feuille — et rien
+          ne la rendra. Les planches déjà imprimées ne changent pas ; les prochaines repartiront
+          du modèle par défaut.
+        </Confirmation>
+      )}
+
+      {error && !àSupprimer && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
           {error}
         </div>
@@ -204,7 +226,7 @@ export function TicketTemplatesPage() {
               Dupliquer
             </Button>
             {selected && !selected.isDefault && (
-              <Button variant="danger" onClick={() => remove.mutate(selected.id)}>
+              <Button variant="danger" onClick={() => setÀSupprimer(true)}>
                 Supprimer
               </Button>
             )}

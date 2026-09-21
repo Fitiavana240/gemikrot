@@ -135,6 +135,8 @@ function ProfilesTab() {
   const [àGenerer, setÀGenerer] = useState<string | null>(null);
   const [àModifier, setÀModifier] = useState<UserManagerProfile | null>(null);
   const [créer, setCréer] = useState(false);
+  /** Le profil qu'on s'apprête à supprimer, tant que ce n'est pas confirmé. */
+  const [àSupprimer, setÀSupprimer] = useState<string | null>(null);
 
   const { currentId } = useRouterSelection();
   const profiles = useQuery({
@@ -174,6 +176,7 @@ function ProfilesTab() {
     mutationFn: (name: string) => userManagerApi.deleteProfile(name, currentId),
     onSuccess: () => {
       setError(null);
+      setÀSupprimer(null);
       refresh();
     },
     onError,
@@ -198,6 +201,25 @@ function ProfilesTab() {
           profileName={àGenerer}
           onFermer={() => setÀGenerer(null)}
         />
+      )}
+
+      {àSupprimer && (
+        <Confirmation
+          titre={`Supprimer le profil « ${àSupprimer} » ?`}
+          libelléConfirmer="Supprimer le profil"
+          enCours={remove.isPending}
+          erreur={remove.isError ? error : null}
+          onAnnuler={() => {
+            setError(null);
+            setÀSupprimer(null);
+          }}
+          onConfirmer={() => remove.mutate(àSupprimer)}
+        >
+          Aucun compte ne s&apos;en sert aujourd&apos;hui, sans quoi le bouton ne serait pas
+          là. Une offre de l&apos;application qui le désigne par son nom{' '}
+          <strong>resterait vendable et échouerait à chaque ticket</strong> : le routeur
+          refuse un profil qu&apos;il ne connaît pas.
+        </Confirmation>
       )}
 
       {àModifier && (
@@ -387,7 +409,7 @@ function ProfilesTab() {
                         désignent personne — faisait apparaître le bouton sur des
                         profils encore référencés seize fois. */}
                     {profile.accountCount === 0 && profile.attributionsOrphelines === 0 && (
-                      <Button variant="danger" onClick={() => remove.mutate(profile.name)}>
+                      <Button variant="danger" onClick={() => setÀSupprimer(profile.name)}>
                         Supprimer
                       </Button>
                     )}
@@ -417,6 +439,8 @@ function LimitationsTab() {
   // déplié en permanence ; avec les neuf champs de réglage fin, il occuperait
   // l'écran avant qu'on ait vu la liste.
   const [créer, setCréer] = useState(false);
+  /** La limitation qu'on s'apprête à supprimer, tant que ce n'est pas confirmé. */
+  const [àSupprimerLim, setÀSupprimerLim] = useState<string | null>(null);
 
   const { currentId } = useRouterSelection();
   const limitations = useQuery({
@@ -464,6 +488,7 @@ function LimitationsTab() {
     mutationFn: (name: string) => userManagerApi.deleteLimitation(name, currentId),
     onSuccess: () => {
       setError(null);
+      setÀSupprimerLim(null);
       refresh();
     },
     onError,
@@ -472,6 +497,24 @@ function LimitationsTab() {
   return (
     <div className="space-y-4">
       {error && <ErrorBanner>{error}</ErrorBanner>}
+
+      {àSupprimerLim && (
+        <Confirmation
+          titre={`Supprimer la limitation « ${àSupprimerLim} » ?`}
+          libelléConfirmer="Supprimer la limitation"
+          enCours={remove.isPending}
+          erreur={remove.isError ? error : null}
+          onAnnuler={() => {
+            setError(null);
+            setÀSupprimerLim(null);
+          }}
+          onConfirmer={() => remove.mutate(àSupprimerLim)}
+        >
+          Aucun forfait ne s&apos;y rattache aujourd&apos;hui, sans quoi le routeur refuserait
+          et le bouton ne serait pas là. Ses réglages de débit, de volume et de pointe partent
+          avec : les retrouver supposerait de les ressaisir un à un.
+        </Confirmation>
+      )}
 
       {àModifier && (
         <FormulaireLimitation
@@ -572,7 +615,10 @@ function LimitationsTab() {
                     {/* RouterOS refuse de supprimer une limitation rattachée
                         à un profil : mieux vaut pas de bouton qu'un échec. */}
                     {limitation.profileNames.length === 0 && (
-                      <Button variant="danger" onClick={() => remove.mutate(limitation.name)}>
+                      <Button
+                        variant="danger"
+                        onClick={() => setÀSupprimerLim(limitation.name)}
+                      >
                         Supprimer
                       </Button>
                     )}

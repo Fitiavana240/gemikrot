@@ -9,6 +9,7 @@ import { ApiError } from '../api/client';
 import { phrasePanne } from '../api/pannes';
 import { AccesPermanentsTab } from './AccesPermanentsTab';
 import { Confirmation } from '../components/Edition';
+import { MenuAction } from '../components/MenuAction';
 import { PlafondsTab } from './PlafondsTab';
 import {
   Badge,
@@ -213,6 +214,15 @@ function WalledGardenTab() {
   const [host, setHost] = useState('');
   const [address, setAddress] = useState('');
   const [error, setError] = useState<string | null>(null);
+  /**
+   * L'entrée qu'on s'apprête à retirer, tant que ce n'est pas confirmé.
+   *
+   * Un clic retirait sans rien demander une règle dont dépend le paiement des
+   * clients : le portail ne laisse passer que ce qui est listé ici.
+   */
+  const [àRetirer, setÀRetirer] = useState<{ id: string; quoi: string; ip: boolean } | null>(
+    null,
+  );
 
   const { currentId } = useRouterSelection();
   const walledGarden = useQuery({
@@ -243,12 +253,18 @@ function WalledGardenTab() {
   });
   const removeHost = useMutation({
     mutationFn: (id: string) => hotspotApi.removeHost(id, currentId),
-    onSuccess: refresh,
+    onSuccess: () => {
+      setÀRetirer(null);
+      refresh();
+    },
     onError,
   });
   const removeIp = useMutation({
     mutationFn: (id: string) => hotspotApi.removeIp(id, currentId),
-    onSuccess: refresh,
+    onSuccess: () => {
+      setÀRetirer(null);
+      refresh();
+    },
     onError,
   });
 
@@ -269,7 +285,27 @@ function WalledGardenTab() {
 
   return (
     <div className="space-y-4">
-      {error && <ErrorBanner>{error}</ErrorBanner>}
+      {àRetirer && (
+        <Confirmation
+          titre={`Retirer « ${àRetirer.quoi} » du Walled Garden ?`}
+          libelléConfirmer="Retirer cette entrée"
+          enCours={removeHost.isPending || removeIp.isPending}
+          erreur={removeHost.isError || removeIp.isError ? error : null}
+          onAnnuler={() => {
+            setError(null);
+            setÀRetirer(null);
+          }}
+          onConfirmer={() =>
+            àRetirer.ip ? removeIp.mutate(àRetirer.id) : removeHost.mutate(àRetirer.id)
+          }
+        >
+          Cette destination ne sera plus joignable <strong>avant</strong> saisie du code. Si
+          c&apos;est celle d&apos;une page de paiement ou d&apos;un Mobile Money, un client qui
+          n&apos;a pas encore d&apos;accès ne pourra plus payer du tout.
+        </Confirmation>
+      )}
+
+      {error && !àRetirer && <ErrorBanner>{error}</ErrorBanner>}
 
       <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-900">
         Ce qu'un client peut joindre <strong>avant</strong> de saisir son code. Sans entrée ici,
@@ -328,7 +364,12 @@ function WalledGardenTab() {
               <td className="px-3 py-2 text-slate-500">{entry.hits}</td>
               <td className="px-3 py-2 text-right">
                 {canWrite && (
-                  <Button variant="danger" onClick={() => removeHost.mutate(entry.id)}>
+                  <Button
+                    variant="danger"
+                    onClick={() =>
+                      setÀRetirer({ id: entry.id, quoi: entry.dstHost ?? entry.id, ip: false })
+                    }
+                  >
                     Retirer
                   </Button>
                 )}
@@ -353,7 +394,12 @@ function WalledGardenTab() {
               <td className="px-3 py-2 text-slate-500">{entry.dstPort ?? 'tous'}</td>
               <td className="px-3 py-2 text-right">
                 {canWrite && (
-                  <Button variant="danger" onClick={() => removeIp.mutate(entry.id)}>
+                  <Button
+                    variant="danger"
+                    onClick={() =>
+                      setÀRetirer({ id: entry.id, quoi: entry.dstAddress ?? entry.id, ip: true })
+                    }
+                  >
                     Retirer
                   </Button>
                 )}
@@ -375,6 +421,10 @@ function CookiesTab() {
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  /** Le cookie sur lequel on agit : les deux gestes sont exclusifs. */
+  const [actionCookie, setActionCookie] = useState<{ id: string; username: string } | null>(
+    null,
+  );
 
   const { currentId } = useRouterSelection();
   const cookies = useQuery({
@@ -390,7 +440,10 @@ function CookiesTab() {
 
   const remove = useMutation({
     mutationFn: (id: string) => hotspotApi.deleteCookie(id, currentId),
-    onSuccess: refresh,
+    onSuccess: () => {
+      setActionCookie(null);
+      refresh();
+    },
     onError,
   });
 
@@ -421,9 +474,44 @@ function CookiesTab() {
   });
   const cut = useMutation({
     mutationFn: (username: string) => hotspotApi.cutAccess(username, currentId),
-    onSuccess: refresh,
+    onSuccess: () => {
+      setActionCookie(null);
+      refresh();
+    },
     onError,
   });
+
+  const fenetreCookie = actionCookie ? (
+    <MenuAction
+      titre={`Cookie de « ${actionCookie.username} »`}
+      enCours={remove.isPending || cut.isPending}
+      erreur={remove.isError || cut.isError ? error : null}
+      onFermer={() => {
+        setError(null);
+        setActionCookie(null);
+      }}
+      options={[
+        {
+          clé: 'effacer',
+          libellé: 'Effacer ce cookie',
+          aide: "Ne porte que sur cet appareil. Le compte garde ses autres cookies, et la session en cours n'est pas fermée : le client reste connecté.",
+          libelléBouton: 'Effacer ce cookie',
+        },
+        {
+          clé: 'couper',
+          libellé: "Couper l'accès du compte",
+          aide: "Efface TOUS les cookies du compte et ferme sa session. C'est la coupure qui tient — sans cela le client revient seul en quelques secondes.",
+          danger: true,
+          libelléBouton: "Couper l'accès",
+        },
+      ]}
+      onAppliquer={(clé) => {
+        setError(null);
+        if (clé === 'couper') cut.mutate(actionCookie.username);
+        else remove.mutate(actionCookie.id);
+      }}
+    />
+  ) : null;
 
   /** Un compte peut porter plusieurs cookies : un par appareil. */
   const byUser = new Map<string, number>();
@@ -440,7 +528,8 @@ function CookiesTab() {
 
   return (
     <div className="space-y-4">
-      {error && <ErrorBanner>{error}</ErrorBanner>}
+      {fenetreCookie}
+      {error && !actionCookie && <ErrorBanner>{error}</ErrorBanner>}
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
         Un cookie laisse un client se reconnecter <strong>sans repasser par RADIUS</strong> : sa
@@ -511,16 +600,19 @@ function CookiesTab() {
             <td className="px-3 py-2 font-mono text-xs text-slate-500">{cookie.macAddress}</td>
             <td className="px-3 py-2">{formatUptime(cookie.expiresInSeconds)}</td>
             <td className="px-3 py-2 text-slate-500">{byUser.get(cookie.username)}</td>
-            <td className="space-x-2 px-3 py-2 text-right">
+            <td className="px-3 py-2 text-right">
+              {/* « Effacer » ne porte que sur CE cookie ; « Couper l'accès »
+                  efface tous ceux du compte et ferme sa session. Deux boutons
+                  voisins ne disaient pas cet écart. */}
               {canWrite && (
-                <>
-                  <Button variant="secondary" onClick={() => remove.mutate(cookie.id)}>
-                    Effacer
-                  </Button>
-                  <Button variant="danger" onClick={() => cut.mutate(cookie.username)}>
-                    Couper l'accès
-                  </Button>
-                </>
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    setActionCookie({ id: cookie.id, username: cookie.username })
+                  }
+                >
+                  Action…
+                </Button>
               )}
             </td>
           </tr>
