@@ -22,7 +22,8 @@ export const TRANSLATIONS = {
     confirmIntro:
       'Saisissez le numéro qui a envoyé l\'argent et la référence figurant dans votre SMS de confirmation.',
     yourName: 'Votre nom',
-    yourNameHint: 'Il deviendra votre identifiant de connexion.',
+    yourNameHint:
+      'Il deviendra votre identifiant de connexion. Vous avez déjà un accès ? Retapez le même nom et le même numéro : il sera prolongé, et votre mot de passe deviendra cette nouvelle référence.',
     willBe: 'Votre identifiant sera',
     yourPhone: 'Votre numéro',
     reference: 'Référence du transfert (Trans ID)',
@@ -49,25 +50,6 @@ export const TRANSLATIONS = {
     refusedTitle: 'Paiement non validé',
     refusedBody: 'Contactez le vendeur avec votre référence.',
     alreadyPaid: 'J\'ai déjà payé',
-    // Le réabonnement : le client garde son identifiant, et rachète du temps.
-    buy: 'Premier accès',
-    renewEntry: 'Je me réabonne',
-    renewEntryHint: 'Vous avez déjà un accès ? Gardez le même identifiant.',
-    renewTitle: 'Confirmez votre réabonnement',
-    renewIntro:
-      'Votre identifiant et votre mot de passe ne changent pas. Vous rachetez seulement de la durée.',
-    renewId: 'Votre identifiant',
-    renewIdHint: 'Celui avec lequel vous vous connectez au Wi-Fi.',
-    renewPassword: 'Votre mot de passe actuel',
-    renewPasswordHint:
-      'La référence de votre premier achat. Elle prouve que ce compte est le vôtre, et elle ne change pas.',
-    renewNewReference: 'Référence du nouveau paiement',
-    renewReferenceHint:
-      'Recopiez-la exactement comme dans le SMS de l’opérateur. Elle sert à retrouver votre paiement — elle ne remplace pas votre mot de passe.',
-    renewCheckTwiceBody:
-      'Vérifiez votre identifiant et votre mot de passe actuel : s’ils ne correspondent pas à un accès existant, le réabonnement sera refusé et votre argent sera déjà parti.',
-    renewSubmit: 'Confirmer le réabonnement',
-    renewFirstTime: 'Premier accès ? Achetez-en un.',
     findAccess: 'Retrouver mon accès',
     findIntro: 'Entrez le numéro qui a payé et la référence de votre SMS.',
     search: 'Rechercher',
@@ -92,7 +74,8 @@ export const TRANSLATIONS = {
     confirmIntro:
       'Ampidiro ny laharana nandefa ny vola sy ny référence hita ao amin\'ny SMS fanamarinana.',
     yourName: 'Ny anaranao',
-    yourNameHint: 'Izy no ho anaranao amin’ny fidirana.',
+    yourNameHint:
+      'Izy no ho anaranao amin’ny fidirana. Efa manana fidirana ? Soraty indray ilay anarana sy laharana ihany : hohalavaina izy, ary ho lasa tenimiafinao ity référence vaovao ity.',
     willBe: 'Ny anaranao amin’ny fidirana dia',
     yourPhone: 'Ny laharanao',
     reference: 'Référence ny fandefasana (Trans ID)',
@@ -117,24 +100,6 @@ export const TRANSLATIONS = {
     refusedTitle: 'Tsy voamarina ny fandoavam-bola',
     refusedBody: 'Mifandraisa amin\'ny mpivarotra miaraka amin\'ny référence-nao.',
     alreadyPaid: 'Efa nandoa aho',
-    buy: 'Fidirana voalohany',
-    renewEntry: 'Hanavao ny fisoratana',
-    renewEntryHint: 'Efa manana fidirana ? Tazony ilay anarana efa misy.',
-    renewTitle: 'Hamarino ny fanavaozana',
-    renewIntro:
-      'Tsy miova ny anaranao sy ny tenimiafinao. Fotoana fanampiny ihany no vidinao.',
-    renewId: 'Ny anaranao amin’ny fidirana',
-    renewIdHint: 'Ilay ampiasainao rehefa miditra amin’ny Wi-Fi.',
-    renewPassword: 'Ny tenimiafinao ankehitriny',
-    renewPasswordHint:
-      'Ny référence tamin’ny fividianana voalohany. Izy no porofo fa anao ity kaonty ity, ary tsy miova.',
-    renewNewReference: 'Référence amin’ity fandoavam-bola vaovao ity',
-    renewReferenceHint:
-      'Adikao araka ny SMS avy amin’ny mpandraharaha. Manampy hitady ny fandoavam-bolanao izy — tsy manolo ny tenimiafinao.',
-    renewCheckTwiceBody:
-      'Hamarino ny anaranao sy ny tenimiafinao ankehitriny : raha tsy mifanaraka amin’ny fidirana efa misy izy ireo, dia holavina ny fanavaozana nefa efa lasa ny volanao.',
-    renewSubmit: 'Hamarino ny fanavaozana',
-    renewFirstTime: 'Vao manomboka ? Mividiana fidirana.',
     findAccess: 'Hitady ny fidirako',
     findIntro: 'Ampidiro ny laharana nandoa sy ny référence ao amin\'ny SMS.',
     search: 'Hitady',

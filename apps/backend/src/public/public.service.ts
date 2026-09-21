@@ -220,133 +220,6 @@ export class PublicService {
   }
 
   /**
-   * Le client rachète du temps sur l'accès qu'il a déjà.
-   *
-   * Il garde son identifiant — c'est tout l'intérêt : il n'a pas à retenir un
-   * nouveau nom tous les mois, ni à réapprendre à se connecter. Seule la
-   * référence du transfert change, puisque c'est un nouveau paiement.
-   *
-   * **Son mot de passe ne change pas**, et ce choix est délibéré. La
-   * référence de son premier achat est celle qui est écrite sur le routeur,
-   * et c'est celle qu'il a notée. La remplacer par la nouvelle le mettrait
-   * dehors s'il ressort son ancien SMS — et il n'aurait aucun moyen de
-   * comprendre pourquoi son code « ne marche plus ».
-   *
-   * Cette même référence sert donc de preuve : la saisir, c'est montrer qu'on
-   * est bien le titulaire. Sans elle, n'importe qui pourrait prolonger — ou,
-   * bien pire, se tromper d'un caractère et payer pour le compte d'un autre.
-   */
-  async reabonner(
-    slug: string,
-    input: {
-      identifiant: string;
-      motDePasse: string;
-      planId: string;
-      accountId: string;
-      reference: string;
-    },
-  ): Promise<{ token: string; state: ClaimState; identifiant: string }> {
-    const tenant = await this.requireActiveTenant(slug);
-    const reference = normalizeReference(input.reference);
-    if (!isUsableReference(reference)) {
-      throw new BadRequestException(
-        "Référence invalide — entre 4 et 32 lettres ou chiffres, telle qu'elle figure dans votre SMS",
-      );
-    }
-
-    return this.tenantContext.runAsTenant(tenant.id, async () => {
-      // Insensible à la casse, comme à la création : l'index unique de
-      // Postgres distingue `Herve-Razafy` de `herve-razafy`, pas le client.
-      const acces = await this.prisma.scopedStrict.voucher.findFirst({
-        where: { code: { equals: input.identifiant.trim(), mode: 'insensitive' } },
-        include: { customer: { select: { id: true, phone: true } } },
-      });
-
-      /**
-       * Un seul message pour « identifiant inconnu » et « mot de passe
-       * faux ».
-       *
-       * Deux messages distincts diraient à n'importe qui si tel nom est
-       * client d'ici : il suffirait d'essayer des prénoms. Ce n'est pas un
-       * grand secret, mais il n'y a aucune raison de le distribuer.
-       */
-      const refus = new BadRequestException(
-        "Identifiant ou code inconnu. Vérifiez ce que vous avez saisi — c'est le nom et la référence de votre premier achat. Si c'est votre premier accès, utilisez plutôt « Acheter un accès ».",
-      );
-      if (!acces) throw refus;
-      if (!acces.accessPassword || acces.accessPassword !== normalizeReference(input.motDePasse)) {
-        throw refus;
-      }
-      if (acces.status === 'CANCELLED' || acces.status === 'DISABLED') {
-        throw new BadRequestException(
-          'Cet accès a été bloqué. Contactez le vendeur : un réabonnement ne le rouvrirait pas.',
-        );
-      }
-
-      const plan = await this.prisma.scopedStrict.plan.findFirst({
-        where: { id: input.planId, status: PlanStatus.ACTIVE, kind: PlanKind.TICKET },
-      });
-      if (!plan) throw new NotFoundException('Offre introuvable');
-
-      const account = await this.prisma.scopedStrict.mobileMoneyAccount.findFirst({
-        where: { id: input.accountId, isActive: true },
-      });
-      if (!account) throw new NotFoundException('Moyen de paiement introuvable');
-
-      // Rejouer la même déclaration ne crée pas un second paiement : le
-      // client qui recharge la page retrouve son suivi.
-      const existant = await this.prisma.scopedStrict.payment.findFirst({
-        where: { reference, method: account.provider },
-        include: { claim: true },
-      });
-      if (existant?.claim) {
-        return {
-          token: existant.claim.token,
-          state: this.stateOf(existant.status),
-          identifiant: acces.code,
-        };
-      }
-      if (existant) {
-        throw new BadRequestException(
-          "Cette référence a déjà été utilisée. Contactez le vendeur si vous pensez que c'est une erreur.",
-        );
-      }
-
-      const payment = await this.prisma.scopedStrict.payment.create({
-        data: {
-          tenantId: tenant.id,
-          customerId: acces.customerId!,
-          planId: plan.id,
-          amount: plan.price,
-          currency: tenant.currency,
-          method: account.provider,
-          reference,
-          // `renewsVoucherId`, et non `voucherId` : celui-là est unique, parce
-          // qu'un ticket ne se vend qu'une fois. Un réabonnement ne vend rien.
-          renewsVoucherId: acces.id,
-        },
-      });
-
-      const claim = await this.prisma.scopedStrict.paymentClaim.create({
-        data: {
-          tenantId: tenant.id,
-          paymentId: payment.id,
-          token: randomBytes(24).toString('base64url'),
-          // Le numéro vient de sa fiche : il l'a donné au premier achat, et
-          // le retaper ne serait qu'une occasion de se tromper.
-          phone: acces.customer?.phone ?? '',
-          reference,
-        },
-      });
-
-      this.logger.log(
-        `Réabonnement déclaré : ${plan.name} pour ${acces.code} (${account.provider})`,
-      );
-      return { token: claim.token, state: 'EN_ATTENTE' as const, identifiant: acces.code };
-    });
-  }
-
-  /**
    * Le client déclare avoir payé. Rien ne lui est ouvert à ce stade : un
    * paiement en attente est enregistré, que la lecture des SMS ou un admin
    * viendra confirmer.
@@ -423,6 +296,15 @@ export class PublicService {
       // pour les tickets imprimés, et le routeur ne saurait pas distinguer
       // deux comptes du même nom. On refuse donc **avant** le paiement, avec
       // de quoi s'en sortir, plutôt que de laisser le client payer pour rien.
+      // Créé avant la branche de reprise : elle en a besoin pour rattacher le
+      // paiement, et le nom qu'il vient de saisir vaut mieux que celui d'une
+      // déclaration précédente.
+      const customer = await this.prisma.scopedStrict.customer.upsert({
+        where: { tenantId_phone: { tenantId: tenant.id, phone } },
+        update: { name: input.holderName.trim() },
+        create: { tenantId: tenant.id, name: input.holderName.trim(), phone },
+      });
+
       const déjàPris = await this.prisma.voucher.findFirst({
         // **Insensible à la casse**, et c'est un vrai piège : l'index unique
         // de Postgres, lui, distingue `Naivo-Doublon` de `naivo-doublon`. La
@@ -430,22 +312,67 @@ export class PublicService {
         // posséder le même identifiant. Trouvé par le test qui rejoue le même
         // nom en minuscules.
         where: { code: { equals: identifiant, mode: 'insensitive' } },
-        select: { id: true, code: true },
+        select: { id: true, code: true, tenantId: true, status: true, customer: { select: { phone: true } } },
       });
-      if (déjàPris) {
-        throw new BadRequestException(
-          `« ${déjàPris.code} » est déjà utilisé. Ajoutez votre initiale ou un chiffre, par exemple « ${identifiant}2 ».`,
-        );
-      }
 
-      const customer = await this.prisma.scopedStrict.customer.upsert({
-        where: { tenantId_phone: { tenantId: tenant.id, phone } },
-        // Le nom saisi remplace le numéro posé par une déclaration
-        // précédente : le client vient de se nommer lui-même, c'est plus sûr
-        // que ce que le SMS de l'opérateur rapportera.
-        update: { name: input.holderName.trim() },
-        create: { tenantId: tenant.id, name: input.holderName.trim(), phone },
-      });
+      if (déjàPris) {
+        /**
+         * Le même identifiant **et** le même numéro : c'est le client qui
+         * revient. Il rachète du temps sur l'accès qu'il a déjà, et n'a ni
+         * nouveau nom à inventer ni formulaire séparé à trouver.
+         *
+         * **Le numéro est la preuve, et il n'y en a pas d'autre.** Sans lui,
+         * il suffirait de taper le nom de son voisin et de payer pour le
+         * mettre dehors : son mot de passe deviendrait une référence qu'il ne
+         * connaît pas, et il n'aurait aucun moyen de comprendre pourquoi son
+         * code « ne marche plus ». Le formulaire demande déjà ce numéro —
+         * aucun champ de plus à remplir pour s'en servir.
+         */
+        const luiMeme =
+          déjàPris.tenantId === tenant.id && déjàPris.customer?.phone === phone;
+
+        if (!luiMeme) {
+          throw new BadRequestException(
+            `« ${déjàPris.code} » est déjà utilisé. Ajoutez votre initiale ou un chiffre, par exemple « ${identifiant}2 ».`,
+          );
+        }
+        if (déjàPris.status === 'CANCELLED' || déjàPris.status === 'DISABLED') {
+          throw new BadRequestException(
+            'Cet accès a été bloqué. Contactez le vendeur : un nouveau paiement ne le rouvrirait pas.',
+          );
+        }
+
+        const paiement = await this.prisma.scopedStrict.payment.create({
+          data: {
+            tenantId: tenant.id,
+            customerId: customer.id,
+            planId: plan.id,
+            amount: plan.price,
+            currency: tenant.currency,
+            method: account.provider,
+            reference,
+            // `renewsVoucherId`, et non `voucherId` : celui-là est unique,
+            // parce qu'un ticket ne se vend qu'une fois. Racheter du temps
+            // n'est pas une seconde vente, et cela peut arriver tous les mois.
+            renewsVoucherId: déjàPris.id,
+          },
+        });
+
+        const suivi = await this.prisma.scopedStrict.paymentClaim.create({
+          data: {
+            tenantId: tenant.id,
+            paymentId: paiement.id,
+            token: randomBytes(24).toString('base64url'),
+            phone,
+            reference,
+          },
+        });
+
+        this.logger.log(
+          `Temps racheté : ${plan.name} pour ${déjàPris.code} (${account.provider})`,
+        );
+        return { token: suivi.token, state: 'EN_ATTENTE' as const, identifiant: déjàPris.code };
+      }
 
       // Le ticket est créé **maintenant**, au nom choisi et avec la référence
       // pour mot de passe. Il n'est poussé sur le routeur qu'à la

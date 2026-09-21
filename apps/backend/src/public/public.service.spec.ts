@@ -101,148 +101,76 @@ describe('PublicService', () => {
     await prisma.$disconnect();
   });
 
-  describe('reabonnement', () => {
+  describe('le client qui revient', () => {
     /**
-     * Un acces deja vendu, tel que `claim` en produit un : l'identifiant vient
-     * du nom, le mot de passe est la reference du transfert.
+     * Racheter du temps passe par le **meme formulaire** que le premier
+     * achat : le client retape son nom et son numero, et n'a ni parcours
+     * separe a trouver ni nouvel identifiant a inventer.
      */
-    const poser = async (code: string, motDePasse: string) => {
-      const client = await prisma.customer.create({
-        data: { tenantId: tenantA, name: code, phone: `034${Date.now() % 1_000_000}${code.length}` },
-      });
-      return prisma.voucher.create({
-        data: {
-          tenantId: tenantA,
-          code,
-          accessPassword: motDePasse,
-          planId: planA,
-          price: 2000,
-          customerId: client.id,
-          target: 'USER_MANAGER',
-          umUsername: code,
-          status: 'ACTIVE',
-        },
-      });
-    };
-
-    it('rattache le paiement a l’acces existant, sans en vendre un second', async () => {
-      // `voucherId` est unique : un ticket ne se vend qu'une fois. Un
-      // reabonnement passe donc par `renewsVoucherId`, sans quoi le second
-      // paiement buterait sur la contrainte.
-      const acces = await poser(`Reab-Un-${suffix}`, 'REFUN');
-
-      const r = await service.reabonner(tenantA, {
-        identifiant: acces.code,
-        motDePasse: 'REFUN',
+    const acheter = (nom: string, telephone: string, reference: string) =>
+      service.claim(tenantA, {
         planId: planA,
         accountId: accountA,
-        reference: `REAB1${suffix}`.slice(0, 20),
+        phone: telephone,
+        reference,
+        holderName: nom,
       });
 
-      expect(r.identifiant).toBe(acces.code);
-      const paiement = await prisma.payment.findFirst({
-        where: { renewsVoucherId: acces.id },
+    it('rachete du temps au lieu de refuser le nom deja pris', async () => {
+      const nom = `Revient ${suffix}`;
+      const tel = `034${suffix}`.slice(0, 10);
+
+      const premier = await acheter(nom, tel, `REV1${suffix}`.slice(0, 20));
+      const second = await acheter(nom, tel, `REV2${suffix}`.slice(0, 20));
+
+      expect(second.identifiant).toBe(premier.identifiant);
+      const ticket = await prisma.voucher.findFirst({ where: { code: premier.identifiant } });
+      const paiements = await prisma.payment.findMany({
+        where: { OR: [{ voucherId: ticket!.id }, { renewsVoucherId: ticket!.id }] },
       });
-      expect(paiement).not.toBeNull();
-      // Rien n'est vendu : le champ du ticket delivre reste vide.
-      expect(paiement?.voucherId).toBeNull();
+      // Deux paiements, un seul ticket : le second rachete du temps, il n'en
+      // vend pas un autre.
+      expect(paiements).toHaveLength(2);
+      expect(paiements.filter((p) => p.renewsVoucherId === ticket!.id)).toHaveLength(1);
+      expect(await prisma.voucher.count({ where: { code: premier.identifiant } })).toBe(1);
     });
 
-    it('accepte l’identifiant ecrit autrement', async () => {
-      // L'index unique de Postgres distingue `Herve` de `herve`, pas le
-      // client qui retape son nom sur un telephone.
-      const acces = await poser(`Reab-Casse-${suffix}`, 'REFCASSE');
-
-      const r = await service.reabonner(tenantA, {
-        identifiant: acces.code.toLowerCase(),
-        motDePasse: 'refcasse',
-        planId: planA,
-        accountId: accountA,
-        reference: `REAB2${suffix}`.slice(0, 20),
-      });
-
-      expect(r.identifiant).toBe(acces.code);
-    });
-
-    it('refuse un mot de passe faux, et ne dit pas lequel des deux est faux', async () => {
-      // Deux messages distincts diraient a n'importe qui si tel prenom est
-      // client d'ici : il suffirait d'essayer des prenoms.
-      const acces = await poser(`Reab-Faux-${suffix}`, 'BONNE');
-
-      // Le `catch` est attache des la creation, et non a l'attente : deux
-      // promesses lancees ensemble rejettent avant qu'on les attende, et
-      // vitest signale alors un rejet non gere qui masquerait une vraie
-      // erreur un autre jour.
-      const m1 = await service
-        .reabonner(tenantA, {
-          identifiant: acces.code,
-          motDePasse: 'MAUVAISE',
-          planId: planA,
-          accountId: accountA,
-          reference: `REAB3${suffix}`.slice(0, 20),
-        })
-        .then(() => 'aucun refus', (e) => e.message);
-      const m2 = await service
-        .reabonner(tenantA, {
-          identifiant: `Personne-${suffix}`,
-          motDePasse: 'BONNE',
-          planId: planA,
-          accountId: accountA,
-          reference: `REAB4${suffix}`.slice(0, 20),
-        })
-        .then(() => 'aucun refus', (e) => e.message);
-      expect(m1).toMatch(/Identifiant ou code inconnu/);
-      expect(m1).toBe(m2);
-    });
-
-    it('ne prolonge pas l’acces d’un autre exploitant', async () => {
-      // Le cloisonnement doit tenir sans jeton : c'est la seule barriere ici.
-      const acces = await poser(`Reab-Cloison-${suffix}`, 'REFCLOISON');
+    it('refuse le meme nom depuis un autre numero', async () => {
+      // Le numero est la seule preuve. Sans lui, il suffirait de taper le nom
+      // de son voisin et de payer pour le mettre dehors : son mot de passe
+      // deviendrait une reference qu'il ne connait pas.
+      const nom = `Voisin ${suffix}`;
+      await acheter(nom, `033${suffix}`.slice(0, 10), `VOIS1${suffix}`.slice(0, 20));
 
       await expect(
-        service.reabonner(tenantB, {
-          identifiant: acces.code,
-          motDePasse: 'REFCLOISON',
-          planId: planB,
-          accountId: accountA,
-          reference: `REAB5${suffix}`.slice(0, 20),
-        }),
-      ).rejects.toThrow();
+        acheter(nom, `032${suffix}`.slice(0, 10), `VOIS2${suffix}`.slice(0, 20)),
+      ).rejects.toThrow(/déjà utilisé/);
     });
 
-    it('refuse un acces bloque', async () => {
-      // Un reabonnement ne doit pas servir a contourner un blocage : le
-      // client paierait pour un acces qui ne se rouvrirait pas.
-      const acces = await poser(`Reab-Bloque-${suffix}`, 'REFBLOQ');
-      await prisma.voucher.update({ where: { id: acces.id }, data: { status: 'DISABLED' } });
+    it('refuse de racheter du temps sur un acces bloque', async () => {
+      // Le client paierait pour un acces qui ne se rouvrirait pas.
+      const nom = `Bloque ${suffix}`;
+      const tel = `038${suffix}`.slice(0, 10);
+      const premier = await acheter(nom, tel, `BLOQ1${suffix}`.slice(0, 20));
+      await prisma.voucher.updateMany({
+        where: { code: premier.identifiant },
+        data: { status: 'DISABLED' },
+      });
 
-      await expect(
-        service.reabonner(tenantA, {
-          identifiant: acces.code,
-          motDePasse: 'REFBLOQ',
-          planId: planA,
-          accountId: accountA,
-          reference: `REAB6${suffix}`.slice(0, 20),
-        }),
-      ).rejects.toThrow(/bloqu/i);
+      await expect(acheter(nom, tel, `BLOQ2${suffix}`.slice(0, 20))).rejects.toThrow(/bloqu/i);
     });
 
     it('rejoue la meme declaration sans creer un second paiement', async () => {
-      const acces = await poser(`Reab-Rejeu-${suffix}`, 'REFREJEU');
-      const reference = `REAB7${suffix}`.slice(0, 20);
-      const entree = {
-        identifiant: acces.code,
-        motDePasse: 'REFREJEU',
-        planId: planA,
-        accountId: accountA,
-        reference,
-      };
+      const nom = `Rejeu ${suffix}`;
+      const tel = `039${suffix}`.slice(0, 10);
+      const reference = `REJ2${suffix}`.slice(0, 20);
+      await acheter(nom, tel, `REJ1${suffix}`.slice(0, 20));
 
-      const un = await service.reabonner(tenantA, entree);
-      const deux = await service.reabonner(tenantA, entree);
+      const un = await acheter(nom, tel, reference);
+      const deux = await acheter(nom, tel, reference);
 
       expect(deux.token).toBe(un.token);
-      expect(await prisma.payment.count({ where: { renewsVoucherId: acces.id } })).toBe(1);
+      expect(await prisma.payment.count({ where: { reference } })).toBe(1);
     });
   });
 

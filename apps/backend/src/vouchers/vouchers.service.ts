@@ -282,7 +282,7 @@ export class VouchersService {
    */
   async renouveler(
     voucherId: string,
-    params: { adminUserId?: string } = {},
+    params: { adminUserId?: string; reference?: string } = {},
   ): Promise<Voucher> {
     const voucher = await this.findOne(voucherId);
     const plan = await this.getActivePlan(voucher.planId);
@@ -296,6 +296,22 @@ export class VouchersService {
     const routerId = await this.getDefaultRouterId();
     const { profileName } = await this.provisioning.reconcile(plan.id, routerId);
     const mikrotik = await this.clients.forRouter(routerId);
+
+    /**
+     * Le mot de passe devient la reference du nouveau paiement.
+     *
+     * C'est celle que le client vient de taper, donc celle qu'il a sous les
+     * yeux ; l'ancienne dort dans un SMS d'il y a un mois. Pose **sur le
+     * routeur d'abord** : c'est lui qui authentifie, et une base qui
+     * annoncerait un mot de passe que le routeur refuse serait pire que pas
+     * de changement du tout.
+     */
+    if (params.reference) {
+      await mikrotik.updateUserManagerUser({
+        username: voucher.umUsername,
+        password: params.reference,
+      });
+    }
 
     const assignment = await mikrotik.assignProfile({
       username: voucher.umUsername,
@@ -311,6 +327,8 @@ export class VouchersService {
       data: {
         // Un ticket expiré redevient actif : c'est tout l'objet du geste.
         status: VoucherStatus.ACTIVE,
+        // Écrit seulement après que le routeur l'a accepté.
+        accessPassword: params.reference ?? voucher.accessPassword,
         umState: assignment.state,
         expiresAt: echeance ?? voucher.expiresAt,
         lastReconciledAt: new Date(),
@@ -327,6 +345,7 @@ export class VouchersService {
         code: voucher.code,
         profil: profileName,
         echeance: echeance?.toISOString() ?? null,
+        motDePasseChange: Boolean(params.reference),
       },
     });
 

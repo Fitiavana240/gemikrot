@@ -3,7 +3,7 @@ import type { Request } from 'express';
 import { Public } from '../auth/public.decorator.js';
 import { PublicService } from './public.service.js';
 import { RateLimitGuard } from './rate-limit.guard.js';
-import { ClaimPaymentDto, LookupClaimDto, ReabonnerDto } from './dto/public.dto.js';
+import { ClaimPaymentDto, LookupClaimDto } from './dto/public.dto.js';
 import { normalizePhone, normalizeReference } from './payment-normalization.js';
 
 /**
@@ -94,43 +94,6 @@ export class PublicController {
   )
   claim(@Param('slug') slug: string, @Body() dto: ClaimPaymentDto) {
     return this.publicService.claim(slug, dto);
-  }
-
-  /**
-   * Le client rachete du temps sur l'acces qu'il a deja.
-   *
-   * La limite se pose **sur l'identifiant**, et c'est la difference avec
-   * `claim` : ce formulaire demande un mot de passe, donc il se devine. Dix
-   * essais par heure et par identifiant suffisent largement a un client qui
-   * retape sa reference, et ne suffisent a personne d'autre.
-   */
-  @Post(':slug/reabonner')
-  @UseGuards(
-    new RateLimitGuard([
-      {
-        key: (req) => `reab:${req.params.slug}:${String(req.body?.identifiant ?? '').toLowerCase().trim()}`,
-        limit: 10,
-        windowMs: 3_600_000,
-        message: 'Trop de tentatives pour cet identifiant. Reessayez dans une heure.',
-      },
-      {
-        key: (req) => `${req.params.slug}:${normalizeReference(req.body?.reference ?? '')}`,
-        limit: 20,
-        windowMs: 3_600_000,
-        message: 'Trop de tentatives pour cette reference.',
-      },
-      {
-        // Filet contre un automate exterieur, volontairement large : le
-        // portail captif fait partager une seule adresse a tout le quartier.
-        key: (req) => req.ip,
-        limit: 120,
-        windowMs: 60_000,
-        message: 'Trop de requetes.',
-      },
-    ]),
-  )
-  reabonner(@Param('slug') slug: string, @Body() dto: ReabonnerDto) {
-    return this.publicService.reabonner(slug, dto);
   }
 
   @Get(':slug/claim/:token')

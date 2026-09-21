@@ -190,7 +190,12 @@ export class PaymentsService {
       throw new ConflictException(`Paiement ${payment.id} déjà vérifié par une requête concurrente`);
     }
 
-    const prolonge = await this.vouchers.renouveler(payment.renewsVoucherId!, { adminUserId });
+    // La reference du paiement devient le mot de passe : c'est celle que le
+    // client vient de taper, et donc celle qu'il a sous les yeux.
+    const prolonge = await this.vouchers.renouveler(payment.renewsVoucherId!, {
+      adminUserId,
+      reference: payment.reference,
+    });
 
     await this.audit.log({
       adminUserId,
