@@ -122,6 +122,30 @@ model HotspotLoginPage {
   /// l'atteindre : sans Internet, et donc jamais le `dns-name` du portail.
   portailUrl       String? @map("portail_url")
 
+  // ---------- Le pied de page ----------
+  //
+  // La page de ce parc portait l'adresse du local, deux numeros et la page
+  // Facebook. Une seule ligne de pied ne pouvait pas les tenir, et les perdre
+  // en passant par la console aurait ete un recul : c'est par la que les
+  // clients appellent quand quelque chose ne marche pas.
+
+  /// Ou se trouve le local, tel qu'on l'explique a quelqu'un du quartier.
+  adresse      String? @map("adresse")
+  /// Les numeros, tels qu'ils se composent. Texte libre : deux numeros
+  /// separes par un point, un seul, ou aucun.
+  telephones   String? @map("telephones")
+  /// Page Facebook ou autre, en toutes lettres. Non cliquable : un client
+  /// captif n'a pas Internet, un lien ne menerait nulle part.
+  reseauSocial String? @map("reseau_social")
+
+  /// Afficher le tableau des tarifs, calcule depuis les offres reelles.
+  ///
+  /// La page de ce parc en portait un, ecrit a la main : il annoncait
+  /// << 1 Ora >> pour 500 Ar alors que le routeur en donne deux, une offre a
+  /// 30 000 Ar qui n'existe pas, et passait sous silence les 4 h a 1 000 Ar.
+  /// Calcule, il ne peut plus diverger.
+  afficherTarifs Boolean @default(true) @map("afficher_tarifs")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

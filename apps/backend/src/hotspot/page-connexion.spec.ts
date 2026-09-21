@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   autoriseParLeWalledGarden,
   contrasteAvecBlanc,
+  duree,
   exigerCouleurLisible,
   hoteDe,
   PageConnexionService,
@@ -18,7 +19,25 @@ import {
  * sans effet est la pire panne possible : on cherche la cause partout sauf là.
  */
 
-const TENANT = { slug: 'zone-wifi-tati', wifiName: 'Zone WIFI-TATI', name: 'Tati' };
+const TENANT = {
+  slug: 'zone-wifi-tati',
+  wifiName: 'Zone WIFI-TATI',
+  name: 'Tati',
+  currency: 'MGA',
+};
+
+/** Les offres de ce parc, telles qu'elles sont en base. */
+const OFFRES = [
+  { name: '2Heure-500Ar', price: 500, validityDurationSeconds: 7200, maxSharedUsers: 1 },
+  { name: '4Heure-1000Ar', price: 1000, validityDurationSeconds: 14400, maxSharedUsers: 1 },
+  { name: '1Jour-2000Ar', price: 2000, validityDurationSeconds: 86400, maxSharedUsers: 1 },
+  {
+    name: 'Abo-25000Ar-2Appareils',
+    price: 25000,
+    validityDurationSeconds: 2592000,
+    maxSharedUsers: 2,
+  },
+];
 
 function service(options: {
   serveurs?: any[];
@@ -58,6 +77,7 @@ function service(options: {
       findMany: vi.fn(async () => []),
       upsert: vi.fn(async () => ({})),
     },
+    scopedStrict: { plan: { findMany: vi.fn(async () => OFFRES) } },
   };
 
   const s = new PageConnexionService(
@@ -229,6 +249,20 @@ describe('le bouton d’achat', () => {
     expect(contenu).toContain('class="payer"');
   });
 
+  it('ne sert pas au client la documentation du modele', async () => {
+    // Le commentaire de tete **liste les marqueurs** : `replaceAll` les y
+    // remplacait aussi, et le tableau des tarifs se retrouvait ecrit une
+    // seconde fois a l'interieur d'un commentaire. Invisible, mais 2 800
+    // octets de plus dans un fichier qui voyage par une API plafonnee.
+    const { service: s } = service({ reglages: { portailUrl: 'http://10.0.0.2:5173' } });
+
+    const { contenu } = await s.apercu();
+
+    expect(contenu).not.toContain('Page captive HotSpot');
+    expect(contenu.split('class="tarifs"')).toHaveLength(2);
+    expect(contenu.split('class="payer"')).toHaveLength(2);
+  });
+
   it('ne laisse aucun marqueur non remplacé', async () => {
     // Un `__TRUC__` oublié s'afficherait tel quel au client.
     const { service: s } = service({ reglages: { portailUrl: 'http://10.0.0.2:5173' } });
@@ -248,6 +282,103 @@ describe('le bouton d’achat', () => {
     const { contenu } = await s.apercu();
 
     expect([...contenu].find((c) => c.charCodeAt(0) > 127)).toBeUndefined();
+  });
+});
+
+describe('le tableau des tarifs', () => {
+  it('vient des offres, pas d’une saisie', async () => {
+    // L'affiche écrite à la main de ce parc annonçait « 1 Ora » pour 500 Ar
+    // alors que le routeur en donne deux. Calculé, le tableau ne peut plus
+    // annoncer une durée qui n'est pas celle qu'on livre.
+    const { service: s } = service({ reglages: { portailUrl: 'http://10.0.0.2:5173' } });
+
+    const { contenu } = await s.apercu();
+
+    expect(contenu).toContain('class="tarifs"');
+    expect(contenu).toContain('500 MGA');
+    expect(contenu).toContain('2 h');
+    // Et l'offre que l'affiche taisait.
+    expect(contenu).toContain('1 000 MGA');
+    expect(contenu).toContain('4 h');
+    // Le nombre d'appareils, quand il dépasse un.
+    expect(contenu).toContain('2 appareils');
+  });
+
+  it('disparaît quand on ne le veut pas', async () => {
+    const { service: s } = service({ reglages: { portailUrl: 'http://10.0.0.2:5173' } });
+
+    const { contenu } = await s.apercu({ afficherTarifs: false } as never);
+
+    expect(contenu).not.toContain('class="tarifs"');
+    // Le bouton d'achat, lui, reste : il n'est pas réglable.
+    expect(contenu).toContain('class="payer"');
+  });
+});
+
+describe('duree', () => {
+  it('dit l’unité qui tombe juste', () => {
+    // « 720 h » ne veut rien dire au comptoir ; « 1 mois » si.
+    expect(duree(7200)).toBe('2 h');
+    expect(duree(86400)).toBe('1 jour');
+    expect(duree(604800)).toBe('1 semaine');
+    expect(duree(2592000)).toBe('1 mois');
+    expect(duree(1800)).toBe('30 min');
+  });
+});
+
+describe('le pied de page', () => {
+  it('porte l’adresse, les numéros et la page Facebook', async () => {
+    // La vraie page de ce parc les portait. Les perdre en passant par la
+    // console serait un recul : c'est par là que les clients appellent.
+    const { service: s } = service({
+      reglages: {
+        portailUrl: 'http://10.0.0.2:5173',
+        piedDePage: 'Zone Wifi-TATI',
+        adresse: "Motombe-Tanambao, ambadik'i Garage Belia Rasta",
+        telephones: '034 72 818 91 - 033 12 835 90',
+        reseauSocial: 'Zone Wifi-TATI',
+      },
+    });
+
+    const { contenu } = await s.apercu();
+
+    expect(contenu).toContain('Motombe-Tanambao');
+    expect(contenu).toContain('034 72 818 91');
+    // Rien de cliquable : un client captif n'a pas Internet, et un lien
+    // Facebook ne mènerait nulle part.
+    expect(contenu).not.toContain('facebook.com');
+    expect(contenu).not.toContain('tel:');
+  });
+
+  it('ne laisse pas de ligne vide quand un champ manque', async () => {
+    const { service: s } = service({
+      reglages: { portailUrl: 'http://10.0.0.2:5173', piedDePage: 'Tati' },
+    });
+
+    const { contenu } = await s.apercu();
+
+    expect(contenu).toContain('<div class="footer">Tati</div>');
+  });
+});
+
+describe('les emoji', () => {
+  it('survivent à l’ASCII, en entités valides', async () => {
+    // `charCodeAt` rendait la moitié haute du couple de substitution : le
+    // signal Wi-Fi devenait `&#55357;`, un demi-caractère que le navigateur
+    // affiche en losange. Les quatre emoji de la page de ce parc sont
+    // précisément ce qui l'empêchait de passer par l'API du routeur.
+    const { service: s } = service({
+      reglages: {
+        portailUrl: 'http://10.0.0.2:5173',
+        titre: String.fromCodePoint(0x1f4f6) + ' ZONE WIFI-TATI',
+      },
+    });
+
+    const { contenu } = await s.apercu();
+
+    expect(contenu).toContain('&#128246;');
+    expect(contenu).not.toContain('&#55357;');
+    expect([...contenu].find((c) => (c.codePointAt(0) ?? 0) > 127)).toBeUndefined();
   });
 });
 

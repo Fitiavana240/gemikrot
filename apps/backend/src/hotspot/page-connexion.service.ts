@@ -70,6 +70,14 @@ export interface ReglagesPageConnexion {
   couleur: string;
   logoUrl: string | null;
   portailUrl: string;
+  /** Où se trouve le local, tel qu'on l'explique à quelqu'un du quartier. */
+  adresse: string;
+  /** Les numéros, tels qu'ils se composent. */
+  telephones: string;
+  /** Page Facebook ou autre, en toutes lettres — jamais un lien. */
+  reseauSocial: string;
+  /** Afficher le tableau des tarifs, calculé depuis les offres réelles. */
+  afficherTarifs: boolean;
 }
 
 /** Une cible réelle : un dossier que sert au moins un serveur HotSpot. */
@@ -108,7 +116,7 @@ export class PageConnexionService {
   private async modele(): Promise<string> {
     for (const chemin of CHEMINS_MODELE) {
       try {
-        return await readFile(chemin, 'utf8');
+        return sansDocumentation(await readFile(chemin, 'utf8'));
       } catch {
         /* essai suivant */
       }
@@ -152,6 +160,12 @@ export class PageConnexionService {
         couleur: ligne?.couleur ?? '#0284c7',
         logoUrl: ligne?.logoUrl ?? null,
         portailUrl: ligne?.portailUrl ?? '',
+        adresse: ligne?.adresse ?? '',
+        telephones: ligne?.telephones ?? '',
+        reseauSocial: ligne?.reseauSocial ?? '',
+        // Vrai par défaut : une page de connexion sans prix oblige le client
+        // à demander, ce qui est exactement ce qu'on cherche à supprimer.
+        afficherTarifs: ligne?.afficherTarifs ?? true,
       },
     };
   }
@@ -177,6 +191,12 @@ export class PageConnexionService {
       couleur: dto.couleur ?? null,
       logoUrl: dto.logoUrl || null,
       portailUrl: dto.portailUrl?.trim().replace(/\/+$/, '') || null,
+      adresse: dto.adresse ?? null,
+      telephones: dto.telephones ?? null,
+      reseauSocial: dto.reseauSocial ?? null,
+      // Le formulaire envoie « true »/« false » en chaîne quand il passe par
+      // la requête : un test de vérité brut ferait de « false » un oui.
+      afficherTarifs: dto.afficherTarifs === undefined ? true : `${dto.afficherTarifs}` !== 'false',
     };
 
     await this.prisma.hotspotLoginPage.upsert({
@@ -210,12 +230,37 @@ export class PageConnexionService {
     const tenantId = this.tenantContext.requireTenantId();
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { slug: true },
+      select: { slug: true, currency: true },
     });
     if (!tenant) throw new NotFoundException('Exploitant introuvable');
 
     const { reglages } = await this.reglages();
-    const r = { ...reglages, ...nettoyer(remplace) };
+    // Le booléen se traite à part : il arrive de la requête en toutes lettres
+    // (« false »), et `nettoyer` ne garde que des chaînes destinées à des
+    // marqueurs. Sans cette ligne, décocher les tarifs n'aurait aucun effet
+    // sur l'aperçu — on décoche, rien ne bouge, on conclut que c'est cassé.
+    const tarifsDemandes =
+      remplace?.afficherTarifs === undefined
+        ? reglages.afficherTarifs
+        : `${remplace.afficherTarifs}` !== 'false';
+    const r = { ...reglages, ...nettoyer(remplace), afficherTarifs: tarifsDemandes };
+
+    /**
+     * Les tarifs, lus là où ils se vendent.
+     *
+     * Exactement la règle de la page de paiement — offres actives à ticket —
+     * pour que l'affiche du portail et la vitrine du client ne puissent plus
+     * diverger. Sur ce parc, celle écrite à la main annonçait « 1 Ora » pour
+     * 500 Ar alors que le routeur en donne deux, proposait une offre à
+     * 30 000 Ar qui n'existe pas, et taisait les 4 h à 1 000 Ar.
+     */
+    const offres = r.afficherTarifs
+      ? await this.prisma.scopedStrict.plan.findMany({
+          where: { status: 'ACTIVE', kind: 'TICKET' },
+          select: { name: true, price: true, validityDurationSeconds: true, maxSharedUsers: true },
+          orderBy: { price: 'asc' },
+        })
+      : [];
 
     // Une barre finale se glisse une fois sur deux dans un champ d'adresse,
     // et donnerait « http://hote//p/slug ».
@@ -228,9 +273,11 @@ export class PageConnexionService {
       .replaceAll('__LIBELLE_CONNEXION__', echapper(r.libelleConnexion))
       .replaceAll('__LIBELLE_ACHAT__', echapper(r.libelleAchat))
       .replaceAll('__AIDE_ACHAT__', echapper(r.aideAchat))
-      .replaceAll('__LIEU__', echapper(r.piedDePage))
       .replaceAll('__COULEUR__', couleurSure(r.couleur))
       .replaceAll('__BLOC_LOGO__', blocLogo(r.logoUrl))
+      .replaceAll('__BLOC_TARIFS__', blocTarifs(offres, tenant.currency))
+      .replaceAll('__BLOC_PIED__', blocPied(r))
+      .replaceAll('__LIEU__', echapper(r.piedDePage))
       .replaceAll('__PORTAIL__', echapper(portail))
       .replaceAll('__SLUG__', echapper(tenant.slug));
 
@@ -420,6 +467,31 @@ export class PageConnexionService {
   }
 }
 
+/**
+ * Retire le commentaire de documentation en tête du modèle.
+ *
+ * Il **liste les marqueurs**, et `replaceAll` les y remplaçait aussi : le
+ * tableau des tarifs se retrouvait écrit une seconde fois à l'intérieur d'un
+ * commentaire. Invisible pour le client, mais 2 800 octets de plus dans un
+ * fichier qui voyage par une API plafonnée à 61 440 — et surtout, la preuve
+ * qu'on sert au client une page dont une partie ne le concerne pas.
+ *
+ * Ce commentaire explique le modèle à qui le lit dans le dépôt ; il n'a rien
+ * à faire sur le routeur.
+ */
+function sansDocumentation(modele: string): string {
+  const debut = modele.indexOf('<!--');
+  if (debut === -1 || !modele.slice(debut, debut + 200).includes('Page captive HotSpot')) {
+    return modele;
+  }
+  const fin = modele.indexOf('-->', debut);
+  if (fin === -1) return modele;
+  // Cherche par indices plutot que par expression reguliere : le commentaire
+  // fait trente lignes, et une reguliere qui traverse autant de sauts de ligne
+  // se relit mal pour ce qu'elle fait -- trouver deux bornes.
+  return (modele.slice(0, debut) + modele.slice(fin + 3)).replace(/^\s*\n/, '');
+}
+
 /** Les seuls champs qu'un aperçu peut remplacer. */
 const CHAMPS = [
   'titre',
@@ -431,6 +503,9 @@ const CHAMPS = [
   'couleur',
   'logoUrl',
   'portailUrl',
+  'adresse',
+  'telephones',
+  'reseauSocial',
 ] as const;
 
 /**
@@ -574,6 +649,81 @@ function blocLogo(url: string | null): string {
 }
 
 /**
+ * Le tableau des tarifs, tel que le client le lira.
+ *
+ * Les durées sont dites en heures, en jours ou en mois selon ce qui tombe
+ * juste : « 720 h » ne veut rien dire au comptoir, « 1 mois » si.
+ */
+function blocTarifs(
+  offres: { name: string; price: unknown; validityDurationSeconds: number; maxSharedUsers: number | null }[],
+  devise: string,
+): string {
+  if (offres.length === 0) return '';
+
+  const lignes = offres
+    .map((o) => {
+      const prix = `${Number(o.price).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' ')} ${devise}`;
+      const appareils =
+        o.maxSharedUsers && o.maxSharedUsers > 1 ? ` (${o.maxSharedUsers} appareils)` : '';
+      return `        <tr><td class="prix">${echapper(prix)}</td><td class="duree">${echapper(
+        duree(o.validityDurationSeconds) + appareils,
+      )}</td></tr>`;
+    })
+    .join('\n');
+
+  return `<div class="tarifs">
+        <h2>Tarifs</h2>
+        <table>
+${lignes}
+        </table>
+      </div>`;
+}
+
+/** La durée dans l'unité qui tombe juste : 720 h ne se dit pas au comptoir. */
+export function duree(secondes: number): string {
+  if (secondes <= 0) return 'sans limite';
+  const heures = secondes / 3600;
+  if (heures < 1) return `${Math.round(secondes / 60)} min`;
+  if (heures < 24) return `${arrondi(heures)} h`;
+  const jours = heures / 24;
+  if (jours < 7) return `${arrondi(jours)} jour${jours >= 2 ? 's' : ''}`;
+  if (jours % 30 === 0) {
+    const mois = jours / 30;
+    return `${mois} mois`;
+  }
+  if (jours % 7 === 0) {
+    const semaines = jours / 7;
+    return `${semaines} semaine${semaines >= 2 ? 's' : ''}`;
+  }
+  return `${arrondi(jours)} jours`;
+}
+
+function arrondi(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');
+}
+
+/**
+ * Le pied de page : où l'on est, et comment on nous joint.
+ *
+ * Rien n'est cliquable, et ce n'est pas un oubli : un client captif n'a pas
+ * Internet. Un lien Facebook ne mènerait nulle part, et un `tel:` ouvrirait
+ * le composeur sur un téléphone, rien du tout sur un ordinateur portable.
+ * Les lignes absentes ne laissent pas de trou.
+ */
+function blocPied(r: {
+  piedDePage: string;
+  adresse: string;
+  telephones: string;
+  reseauSocial: string;
+}): string {
+  return [r.piedDePage, r.adresse, r.telephones, r.reseauSocial]
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => echapper(l))
+    .join('<br />');
+}
+
+/**
  * Ce que l'exploitant a saisi entre dans du HTML : il doit en sortir inerte.
  *
  * Un nom de réseau contenant `"` ou `<` casserait l'attribut ou la balise
@@ -589,7 +739,13 @@ function echapper(texte: string): string {
       if (c === '>') return '&gt;';
       if (c === '"') return '&quot;';
       if (c === "'") return '&#39;';
-      return c.charCodeAt(0) > 127 ? `&#${c.charCodeAt(0)};` : c;
+      // `codePointAt`, et non `charCodeAt` : sur un emoji, le second rend la
+      // moitie haute du couple de substitution — « 📶 » devenait `&#55357;`,
+      // un demi-caractere invalide que le navigateur affiche en losange. La
+      // page de ce parc en porte quatre, et c'est ce qui l'empechait de
+      // passer par l'API du routeur, qui refuse tout octet au-dessus de 127.
+      const point = c.codePointAt(0) ?? 0;
+      return point > 127 ? `&#${point};` : c;
     })
     .join('');
 }

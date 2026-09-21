@@ -19,6 +19,8 @@
     __BLOC_LOGO__          le logo, ou rien
     __PORTAIL__            l'adresse de la page de paiement, sans barre finale
     __SLUG__               l'identifiant public de l'exploitant
+    __BLOC_TARIFS__        le tableau des tarifs, calcule depuis les offres
+    __BLOC_PIED__          adresse, telephones, page Facebook
 
   CE QUE L'EXPLOITANT NE REGLE PAS, et c'est le coeur du dispositif : le
   formulaire de connexion et le bouton d'achat. Il en change les mots, jamais
@@ -52,7 +54,11 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #f8fafc;
+        /* Le fond reprend la couleur d'accent : c'est ce qui fait qu'un
+           client reconnait le reseau avant d'avoir lu le titre. La carte
+           blanche par-dessus garde le texte lisible au soleil. */
+        background: __COULEUR__;
+        background: linear-gradient(180deg, __COULEUR__ 0%, #f8fafc 62%);
         font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
         color: #0f172a;
         padding: 16px;
@@ -152,10 +158,30 @@
         font-size: 12px;
         color: #64748b;
       }
+      /* Le tableau des tarifs. Il etait ecrit a la main sur la page de ce
+         parc, et il avait derive : << 1 Ora >> pour 500 Ar quand le routeur
+         en donne deux, une offre a 30 000 Ar qui n'existe pas, et les 4 h a
+         1 000 Ar passees sous silence. Calcule, il ne peut plus mentir. */
+      .tarifs {
+        margin-top: 22px;
+        background: #f1f5f9;
+        border-radius: 10px;
+        padding: 12px 14px;
+      }
+      .tarifs h2 {
+        margin: 0 0 8px;
+        font-size: 13px;
+        color: __COULEUR__;
+      }
+      .tarifs table { width: 100%; font-size: 13px; border-collapse: collapse; }
+      .tarifs td { padding: 3px 0; color: #334155; }
+      .tarifs td.prix { font-weight: 700; white-space: nowrap; }
+      .tarifs td.duree { text-align: right; color: #64748b; }
       .footer {
         margin-top: 18px;
         text-align: center;
         font-size: 12px;
+        line-height: 1.7;
         color: #64748b;
       }
     </style>
@@ -220,7 +246,9 @@
       <a class="payer" href="__PORTAIL__/p/__SLUG__">__LIBELLE_ACHAT__</a>
       <p class="payer-aide">__AIDE_ACHAT__</p>
 
-      <div class="footer">__LIEU__</div>
+      __BLOC_TARIFS__
+
+      <div class="footer">__BLOC_PIED__</div>
     </div>
 
     <script>

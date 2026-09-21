@@ -111,6 +111,13 @@ export interface ReglagesPageConnexion {
   couleur: string;
   logoUrl: string | null;
   portailUrl: string;
+  /** Où se trouve le local, tel qu'on l'explique à quelqu'un du quartier. */
+  adresse: string;
+  telephones: string;
+  /** En toutes lettres, jamais un lien : un client captif n'a pas Internet. */
+  reseauSocial: string;
+  /** Le tableau des tarifs, calculé depuis les offres actives à ticket. */
+  afficherTarifs: boolean;
 }
 
 /** Un dossier que sert au moins un serveur HotSpot actif de ce routeur. */
@@ -142,6 +149,9 @@ export const hotspotApi = {
     const q = new URLSearchParams();
     for (const [clef, valeur] of Object.entries(reglages)) {
       if (typeof valeur === 'string' && valeur !== '') q.set(clef, valeur);
+      // Le booléen voyage en toutes lettres : filtré comme une chaîne vide,
+      // « ne pas afficher les tarifs » n'aurait jamais atteint l'aperçu.
+      if (typeof valeur === 'boolean') q.set(clef, String(valeur));
     }
     return api.get<{ contenu: string; octets: number }>(`/hotspot/page-connexion?${q}`);
   },

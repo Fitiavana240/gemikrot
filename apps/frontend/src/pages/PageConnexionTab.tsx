@@ -204,13 +204,46 @@ export function PageConnexionTab() {
                   onChange={(e) => champ('aideAchat', e.target.value)}
                 />
               </FormField>
+              {/* Le pied de page de la vraie page de ce parc portait
+                  l'adresse du local, deux numeros et la page Facebook. Une
+                  seule ligne ne pouvait pas les tenir, et les perdre serait un
+                  recul : c'est par la que les clients appellent. */}
+              <FormField label="Pied de page (premiere ligne)">
+                <Input
+                  value={form.piedDePage}
+                  onChange={(e) => champ('piedDePage', e.target.value)}
+                />
+              </FormField>
+              <FormField
+                label="Adresse du local"
+                aide="Comme on l'explique a quelqu'un du quartier."
+              >
+                <Input
+                  value={form.adresse}
+                  placeholder="Motombe-Tanambao, ambadik'i Garage Belia Rasta"
+                  onChange={(e) => champ('adresse', e.target.value)}
+                />
+              </FormField>
               <div className="grid grid-cols-2 gap-3">
-                <FormField label="Pied de page">
+                <FormField label="Telephones">
                   <Input
-                    value={form.piedDePage}
-                    onChange={(e) => champ('piedDePage', e.target.value)}
+                    value={form.telephones}
+                    placeholder="034 72 818 91 - 033 12 835 90"
+                    onChange={(e) => champ('telephones', e.target.value)}
                   />
                 </FormField>
+                <FormField
+                  label="Page Facebook"
+                  aide="En toutes lettres : un client captif n'a pas Internet, un lien ne menerait nulle part."
+                >
+                  <Input
+                    value={form.reseauSocial}
+                    placeholder="Zone Wifi-TATI"
+                    onChange={(e) => champ('reseauSocial', e.target.value)}
+                  />
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <FormField
                   label="Couleur d'accent"
                   aide="Elle porte du texte blanc : une teinte trop claire est refusée."
@@ -251,6 +284,29 @@ export function PageConnexionTab() {
                   onChange={(e) => champ('portailUrl', e.target.value)}
                 />
               </FormField>
+
+              {/* Calcule, jamais saisi : l'affiche ecrite a la main de ce parc
+                  annoncait « 1 Ora » pour 500 Ar quand le routeur en donne
+                  deux, une offre a 30 000 Ar qui n'existe pas, et taisait les
+                  4 h a 1 000 Ar. Ce tableau-la ne peut plus diverger. */}
+              <label className="flex items-start gap-2 pt-1 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={form.afficherTarifs}
+                  onChange={(e) =>
+                    setForm((f) => (f ? { ...f, afficherTarifs: e.target.checked } : f))
+                  }
+                  className="mt-0.5"
+                />
+                <span>
+                  Afficher le tableau des tarifs
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    Calcule depuis vos offres actives a ticket — les memes que voit la page de
+                    paiement. Il ne peut donc pas annoncer un prix ou une duree que vous ne
+                    vendez pas.
+                  </span>
+                </span>
+              </label>
 
               {canWrite && (
                 <div className="flex flex-wrap gap-2 pt-1">
