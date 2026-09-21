@@ -14,6 +14,9 @@ export function CustomersPage() {
   const queryClient = useQueryClient();
   const clients = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
   const customers = clients.data;
+  // Les clients importés du routeur portent un gabarit `import:<compte>` en
+  // guise de numéro, faute de mieux : le routeur n'en connaît aucun.
+  const sansNumero = (customers ?? []).filter((c) => telephoneAffiche(c.phone).provisoire);
   const [form, setForm] = useState<CreateCustomerInput>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,6 +25,29 @@ export function CustomersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] });
       setForm(EMPTY_FORM);
+      setError(null);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Erreur inconnue'),
+  });
+
+  // Quel client est en cours de correction, et ce qu'on y saisit.
+  const [édition, setÉdition] = useState<{ id: string; name: string; phone: string } | null>(
+    null,
+  );
+
+  /**
+   * Corriger un nom ou un numéro.
+   *
+   * `customersApi.update` existait et **rien ne l'appelait** : la console
+   * affichait « à renseigner » sur quatorze clients sur quinze, sans offrir
+   * nulle part de quoi le renseigner.
+   */
+  const updateMutation = useMutation({
+    mutationFn: ({ id, ...champs }: { id: string; name: string; phone: string }) =>
+      customersApi.update(id, champs),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      setÉdition(null);
       setError(null);
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Erreur inconnue'),
@@ -44,6 +70,28 @@ export function CustomersPage() {
         title="Clients"
         description="Les personnes à qui vous vendez. Cliquez un nom pour voir sa fiche : tickets, abonnement, appareils et paiements réunis."
       />
+
+      {/* Deux conséquences, et aucune n'est devinable depuis la colonne
+          grisée « à renseigner » : on ne peut prévenir personne, et un
+          paiement déclaré depuis le vrai numéro crée un SECOND client au
+          lieu de se rattacher à celui-ci — la fiche publique rapproche sur
+          le numéro, pas sur le nom. */}
+      {sansNumero.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <strong>
+            {sansNumero.length === 1
+              ? 'Un client n’a pas de numéro de téléphone.'
+              : `${sansNumero.length} clients sur ${customers?.length ?? 0} n’ont pas de numéro de téléphone.`}
+          </strong>{' '}
+          Ils viennent du routeur, qui n’en connaît aucun. Vous ne pouvez donc ni les
+          prévenir d’une échéance, ni rapprocher leur paiement :{' '}
+          <strong>
+            un règlement déclaré depuis leur vrai numéro créera une seconde fiche
+          </strong>{' '}
+          au lieu de se rattacher à celle-ci. Le bouton <em>Modifier</em> de chaque ligne
+          permet de les compléter.
+        </div>
+      )}
 
       {canWrite && (
         <Card title="Nouveau client">
@@ -96,14 +144,22 @@ export function CustomersPage() {
                 </Link>
               </td>
               <td className="px-3 py-2">
-                {(() => {
-                  const t = telephoneAffiche(customer.phone);
-                  return t.provisoire ? (
-                    <span className="text-slate-400 italic">{t.texte}</span>
-                  ) : (
-                    t.texte
-                  );
-                })()}
+                {édition?.id === customer.id ? (
+                  <Input
+                    value={édition.phone}
+                    placeholder="034 00 000 00"
+                    onChange={(e) => setÉdition({ ...édition, phone: e.target.value })}
+                  />
+                ) : (
+                  (() => {
+                    const t = telephoneAffiche(customer.phone);
+                    return t.provisoire ? (
+                      <span className="text-slate-400 italic">{t.texte}</span>
+                    ) : (
+                      t.texte
+                    );
+                  })()
+                )}
               </td>
               <td className="px-3 py-2 text-slate-500">{customer.email ?? '—'}</td>
               <td className="px-3 py-2">
@@ -112,15 +168,47 @@ export function CustomersPage() {
                 </Badge>
               </td>
               <td className="px-3 py-2 text-right">
-                {canWrite && (
-                  <Button
-                    variant="secondary"
-                    onClick={() =>
-                      toggleMutation.mutate({ id: customer.id, enable: customer.status === 'DISABLED' })
-                    }
-                  >
-                    {customer.status === 'ACTIVE' ? 'Désactiver' : 'Réactiver'}
-                  </Button>
+                {canWrite && édition?.id === customer.id && (
+                  <>
+                    <Button
+                      disabled={updateMutation.isPending}
+                      onClick={() => updateMutation.mutate(édition)}
+                    >
+                      {updateMutation.isPending ? 'Enregistrement…' : 'Enregistrer'}
+                    </Button>
+                    <Button variant="secondary" onClick={() => setÉdition(null)}>
+                      Annuler
+                    </Button>
+                  </>
+                )}
+                {canWrite && édition?.id !== customer.id && (
+                  <>
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        setÉdition({
+                          id: customer.id,
+                          name: customer.name,
+                          // Le gabarit `import:` n'est pas un numéro : le
+                          // proposer à la correction ferait recopier un
+                          // faux plutôt que saisir le vrai.
+                          phone: telephoneAffiche(customer.phone).provisoire
+                            ? ''
+                            : (customer.phone ?? ''),
+                        })
+                      }
+                    >
+                      Modifier
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        toggleMutation.mutate({ id: customer.id, enable: customer.status === 'DISABLED' })
+                      }
+                    >
+                      {customer.status === 'ACTIVE' ? 'Désactiver' : 'Réactiver'}
+                    </Button>
+                  </>
                 )}
               </td>
             </tr>
