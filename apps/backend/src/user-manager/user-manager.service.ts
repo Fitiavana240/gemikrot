@@ -168,6 +168,15 @@ export interface ProfileView extends UserManagerProfileDto {
   planLien: 'rattachee' | 'meme-nom' | 'aucune';
   /** Un abonnement ne s'achete pas seul : il n'apparait pas sur la page publique. */
   planKind: 'TICKET' | 'SUBSCRIPTION' | null;
+  /**
+   * Ce profil est-il au tarif que voient les clients ?
+   *
+   * Calcule ici avec **la regle exacte de la page de paiement** -- offre
+   * active, a ticket -- et non deduit dans l'ecran. Deux lectures de la meme
+   * regle finiraient par diverger, et le bouton dirait << au tarif >> sur un
+   * profil que le client ne voit nulle part.
+   */
+  auTarif: boolean;
   limitationNames: string[];
   accountCount: number;
   /** Attributions désignant un compte disparu du routeur. */
@@ -274,7 +283,14 @@ export class UserManagerService {
       mikrotik.getUserManagerProfileLimitations(),
       mikrotik.getUserManagerUserProfiles(),
       this.prisma.scopedStrict.plan.findMany({
-        select: { id: true, name: true, kind: true, umProfileName: true, mikrotikProfileName: true },
+        select: {
+          id: true,
+          name: true,
+          kind: true,
+          status: true,
+          umProfileName: true,
+          mikrotikProfileName: true,
+        },
       }),
     ]);
 
@@ -297,6 +313,7 @@ export class UserManagerService {
         planName: plan?.name ?? null,
         planLien: rattachee ? ('rattachee' as const) : homonyme ? ('meme-nom' as const) : ('aucune' as const),
         planKind: plan ? (plan.kind as 'TICKET' | 'SUBSCRIPTION') : null,
+        auTarif: plan ? plan.status === 'ACTIVE' && plan.kind === 'TICKET' : false,
         limitationNames: junctions
           .filter((j) => j.profileName === profile.name)
           .map((j) => j.limitationName),

@@ -134,19 +134,7 @@ export class RapprochementProfilsService {
     adminUserId: string,
     routerId?: string,
   ): Promise<{ id: string; nom: string }> {
-    const mikrotik = routerId
-      ? await this.clients.forRouter(routerId)
-      : await this.clients.forDefaultRouter();
-
-    const profil = (await mikrotik.getUserManagerProfiles()).find((p) => p.name === nomProfil);
-    if (!profil) {
-      throw new BadRequestException(`Le profil « ${nomProfil} » n'existe pas sur le routeur`);
-    }
-    if (profil.validityDurationSeconds == null) {
-      throw new BadRequestException(
-        `Le profil « ${nomProfil} » n'a pas de validité : il ne peut pas devenir une offre`,
-      );
-    }
+    const profil = await this.profilVendable(nomProfil, routerId);
 
     const tenantId = this.tenantContext.requireTenantId();
     const existante = await this.prisma.scoped.plan.findFirst({
@@ -189,5 +177,195 @@ export class RapprochementProfilsService {
     });
 
     return { id: offre.id, nom: offre.name };
+  }
+
+  /**
+   * Met le profil au tarif que voient les clients.
+   *
+   * La page de paiement ne lit que les offres de l'application : un profil
+   * cree dans WinBox n'y apparait jamais, et c'est ce qui faisait diverger
+   * les deux listes sans qu'aucun geste ne les rapproche. Ce bouton est ce
+   * geste, dans le sens qui manquait -- du routeur vers la vitrine.
+   *
+   * **Rien n'est ecrit sur le routeur.** Le profil existe deja, il sert deja
+   * des clients : on se contente de le vendre. Le sens inverse -- pousser une
+   * offre vers User Manager -- reste « Synchroniser », dans l'ecran Offres.
+   *
+   * Un profil sans prix est refuse : il s'afficherait a 0 Ar et se vendrait
+   * pour rien. C'est le seul cas ou l'exploitant doit d'abord passer par
+   * WinBox, et le message le dit.
+   */
+  async publierAuTarif(
+    nomProfil: string,
+    adminUserId: string,
+    routerId?: string,
+  ): Promise<{ id: string; nom: string; cree: boolean }> {
+    const profil = await this.profilVendable(nomProfil, routerId);
+    const existante = await this.offreDuProfil(nomProfil);
+
+    if (existante) {
+      // Un abonnement ne se vend pas en libre-service : il se renouvelle au
+      // comptoir, et la page publique ne le propose pas. Basculer son genre
+      // pour l'y faire entrer changerait ce qu'il est, sans que personne ne
+      // l'ait demande.
+      if (existante.kind === PlanKind.SUBSCRIPTION) {
+        throw new BadRequestException(
+          `« ${existante.name} » est un abonnement : il se renouvelle au comptoir et n'a pas sa place sur la page de paiement, qui ne vend que des accès à durée.`,
+        );
+      }
+      // Le prix de l'offre est conserve, pas ecrase par celui du profil :
+      // c'est lui qui a servi aux ventes passees, et l'aligner en silence sur
+      // WinBox pourrait baisser un tarif que l'exploitant avait releve.
+      if (Number(existante.price) <= 0 || existante.priceNeedsReview) {
+        throw new BadRequestException(
+          `Le prix de l'offre « ${existante.name} » n'est pas confirmé : elle s'afficherait à un tarif que personne n'a validé. Ouvrez l'écran Offres, posez son prix, puis remettez-la au tarif.`,
+        );
+      }
+
+      const offre = await this.prisma.scoped.plan.update({
+        where: { id: existante.id },
+        data: {
+          status: PlanStatus.ACTIVE,
+          // Le rattachement explicite, sans quoi l'offre resterait un simple
+          // homonyme du profil -- l'etat que cet ecran sert justement a lever.
+          umProfileName: nomProfil,
+          umSyncedAt: new Date(),
+        },
+      });
+
+      await this.audit.log({
+        adminUserId,
+        routerId,
+        action: 'PUBLISH_PLAN_TARIFF',
+        targetType: 'Plan',
+        targetId: offre.id,
+        payloadDiff: { profil: nomProfil, statutPrecedent: existante.status },
+      });
+
+      return { id: offre.id, nom: offre.name, cree: false };
+    }
+
+    if (profil.price == null || profil.price <= 0) {
+      throw new BadRequestException(
+        `Le profil « ${nomProfil} » n'a pas de prix : il s'afficherait à 0 Ar sur la page de paiement, et se vendrait pour rien. Posez son prix, puis remettez-le au tarif.`,
+      );
+    }
+
+    const offre = await this.prisma.scoped.plan.create({
+      data: {
+        tenantId: this.tenantContext.requireTenantId(),
+        name: nomProfil,
+        price: profil.price,
+        validityDurationSeconds: profil.validityDurationSeconds,
+        startsWhen:
+          profil.startsWhen === 'assigned'
+            ? ProfileStartsWhen.ASSIGNED
+            : ProfileStartsWhen.FIRST_AUTH,
+        maxSharedUsers: profil.overrideSharedUsers ?? undefined,
+        mikrotikProfileName: nomProfil,
+        umProfileName: nomProfil,
+        umSyncedAt: new Date(),
+        // Active, contrairement a « Creer l'offre » : ici le geste demande
+        // explicitement la mise en vente, et naitre archivee obligerait a
+        // aller la chercher dans un autre ecran pour l'activer.
+        status: PlanStatus.ACTIVE,
+        kind: PlanKind.TICKET,
+      },
+    });
+
+    await this.audit.log({
+      adminUserId,
+      routerId,
+      action: 'PUBLISH_PLAN_TARIFF',
+      targetType: 'Plan',
+      targetId: offre.id,
+      payloadDiff: { profil: nomProfil, prix: String(profil.price), creee: true },
+    });
+
+    return { id: offre.id, nom: offre.name, cree: true };
+  }
+
+  /**
+   * Retire le profil du tarif public.
+   *
+   * L'offre est archivee, jamais supprimee : les tickets deja vendus sur ce
+   * profil continuent de fonctionner -- le routeur ne connait que le profil,
+   * et le profil reste -- et les recettes gardent a quoi se rattacher.
+   */
+  async retirerDuTarif(
+    nomProfil: string,
+    adminUserId: string,
+    routerId?: string,
+  ): Promise<{ id: string; nom: string }> {
+    const offre = await this.offreDuProfil(nomProfil);
+    if (!offre) {
+      throw new BadRequestException(
+        `Aucune offre ne vend le profil « ${nomProfil} » : il n'est déjà pas au tarif.`,
+      );
+    }
+
+    const archivee = await this.prisma.scoped.plan.update({
+      where: { id: offre.id },
+      data: { status: PlanStatus.ARCHIVED },
+    });
+
+    await this.audit.log({
+      adminUserId,
+      routerId,
+      action: 'WITHDRAW_PLAN_TARIFF',
+      targetType: 'Plan',
+      targetId: offre.id,
+      payloadDiff: { profil: nomProfil },
+    });
+
+    return { id: archivee.id, nom: archivee.name };
+  }
+
+  /**
+   * Le profil du routeur, verifie vendable.
+   *
+   * Sans validite, RouterOS ne sait pas quand couper : l'offre se vendrait
+   * sans fin d'acces, et aucun ecran ne rattraperait ensuite.
+   */
+  private async profilVendable(nomProfil: string, routerId?: string) {
+    const mikrotik = routerId
+      ? await this.clients.forRouter(routerId)
+      : await this.clients.forDefaultRouter();
+
+    const profil = (await mikrotik.getUserManagerProfiles()).find((p) => p.name === nomProfil);
+    if (!profil) {
+      throw new BadRequestException(
+        `Le profil « ${nomProfil} » n'existe pas sur le routeur`,
+      );
+    }
+    if (profil.validityDurationSeconds == null) {
+      throw new BadRequestException(
+        `Le profil « ${nomProfil} » n'a pas de validité : il ne peut pas devenir une offre`,
+      );
+    }
+    // Reconstruit plutot que renvoye tel quel : le rétrécissement de type
+    // obtenu par le `throw` ci-dessus ne franchit pas la frontière de la
+    // méthode, et les appelants retrouveraient une validité « peut-être
+    // nulle » qu'ils viennent pourtant de faire vérifier.
+    return { ...profil, validityDurationSeconds: profil.validityDurationSeconds };
+  }
+
+  /**
+   * L'offre qui vend ce profil, rattachement explicite d'abord.
+   *
+   * L'homonyme compte aussi : une offre qui porte le nom du profil sans y
+   * etre reliee est bien celle qu'on republie, et en creer une seconde
+   * ferait deux lignes pour un seul tarif -- exactement ce que cet ecran
+   * sert a eviter.
+   */
+  private async offreDuProfil(nomProfil: string) {
+    const rattachee = await this.prisma.scoped.plan.findFirst({
+      where: { umProfileName: nomProfil },
+    });
+    if (rattachee) return rattachee;
+
+    return this.prisma.scoped.plan.findFirst({
+      where: { OR: [{ name: nomProfil }, { mikrotikProfileName: nomProfil }] },
+    });
   }
 }

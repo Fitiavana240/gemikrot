@@ -32,6 +32,29 @@ export const plansApi = {
     api.post<{ profileName: string; actions: string[] }>(`/plans/${id}/sync-user-manager`),
   create: (input: CreatePlanInput) => api.post<Plan>('/plans', input),
   archive: (id: string) => api.delete<Plan>(`/plans/${id}`),
+  /**
+   * Supprime l'offre pour de bon. Refusée dès qu'une vente s'y rattache —
+   * le serveur répond alors ce qui la retient, et l'archivage est la réponse.
+   */
+  supprimer: (id: string) => api.delete<{ id: string; nom: string }>(`/plans/${id}/definitif`),
+  /**
+   * Met un profil du routeur au tarif que voient les clients.
+   *
+   * Le sens qui manquait : `syncUserManager` pousse une offre vers le
+   * routeur, celui-ci fait entrer dans la vitrine un profil déjà servi —
+   * **sans rien écrire sur le routeur**.
+   */
+  publierAuTarif: (profil: string, routerId?: string) =>
+    api.post<{ id: string; nom: string; cree: boolean }>(
+      `/plans/tarif-public${routerId ? `?routerId=${routerId}` : ''}`,
+      { profil },
+    ),
+  /** Retire le profil du tarif public. L'offre est archivée, pas supprimée. */
+  retirerDuTarif: (profil: string, routerId?: string) =>
+    api.post<{ id: string; nom: string }>(
+      `/plans/tarif-public/retrait${routerId ? `?routerId=${routerId}` : ''}`,
+      { profil },
+    ),
 };
 
 /**

@@ -33,6 +33,7 @@ import {
 } from '../components/Edition';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
+import { plansApi } from '../api/plans';
 import {
   Badge,
   Button,
@@ -137,6 +138,9 @@ function ProfilesTab() {
   const [créer, setCréer] = useState(false);
   /** Le profil qu'on s'apprête à supprimer, tant que ce n'est pas confirmé. */
   const [àSupprimer, setÀSupprimer] = useState<string | null>(null);
+  /** Le profil qu'on s'apprête à mettre au tarif public, ou à en retirer. */
+  const [àPublier, setÀPublier] = useState<UserManagerProfile | null>(null);
+  const [àRetirer, setÀRetirer] = useState<UserManagerProfile | null>(null);
 
   const { currentId } = useRouterSelection();
   const profiles = useQuery({
@@ -172,6 +176,42 @@ function ProfilesTab() {
     onError,
   });
 
+  /**
+   * Met le profil au tarif que voient les clients, et l'en retire.
+   *
+   * Le geste qui manquait. Les deux listes -- les profils du routeur et ce
+   * que la page de paiement propose -- divergeaient sans qu'aucun bouton ne
+   * les rapproche dans ce sens-là : l'exploitant créait un profil dans
+   * WinBox, et aucun client ne le voyait jamais.
+   *
+   * **Rien n'est écrit sur le routeur.** Le profil existe déjà, il sert déjà
+   * des clients ; on se contente de le vendre. Pousser une offre *vers* User
+   * Manager reste « Synchroniser », dans l'écran Offres.
+   */
+  const publier = useMutation({
+    mutationFn: (name: string) => plansApi.publierAuTarif(name, currentId),
+    onSuccess: () => {
+      setError(null);
+      setÀPublier(null);
+      refresh();
+      queryClient.invalidateQueries({ queryKey: ['plans'] });
+      queryClient.invalidateQueries({ queryKey: ['rapprochement-profils'] });
+    },
+    onError,
+  });
+
+  const retirer = useMutation({
+    mutationFn: (name: string) => plansApi.retirerDuTarif(name, currentId),
+    onSuccess: () => {
+      setError(null);
+      setÀRetirer(null);
+      refresh();
+      queryClient.invalidateQueries({ queryKey: ['plans'] });
+      queryClient.invalidateQueries({ queryKey: ['rapprochement-profils'] });
+    },
+    onError,
+  });
+
   const remove = useMutation({
     mutationFn: (name: string) => userManagerApi.deleteProfile(name, currentId),
     onSuccess: () => {
@@ -201,6 +241,48 @@ function ProfilesTab() {
           profileName={àGenerer}
           onFermer={() => setÀGenerer(null)}
         />
+      )}
+
+      {àPublier && (
+        <Confirmation
+          titre={`Afficher « ${àPublier.name} » au tarif d’abonnement ?`}
+          libelléConfirmer="Afficher au tarif"
+          enCours={publier.isPending}
+          erreur={publier.isError ? error : null}
+          onAnnuler={() => {
+            setError(null);
+            setÀPublier(null);
+          }}
+          onConfirmer={() => publier.mutate(àPublier.name)}
+        >
+          Il apparaîtra sur la page de paiement de vos clients, à{' '}
+          <strong>{àPublier.price ? format(àPublier.price) : '0'}</strong> pour{' '}
+          {formatDuration(àPublier.validityDurationSeconds)} — le prix et la durée que porte
+          déjà le profil. N&apos;importe qui connecté au Wi-Fi pourra l&apos;acheter seul.
+          <br />
+          <strong>Rien n&apos;est écrit sur le routeur</strong> : le profil existe déjà et
+          sert déjà vos clients. Pour le retirer de la vente, le même bouton fait le chemin
+          inverse, et les tickets déjà vendus continuent de fonctionner.
+        </Confirmation>
+      )}
+
+      {àRetirer && (
+        <Confirmation
+          titre={`Retirer « ${àRetirer.name} » du tarif d’abonnement ?`}
+          libelléConfirmer="Retirer du tarif"
+          enCours={retirer.isPending}
+          erreur={retirer.isError ? error : null}
+          onAnnuler={() => {
+            setError(null);
+            setÀRetirer(null);
+          }}
+          onConfirmer={() => retirer.mutate(àRetirer.name)}
+        >
+          Il disparaît de la page de paiement et ne peut plus être acheté en libre-service.{' '}
+          <strong>Les tickets déjà vendus continuent de fonctionner</strong> : le routeur ne
+          connaît que le profil, et le profil reste. Rien n&apos;est effacé, et la vente au
+          comptoir reste possible.
+        </Confirmation>
       )}
 
       {àSupprimer && (
@@ -410,6 +492,25 @@ function ProfilesTab() {
                     <Button variant="secondary" onClick={() => setÀModifier(profile)}>
                       Modifier
                     </Button>
+                    {/* Le sens qui manquait : du routeur vers la vitrine. Un
+                        abonnement en est écarté -- il se renouvelle au
+                        comptoir, et la page publique ne vend que des accès à
+                        durée ; l'y proposer changerait ce qu'il est. */}
+                    {profile.planKind !== 'SUBSCRIPTION' &&
+                      (profile.auTarif ? (
+                        <Button variant="secondary" onClick={() => setÀRetirer(profile)}>
+                          Retirer du tarif
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() => {
+                            setError(null);
+                            setÀPublier(profile);
+                          }}
+                        >
+                          Afficher au tarif d&apos;abonnement
+                        </Button>
+                      ))}
                     {/* Supprimer reste interdit tant qu'une attribution s'y
                         rattache : RouterOS refuserait, et l'échec serait
                         moins clair que l'absence du bouton.
@@ -438,17 +539,21 @@ function ProfilesTab() {
           reponse tient en deux regles, et elle a sa place ici. */}
       <p className="max-w-3xl text-xs text-slate-500">
         Cette liste est celle du <strong>routeur</strong> : ce qu&apos;il sait appliquer. La
-        page de paiement de vos clients, elle, ne montre que les{' '}
-        <strong>offres à ticket actives</strong> — un abonnement se vend au comptoir, pas en
-        libre-service, et n&apos;y apparaît donc jamais. Les deux listes ne peuvent pas
-        coïncider, et ce n&apos;est pas un défaut.
+        page de paiement de vos clients, elle, ne montre que ce que vous y avez mis —{' '}
+        <strong>« Afficher au tarif d&apos;abonnement »</strong> fait entrer un profil dans
+        cette vitrine, à son prix et pour sa durée, <strong>sans rien écrire sur le
+        routeur</strong>. Un profil n&apos;y va donc jamais tout seul, et c&apos;est voulu :
+        ce qui se vend en libre-service est une décision, pas une conséquence.
         <br />
-        Ce qui en est un : une offre marquée{' '}
-        <span className="text-amber-800">non rattachée</span> porte le même nom qu&apos;un
-        profil sans y être reliée — elle n&apos;a jamais été poussée vers User Manager.
-        « Synchroniser », dans l&apos;écran Offres, referme l&apos;écart. Et une offre à
-        ticket absente d&apos;ici se vend sans que le routeur ait le profil correspondant : il
-        sera créé à la première vente en ligne, mais un lot généré au comptoir échouerait.
+        Un abonnement n&apos;a pas ce bouton. Il se renouvelle au comptoir, et l&apos;afficher
+        en libre-service changerait ce qu&apos;il est.
+        <br />
+        Une offre marquée <span className="text-amber-800">non rattachée</span> porte le même
+        nom qu&apos;un profil sans y être reliée — elle n&apos;a jamais été poussée vers User
+        Manager. « Synchroniser », dans l&apos;écran Offres, referme l&apos;écart. Et une
+        offre à ticket absente d&apos;ici se vend sans que le routeur ait le profil
+        correspondant : il sera créé à la première vente en ligne, mais un lot généré au
+        comptoir échouerait.
       </p>
     </div>
   );

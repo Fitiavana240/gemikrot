@@ -29,6 +29,34 @@ export class PlansController {
     return this.rapprochement.rapprocher(routerId);
   }
 
+  /**
+   * Met un profil du routeur au tarif que voient les clients.
+   *
+   * Le sens qui manquait. << Synchroniser >> pousse une offre vers le
+   * routeur ; celui-ci fait entrer un profil deja servi dans la vitrine, sans
+   * rien ecrire sur le routeur.
+   */
+  @Roles(AdminRole.SUPER_ADMIN, AdminRole.ADMIN)
+  @Post('tarif-public')
+  publierAuTarif(
+    @Body() body: { profil: string },
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('routerId') routerId?: string,
+  ) {
+    return this.rapprochement.publierAuTarif(body.profil, user.id, routerId);
+  }
+
+  /** Retire le profil du tarif public. L'offre est archivee, pas supprimee. */
+  @Roles(AdminRole.SUPER_ADMIN, AdminRole.ADMIN)
+  @Post('tarif-public/retrait')
+  retirerDuTarif(
+    @Body() body: { profil: string },
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('routerId') routerId?: string,
+  ) {
+    return this.rapprochement.retirerDuTarif(body.profil, user.id, routerId);
+  }
+
   /** Cree une offre **archivee** a partir d'un profil du routeur. */
   @Roles(AdminRole.SUPER_ADMIN, AdminRole.ADMIN)
   @Post('depuis-profil')
@@ -66,6 +94,20 @@ export class PlansController {
   @Delete(':id')
   archive(@Param('id') id: string) {
     return this.plansService.archive(id);
+  }
+
+  /**
+   * Supprime l'offre pour de bon.
+   *
+   * Une route separee de l'archivage, et non un drapeau : les deux gestes ne
+   * se rattrapent pas de la meme facon, et une case cochee par erreur sur un
+   * `DELETE` effacerait ce que l'exploitant voulait seulement retirer de la
+   * vente. Refuse des qu'une vente s'y rattache.
+   */
+  @Roles(AdminRole.SUPER_ADMIN, AdminRole.ADMIN)
+  @Delete(':id/definitif')
+  supprimer(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.plansService.supprimer(id, user.id);
   }
 
   /** État du profil User Manager de l'offre, vu du routeur. */

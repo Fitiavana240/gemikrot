@@ -3,6 +3,7 @@ import { Plan } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { PlanProvisioningService } from './plan-provisioning.service.js';
+import { AuditService } from '../audit/audit.service.js';
 import type { CreatePlanDto } from './dto/create-plan.dto.js';
 import type { UpdatePlanDto } from './dto/update-plan.dto.js';
 
@@ -21,6 +22,7 @@ export class PlansService {
     private readonly prisma: PrismaService,
     private readonly provisioning: PlanProvisioningService,
     private readonly tenantContext: TenantContextService,
+    private readonly audit: AuditService,
   ) {}
 
   findAll(): Promise<Plan[]> {
@@ -99,6 +101,11 @@ export class PlansService {
         maxSharedUsers: dto.maxSharedUsers,
         subscriptionPeriodDays: dto.subscriptionPeriodDays,
         sessionTimeoutSeconds: dto.validityDurationSeconds,
+        // Poser un prix vaut confirmation : le drapeau dit << ce prix a ete
+        // devine a l'import, relisez-le >>, et c'est exactement ce que
+        // l'exploitant vient de faire. Sans cela il ne retomberait jamais, et
+        // l'offre resterait bloquee hors du tarif public.
+        priceNeedsReview: dto.price == null ? undefined : false,
       },
     });
 
@@ -109,6 +116,62 @@ export class PlansService {
   async archive(id: string): Promise<Plan> {
     await this.findOne(id);
     return this.prisma.scoped.plan.update({ where: { id }, data: { status: 'ARCHIVED' } });
+  }
+
+  /**
+   * Supprime l'offre pour de bon.
+   *
+   * Archiver ne repond pas a tout. Un doublon, un essai, une offre creee de
+   * travers restent dans la liste et continuent d'encombrer l'ecran et le
+   * rapprochement des profils : on les relit a chaque fois pour conclure a
+   * chaque fois qu'elles ne servent a rien. Celles-la se suppriment.
+   *
+   * **Le profil du routeur n'est pas touche.** C'est lui qui sert les clients
+   * connectes : l'effacer au passage couperait des gens au nom d'un menage
+   * dans une liste. Il reste sur le routeur et reapparait du cote des
+   * profils sans offre, ou un bouton le remet au tarif.
+   *
+   * Refuse des qu'une vente s'y rattache, et ce n'est pas de la prudence de
+   * principe : un paiement dont l'offre a disparu est une recette qu'on ne
+   * sait plus rattacher a rien. La base le refuserait de toute facon, avec un
+   * message que personne ne peut lire ; celui-ci nomme ce qui retient
+   * l'offre et dit que l'archivage est la reponse.
+   */
+  async supprimer(id: string, adminUserId?: string): Promise<{ id: string; nom: string }> {
+    const plan = await this.findOne(id);
+
+    const [tickets, lots, paiements, abonnements] = await Promise.all([
+      this.prisma.scoped.voucher.count({ where: { planId: id } }),
+      this.prisma.scoped.voucherBatch.count({ where: { planId: id } }),
+      this.prisma.scoped.payment.count({ where: { planId: id } }),
+      this.prisma.scoped.subscription.count({ where: { planId: id } }),
+    ]);
+
+    const retenues: string[] = [];
+    if (tickets) retenues.push(`${tickets} ticket(s)`);
+    if (lots) retenues.push(`${lots} lot(s)`);
+    if (paiements) retenues.push(`${paiements} paiement(s)`);
+    if (abonnements) retenues.push(`${abonnements} abonnement(s)`);
+
+    if (retenues.length > 0) {
+      throw new ConflictException(
+        `L'offre « ${plan.name} » ne peut pas être supprimée : ${retenues.join(
+          ', ',
+        )} s'y rattachent, et leur historique disparaîtrait avec elle. Archivez-la : elle sort de la vente, les ventes passées restent.`,
+      );
+    }
+
+    await this.prisma.scoped.plan.delete({ where: { id } });
+
+    await this.audit.log({
+      adminUserId,
+      action: 'DELETE_PLAN',
+      targetType: 'Plan',
+      targetId: id,
+      payloadDiff: { nom: plan.name, profil: plan.mikrotikProfileName, prix: plan.price.toString() },
+    });
+
+    return { id, nom: plan.name };
   }
 
   /** Dérive un nom de profil RouterOS à partir du nom commercial. */

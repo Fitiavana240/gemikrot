@@ -52,6 +52,16 @@ export function PlansPage() {
   const [créer, setCréer] = useState(false);
   /** L'offre qu'on s'apprête à archiver, tant que ce n'est pas confirmé. */
   const [àArchiver, setÀArchiver] = useState<{ id: string; name: string } | null>(null);
+  /** L'offre qu'on s'apprête à supprimer pour de bon. */
+  const [àSupprimer, setÀSupprimer] = useState<{ id: string; name: string } | null>(null);
+  /**
+   * Le refus du serveur, gardé à part de `error`.
+   *
+   * Il s'affiche dans la fenêtre de confirmation, là où la question vient
+   * d'être posée. Le mêler à la bannière du formulaire de création le ferait
+   * apparaître en haut de l'écran, loin du bouton qu'on vient de presser.
+   */
+  const [refusSuppression, setRefusSuppression] = useState<string | null>(null);
 
   const createMutation = useMutation({
     mutationFn: plansApi.create,
@@ -82,6 +92,28 @@ export function PlansPage() {
     },
   });
 
+  /**
+   * Supprime l'offre pour de bon.
+   *
+   * Archiver ne répond pas à tout : un doublon, un essai, une offre créée de
+   * travers restent dans la liste et dans le rapprochement, et on les relit à
+   * chaque fois pour conclure à chaque fois qu'elles ne servent à rien.
+   *
+   * Le serveur refuse dès qu'une vente s'y rattache et dit ce qui la retient.
+   */
+  const supprimerMutation = useMutation({
+    mutationFn: plansApi.supprimer,
+    onSuccess: () => {
+      setRefusSuppression(null);
+      setÀSupprimer(null);
+      queryClient.invalidateQueries({ queryKey: ['plans'] });
+      queryClient.invalidateQueries({ queryKey: ['rapprochement-profils'] });
+      queryClient.invalidateQueries({ queryKey: ['um-profiles'] });
+    },
+    onError: (err) =>
+      setRefusSuppression(err instanceof ApiError ? err.message : 'Erreur inconnue'),
+  });
+
   function handleSubmit() {
     createMutation.mutate(form);
   }
@@ -104,6 +136,29 @@ export function PlansPage() {
           Elle disparaît de la page de paiement et ne peut plus servir à générer un lot. Les
           tickets déjà vendus <strong>continuent de fonctionner</strong> : le routeur ne
           connaît que le profil, et le profil reste. Rien n&apos;est effacé.
+        </Confirmation>
+      )}
+
+      {àSupprimer && (
+        <Confirmation
+          titre={`Supprimer l’offre « ${àSupprimer.name} » ?`}
+          libelléConfirmer="Supprimer définitivement"
+          enCours={supprimerMutation.isPending}
+          erreur={refusSuppression}
+          onAnnuler={() => {
+            setRefusSuppression(null);
+            setÀSupprimer(null);
+          }}
+          onConfirmer={() => supprimerMutation.mutate(àSupprimer.id)}
+        >
+          Elle disparaît de la base, de la page de paiement et du rapprochement.{' '}
+          <strong>Le profil du routeur, lui, reste</strong> : c&apos;est lui qui sert les
+          clients connectés, et l&apos;effacer ici couperait des gens au nom d&apos;un ménage
+          dans une liste. Il réapparaîtra simplement comme profil sans offre, où un bouton le
+          remet au tarif.
+          <br />
+          Si des tickets, des lots ou des paiements s&apos;y rattachent, la suppression sera
+          refusée : leur historique partirait avec l&apos;offre. Archivez-la plutôt.
         </Confirmation>
       )}
 
@@ -241,6 +296,21 @@ export function PlansPage() {
                       Archiver
                     </Button>
                   </>
+                )}
+                {/* Proposé aussi sur les offres archivées, et c'est là qu'il
+                    sert le plus : une offre retirée de la vente mais restée
+                    en liste est précisément celle dont on veut se
+                    débarrasser. */}
+                {canWrite && (
+                  <Button
+                    variant="danger"
+                    onClick={() => {
+                      setRefusSuppression(null);
+                      setÀSupprimer({ id: plan.id, name: plan.name });
+                    }}
+                  >
+                    Supprimer
+                  </Button>
                 )}
               </td>
             </tr>

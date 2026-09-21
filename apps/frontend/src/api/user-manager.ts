@@ -25,6 +25,15 @@ export interface UserManagerProfile {
    */
   planLien: 'rattachee' | 'meme-nom' | 'aucune';
   planKind: 'TICKET' | 'SUBSCRIPTION' | null;
+  /**
+   * Ce profil est-il au tarif que voient les clients ?
+   *
+   * Calculé par le serveur avec la règle exacte de la page de paiement, et
+   * non redéduit ici : deux lectures de la même règle finiraient par
+   * diverger, et le bouton annoncerait « au tarif » sur un profil que le
+   * client ne voit nulle part.
+   */
+  auTarif: boolean;
   limitationNames: string[];
   accountCount: number;
   /**

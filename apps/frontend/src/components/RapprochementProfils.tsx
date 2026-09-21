@@ -172,6 +172,12 @@ export function RapprochementProfils() {
             chose que le routeur applique déjà. Elle naît <strong>archivée</strong> : elle
             n&apos;apparaît ni sur la page publique ni dans la vente tant que vous ne
             l&apos;avez pas relue et activée. Un profil sans prix arrive marqué « à revoir ».
+            {/* Les deux gestes coexistent, et la différence tient en un mot :
+                ici on prépare, là-bas on vend. Sans cette phrase, on cherche
+                longtemps pourquoi l'offre créée n'apparaît chez personne. */}
+            <br />
+            Pour le mettre en vente tout de suite, « Afficher au tarif d&apos;abonnement »,
+            dans <strong>User Manager › Profils</strong>, fait les deux d&apos;un coup.
           </p>
         </>
       )}
