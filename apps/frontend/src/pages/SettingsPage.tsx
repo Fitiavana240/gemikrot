@@ -162,7 +162,7 @@ function ExploitantTab() {
           {/* Le mot que lit le client dans l'adresse de sa page de paiement.
               Il derivait du nom de l'exploitant a l'inscription -- rarement
               celui qu'il aurait choisi, et il s'affiche a l'ecran d'un
-              telephone. */}
+              téléphone. */}
           <FormField
             label="Identifiant public"
             aide={
@@ -181,7 +181,7 @@ function ExploitantTab() {
             />
           </FormField>
 
-          {/* Ils servaient deja au QR des tickets, mais rien ne s'en servait
+          {/* Ils servaient déjà au QR des tickets, mais rien ne s'en servait
               pour repondre : un client qui tapait l'adresse tombait sur
               l'ecran de connexion de la console. */}
           <FormField
@@ -250,7 +250,7 @@ function ExploitantTab() {
               <td className="px-3 py-2">
                 {/* Desactiver plutot que supprimer : une puce retiree du
                     commerce garde ses paiements passes, qui referencent son
-                    numero. */}
+                    numéro. */}
                 <Badge tone={acc.isActive ? 'green' : 'slate'}>
                   {acc.isActive ? 'oui' : 'non'}
                 </Badge>

@@ -258,10 +258,10 @@ export function PageConnexionTab() {
                 />
               </FormField>
               {/* Le pied de page de la vraie page de ce parc portait
-                  l'adresse du local, deux numeros et la page Facebook. Une
+                  l'adresse du local, deux numéros et la page Facebook. Une
                   seule ligne ne pouvait pas les tenir, et les perdre serait un
-                  recul : c'est par la que les clients appellent. */}
-              <FormField label="Pied de page (premiere ligne)">
+                  recul : c'est par là que les clients appellent. */}
+              <FormField label="Pied de page (première ligne)">
                 <Input
                   value={form.piedDePage}
                   onChange={(e) => champ('piedDePage', e.target.value)}
@@ -269,7 +269,7 @@ export function PageConnexionTab() {
               </FormField>
               <FormField
                 label="Adresse du local"
-                aide="Comme on l'explique a quelqu'un du quartier."
+                aide="Comme on l'explique à quelqu'un du quartier."
               >
                 <Input
                   value={form.adresse}
@@ -278,7 +278,7 @@ export function PageConnexionTab() {
                 />
               </FormField>
               <div className="grid grid-cols-2 gap-3">
-                <FormField label="Telephones">
+                <FormField label="Téléphones">
                   <Input
                     value={form.telephones}
                     placeholder="034 72 818 91 - 033 12 835 90"
@@ -287,7 +287,7 @@ export function PageConnexionTab() {
                 </FormField>
                 <FormField
                   label="Page Facebook"
-                  aide="En toutes lettres : un client captif n'a pas Internet, un lien ne menerait nulle part."
+                  aide="En toutes lettres : un client captif n'a pas Internet, un lien ne mènerait nulle part."
                 >
                   <Input
                     value={form.reseauSocial}
@@ -323,11 +323,11 @@ export function PageConnexionTab() {
                   onChange={(v) => champ('logoUrl', v)}
                 />
               </FormField>
-              {/* Elle se tapait a la main, et rien ne disait laquelle prendre.
-                  Elle se deduit pourtant : la console connait ses cartes
-                  reseau, le routeur annonce l'adresse de son portail, et on
-                  garde celles qui sont sur le meme reseau. Les cartes
-                  virtuelles d'un poste de travail tombent d'elles-memes --
+              {/* Elle se tapait à la main, et rien ne disait laquelle prendre.
+                  Elle se déduit pourtant : la console connaît ses cartes
+                  réseau, le routeur annonce l'adresse de son portail, et on
+                  garde celles qui sont sur le même réseau. Les cartes
+                  virtuelles d'un poste de travail tombent d'elles-mêmes —
                   elles sont injoignables depuis le Wi-Fi. */}
               <FormField
                 label="Adresse de la page de paiement"
@@ -369,10 +369,10 @@ export function PageConnexionTab() {
                 </div>
               )}
 
-              {/* Calcule, jamais saisi : l'affiche ecrite a la main de ce parc
-                  annoncait « 1 Ora » pour 500 Ar quand le routeur en donne
-                  deux, une offre a 30 000 Ar qui n'existe pas, et taisait les
-                  4 h a 1 000 Ar. Ce tableau-la ne peut plus diverger. */}
+              {/* Calculé, jamais saisi : l'affiche écrite à la main de ce parc
+                  annonçait « 1 Ora » pour 500 Ar quand le routeur en donne
+                  deux, une offre à 30 000 Ar qui n'existe pas, et taisait les
+                  4 h à 1 000 Ar. Ce tableau-là ne peut plus diverger. */}
               <label className="flex items-start gap-2 pt-1 text-sm text-slate-700">
                 <input
                   type="checkbox"
@@ -385,8 +385,8 @@ export function PageConnexionTab() {
                 <span>
                   Afficher le tableau des tarifs
                   <span className="mt-0.5 block text-xs text-slate-500">
-                    Calcule depuis vos offres actives a ticket — les memes que voit la page de
-                    paiement. Il ne peut donc pas annoncer un prix ou une duree que vous ne
+                    Calculé depuis vos offres actives à ticket — les mêmes que voit la page
+                    de paiement. Il ne peut donc pas annoncer un prix ou une durée que vous ne
                     vendez pas.
                   </span>
                 </span>
@@ -401,10 +401,10 @@ export function PageConnexionTab() {
                       onChange={(e) => champ('titreTarifs', e.target.value)}
                     />
                   </FormField>
-                  {/* Chaque exploitant a ses offres, et n'a pas forcement envie
-                      de toutes les afficher : dix lignes sur un telephone
-                      noient celle qu'on cherche. Decocher retire de
-                      l'affiche, jamais de la vente -- l'offre reste achetable
+                  {/* Chaque exploitant a ses offres, et n'a pas forcément envie
+                      de toutes les afficher : dix lignes sur un téléphone
+                      noient celle qu'on cherche. Décocher retire de
+                      l'affiche, jamais de la vente — l'offre reste achetable
                       sur la page de paiement. */}
                   <div className="space-y-1">
                     {(d?.tarifs ?? []).map((t) => (
@@ -438,12 +438,12 @@ export function PageConnexionTab() {
                     ))}
                     {(d?.tarifs.length ?? 0) === 0 && (
                       <p className="text-xs text-slate-500">
-                        Aucune offre a ticket active : le tableau ne s&apos;affichera pas.
+                        Aucune offre à ticket active : le tableau ne s&apos;affichera pas.
                       </p>
                     )}
                   </div>
                   <p className="text-xs text-slate-500">
-                    Decocher retire la ligne de l&apos;affiche, <strong>pas de la vente</strong> :
+                    Décocher retire la ligne de l&apos;affiche, <strong>pas de la vente</strong> :
                     l&apos;offre reste achetable sur la page de paiement.
                   </p>
                 </div>

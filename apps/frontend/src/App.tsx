@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { RequireAuth } from './components/RequireAuth';
 import { RouterProvider } from './routers/RouterContext';
@@ -54,6 +54,13 @@ export function App() {
             <Route path="/diagnostic" element={<RouterToolsPage />} />
             <Route path="/diagnostic/:tab" element={<RouterToolsPage />} />
             <Route path="/hotspot" element={<HotspotPage />} />
+            {/* L'ancienne adresse de la page de connexion : elle a rejoint
+                Paramètres. Rediriger plutôt que laisser retomber sur l'onglet
+                Serveurs, qui n'aurait rien dit et laissé chercher. */}
+            <Route
+              path="/hotspot/page-connexion"
+              element={<Navigate to="/settings/portail" replace />}
+            />
             <Route path="/hotspot/:tab" element={<HotspotPage />} />
             <Route path="/pppoe" element={<PppoePage />} />
             <Route path="/pppoe/:tab" element={<PppoePage />} />

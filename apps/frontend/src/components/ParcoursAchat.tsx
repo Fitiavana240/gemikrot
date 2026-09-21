@@ -88,7 +88,7 @@ export function ParcoursAchat() {
             Rétablir
           </Button>
         )}
-        <Link to="/hotspot/page-connexion" className="font-medium underline">
+        <Link to="/settings/portail" className="font-medium underline">
           Voir la page de connexion
         </Link>
       </div>

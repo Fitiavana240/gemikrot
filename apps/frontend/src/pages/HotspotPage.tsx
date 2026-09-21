@@ -11,7 +11,6 @@ import { AccesPermanentsTab } from './AccesPermanentsTab';
 import { Confirmation } from '../components/Edition';
 import { Modale } from '../components/Modale';
 import { PlafondsTab } from './PlafondsTab';
-import { PageConnexionTab } from './PageConnexionTab';
 import {
   Badge,
   Button,
@@ -35,10 +34,10 @@ import { TabBar, type TabDef } from '../components/TabBar';
 /** Un onglet par table de `IP / Hotspot` dans WinBox, dans le même ordre. */
 const ONGLETS = {
   serveurs: { titre: 'Serveurs', rendu: () => <ServersTab /> },
-  'page-connexion': {
-    titre: 'Page de connexion',
-    rendu: () => <PageConnexionTab />,
-  },
+  // « Page de connexion » a rejoint Paramètres › Portail captif. Elle était
+  // ici parce qu'elle touche au routeur, mais on la cherche là où on range
+  // les réglages — et la garder aux deux endroits ferait deux écrans à tenir
+  // d'accord, donc un jour deux écrans qui divergent.
   'profils-serveur': { titre: 'Profils de serveur', rendu: () => <HotspotServerProfilesTab /> },
   comptes: { titre: 'Comptes', rendu: () => <HotspotUsersTab /> },
   profils: { titre: 'Profils de compte', rendu: () => <HotspotProfilesTab /> },
