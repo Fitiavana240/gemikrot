@@ -120,6 +120,17 @@ export const hotspotApi = {
   /** Ce que le routeur porte réellement, par opposition à ce que la base suit. */
   stock: (routerId?: string) =>
     api.get<StockRouteur>(`/hotspot/stock${routerQuery(routerId)}`),
+  /**
+   * Pose la durée de l'offre en plafond sur les comptes qui n'en ont pas.
+   *
+   * `appliquer` à faux — le défaut — ne touche à rien et rend seulement ce
+   * qui changerait.
+   */
+  plafonds: (routerId?: string, appliquer = false) =>
+    api.post<RapportPlafonds>(
+      `/hotspot/plafonds${routerQuery(routerId)}${routerQuery(routerId) ? '&' : '?'}apply=${appliquer}`,
+      {},
+    ),
   cutAccess: (username: string, routerId?: string) =>
     api.post<Coupure>(
       `/hotspot/cut-access/${encodeURIComponent(username)}${routerQuery(routerId)}`,
@@ -141,3 +152,18 @@ export function formatUptime(seconds: number): string {
   if (seconds >= 60) return `${Math.floor(seconds / 60)} min`;
   return `${seconds} s`;
 }
+
+/**
+ * Ce que la pose de plafonds ferait, ou a fait.
+ *
+ * `appliqué` à faux : rien n'a été écrit sur le routeur, `aCorriger` dit
+ * seulement ce qui changerait.
+ */
+export interface RapportPlafonds {
+  appliqué: boolean;
+  aCorriger: { username: string; profil: string; plafondSecondes: number }[];
+  ignorés: { username: string; profil: string; motif: string }[];
+  corrigés: number;
+  échecs: { username: string; motif: string }[];
+}
+

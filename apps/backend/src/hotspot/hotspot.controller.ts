@@ -45,6 +45,19 @@ export class HotspotController {
   }
 
   /** Combien de tickets dorment réellement sur le routeur, par profil. */
+  /**
+   * Les comptes vendables sans plafond de durée, et de quoi le poser.
+   *
+   * `apply=true` écrit sur le routeur ; sans lui, rien n'est touché et la
+   * réponse dit seulement ce qui changerait. Le défaut est l'aperçu : poser un
+   * plafond sur des comptes en vente se regarde avant de se faire.
+   */
+  @Roles(...CAN_CONFIGURE)
+  @Post('plafonds')
+  plafonds(@Query('routerId') routerId?: string, @Query('apply') apply?: string) {
+    return this.hotspot.plafonds(routerId, { appliquer: apply === 'true' });
+  }
+
   @Get('stock')
   stock(@Query('routerId') routerId?: string) {
     return this.hotspot.stock(routerId);

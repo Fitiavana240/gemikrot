@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { IMikrotikService } from '@wifitati/mikrotik-service';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -36,6 +36,8 @@ export interface SessionView {
  */
 @Injectable()
 export class HotspotService {
+  private readonly logger = new Logger(HotspotService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly clients: MikrotikClientFactory,
@@ -341,6 +343,117 @@ export class HotspotService {
    * ticket imprimé et perdu compte ici et pas là. Les deux nombres sont donc
    * rendus **séparément**, jamais additionnés.
    */
+  /**
+   * Les comptes vendables qu'aucun plafond de durée n'arrête.
+   *
+   * Sans `limit-uptime`, un ticket HotSpot ne finit jamais. Le
+   * `session-timeout` du profil coupe la session en cours, mais **repart à
+   * zéro à chaque reconnexion**, et le cookie rend cette reconnexion
+   * automatique : un « 2 heures » se rejoue indéfiniment. Relevé sur le parc :
+   * 228 comptes dans ce cas, aucun plafond d'octets non plus.
+   *
+   * `appliquer` à faux ne touche à rien et rend ce qui changerait. C'est le
+   * mode par défaut : poser un plafond sur des comptes vendables se regarde
+   * avant de se faire.
+   */
+  async plafonds(
+    routerId: string | undefined,
+    options: { appliquer?: boolean } = {},
+  ): Promise<{
+    appliqué: boolean;
+    aCorriger: { username: string; profil: string; plafondSecondes: number }[];
+    ignorés: { username: string; profil: string; motif: string }[];
+    corrigés: number;
+    échecs: { username: string; motif: string }[];
+  }> {
+    const mikrotik = await this.client(routerId);
+    const [comptes, profils, offresTicket] = await Promise.all([
+      mikrotik.getHotspotUsers(),
+      mikrotik.getHotspotProfiles(),
+      // Seules les offres à la carte. Un abonnement au mois se compte en
+      // CALENDRIER, pas en heures de connexion : lui poser un `limit-uptime`
+      // le couperait au bout de trente jours *passés en ligne*, ce qui n'a
+      // aucun rapport avec ce qu'il a acheté. Le profil ne suffit pas à les
+      // distinguer — `1Mois-15000Ar` porte `session-timeout=4w2d` comme un
+      // ticket porte `2h` — mais la console, elle, sait lequel est lequel.
+      this.prisma.scopedStrict.plan.findMany({
+        where: { kind: 'TICKET' },
+        select: { mikrotikProfileName: true },
+      }),
+    ]);
+    const durée = new Map(profils.map((p) => [p.name, p.sessionTimeoutSeconds]));
+    const profilsTicket = new Set(
+      offresTicket
+        .map((o) => o.mikrotikProfileName)
+        .filter((n): n is string => Boolean(n))
+        .map((n) => n.toLowerCase()),
+    );
+
+    const aCorriger: { username: string; profil: string; plafondSecondes: number }[] = [];
+    const ignorés: { username: string; profil: string; motif: string }[] = [];
+
+    for (const compte of comptes) {
+      if (compte.limitUptimeSeconds != null) continue;
+      const profil = compte.profile || '';
+      const plafond = durée.get(profil) ?? null;
+
+      // La garde qui compte : hors d'une offre à la carte, on ne touche à rien.
+      // Les comptes d'administration comme les abonnés au mois tombent ici.
+      if (!profilsTicket.has(profil.toLowerCase())) {
+        ignorés.push({
+          username: compte.username,
+          profil,
+          motif: "pas une offre à la carte",
+        });
+        continue;
+      }
+      if (!plafond) {
+        ignorés.push({ username: compte.username, profil, motif: 'profil sans durée' });
+        continue;
+      }
+      // Déjà entamé : poser le plafond maintenant raccourcirait ce que le
+      // client a déjà, et pourrait le couper en pleine session. C'est à
+      // l'exploitant de trancher au cas par cas, pas à un traitement de masse.
+      if (compte.uptimeSeconds > 0) {
+        ignorés.push({ username: compte.username, profil, motif: 'déjà utilisé' });
+        continue;
+      }
+      if (compte.disabled) {
+        ignorés.push({ username: compte.username, profil, motif: 'bloqué' });
+        continue;
+      }
+      aCorriger.push({ username: compte.username, profil, plafondSecondes: plafond });
+    }
+
+    if (!options.appliquer) {
+      return { appliqué: false, aCorriger, ignorés, corrigés: 0, échecs: [] };
+    }
+
+    let corrigés = 0;
+    const échecs: { username: string; motif: string }[] = [];
+    for (const cible of aCorriger) {
+      try {
+        await mikrotik.updateHotspotUser({
+          username: cible.username,
+          limitUptimeSeconds: cible.plafondSecondes,
+        });
+        corrigés += 1;
+      } catch (error) {
+        // Un compte en échec n'arrête pas les autres : mieux vaut 227 plafonds
+        // posés et un échec nommé que rien du tout.
+        échecs.push({
+          username: cible.username,
+          motif: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    this.logger.log(
+      `Plafonds de durée : ${corrigés} posé(s), ${échecs.length} en échec, ${ignorés.length} ignoré(s)`,
+    );
+    return { appliqué: true, aCorriger, ignorés, corrigés, échecs };
+  }
+
   async stock(routerId?: string): Promise<{
     total: number;
     jamaisUtilises: number;

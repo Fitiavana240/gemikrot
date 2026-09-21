@@ -8,6 +8,7 @@ import { useRouterSelection } from '../routers/RouterContext';
 import { ApiError } from '../api/client';
 import { phrasePanne } from '../api/pannes';
 import { AccesPermanentsTab } from './AccesPermanentsTab';
+import { PlafondsTab } from './PlafondsTab';
 import {
   Badge,
   Button,
@@ -34,6 +35,7 @@ const ONGLETS = {
   'profils-serveur': { titre: 'Profils de serveur', rendu: () => <HotspotServerProfilesTab /> },
   comptes: { titre: 'Comptes', rendu: () => <HotspotUsersTab /> },
   profils: { titre: 'Profils de compte', rendu: () => <HotspotProfilesTab /> },
+  plafonds: { titre: 'Plafonds de durée', rendu: () => <PlafondsTab /> },
   // « Sessions actives » était trompeur : cette table est l'historique
   // comptabilisé par RADIUS, pas ce qui est en ligne maintenant — et le nom
   // entrait en concurrence avec l'écran Connectés, qui, lui, l'est.
