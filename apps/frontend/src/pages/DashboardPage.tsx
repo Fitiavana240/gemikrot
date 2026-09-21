@@ -21,6 +21,7 @@ import {
   PageHeader,
   TableSkeleton,
 } from '../components/ui';
+import { Occupation } from '../components/Occupation';
 
 const VOUCHER_LABEL: Record<string, string> = {
   CREATED: 'disponibles',
@@ -350,7 +351,9 @@ export function DashboardPage() {
           )}
         </Card>
 
-        <Card title="Derniers paiements">
+        <Occupation />
+
+      <Card title="Derniers paiements">
           {d.recentPayments.length === 0 ? (
             <p className="text-sm text-slate-400">Aucun paiement enregistré.</p>
           ) : (

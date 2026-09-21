@@ -2,6 +2,7 @@ import { Controller, Get, Header, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { DashboardService } from './dashboard.service.js';
 import { RecettesService, type Pas } from './recettes.service.js';
+import { OccupationService } from './occupation.service.js';
 
 /**
  * Une periode lue depuis l'URL, avec des bornes qui ne trompent pas.
@@ -29,11 +30,24 @@ export class DashboardController {
   constructor(
     private readonly dashboardService: DashboardService,
     private readonly recettes: RecettesService,
+    private readonly occupations: OccupationService,
   ) {}
 
   @Get('summary')
   getSummary() {
     return this.dashboardService.getSummary();
+  }
+
+  /**
+   * STAT-4 : a quelle heure le reseau se remplit, et de combien il peut.
+   *
+   * La source est le journal RADIUS du routeur, qui est court : la taille de
+   * l'echantillon repart avec le resultat, faute de quoi un profil calcule
+   * sur vingt sessions se lirait comme une statistique.
+   */
+  @Get('occupation')
+  occupation(@Query('routerId') routerId?: string) {
+    return this.occupations.occupation(routerId);
   }
 
   /** STAT-2 : la recette par offre et par periode. */
