@@ -106,16 +106,32 @@ export interface Payment {
 export interface DashboardSummary {
   vouchersByStatus: { status: VoucherStatus; _count: { _all: number } }[];
   revenue: { today: string; thisWeek: string; thisMonth: string };
-  revenueByPlan: { planId: string; _sum: { amount: string | null }; _count: { _all: number } }[];
-  revenueByMethod: { method: PaymentMethod; _sum: { amount: string | null }; _count: { _all: number } }[];
   recentPayments: Payment[];
   recentCustomers: Customer[];
   connectedClients: number;
+  /** Combien de fiches clients existent. La liste des dix derniers ne le disait pas. */
+  clients: number;
+  /**
+   * Clients qu'on ne peut joindre : leur numéro est provisoire.
+   *
+   * Le routeur ne stocke aucun téléphone. L'import en écrit un de la forme
+   * `import:<compte>`, qui ressemble à un vrai numéro dans la liste — et
+   * personne ne pense à le corriger.
+   */
+  clientsInjoignables: number;
   /** Tickets encore vendables : zero veut dire qu'on ne peut plus vendre. */
   ticketsDisponibles: number;
   abonnesActifs: number;
   /** Abonnements arrivant a echeance sous sept jours : a relancer. */
   echeancesProches: number;
+  /**
+   * Parmi elles, celles qu'on ne peut prévenir de rien.
+   *
+   * « À relancer » supposait qu'on sache où joindre les gens. Ce nombre
+   * décidera de l'utilité de l'avertissement par SMS le jour où la
+   * passerelle existera : prévenir personne n'aide personne.
+   */
+  echeancesProchesInjoignables: number;
   /**
    * Vrai quand les travaux de fond tournent sur le serveur.
    *

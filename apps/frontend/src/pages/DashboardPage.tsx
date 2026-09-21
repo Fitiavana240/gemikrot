@@ -241,10 +241,28 @@ export function DashboardPage() {
         />
       </section>
 
-      {/* Cinq tuiles depuis que le stock du routeur est dit à part : sur
-          quatre colonnes, la dernière tombait seule à la ligne. */}
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      {/* Six tuiles depuis que les clients y sont : trois par trois en
+          dessous de 1280 px, une seule ligne au-delà. Sur cinq colonnes, la
+          sixième tombait seule à la ligne. */}
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <Stat label="Connectés" value={d.connectedClients} hint="en ce moment" to="/sessions" />
+        {/* Les clients manquaient. Le tableau de bord en montrait les dix
+            derniers sans jamais dire combien il y en a — et une liste de dix
+            noms se lit pareil qu'on en ait douze ou six cents.
+            Le sous-titre dit ce que le total cache : le routeur ne stocke
+            aucun téléphone, et une fiche importée porte un numéro provisoire
+            qui ressemble à un vrai. */}
+        <Stat
+          label="Clients"
+          value={d.clients}
+          tone={d.clientsInjoignables > 0 ? 'alerte' : 'neutre'}
+          hint={
+            d.clientsInjoignables > 0
+              ? `${d.clientsInjoignables} sans numéro`
+              : 'tous joignables'
+          }
+          to="/customers"
+        />
         {/* Deux nombres, et non un.
             « Tickets disponibles » ne comptait que ce que l'application a
             créé, sous un titre qui promet « ce qui reste à vendre ». Relevé sur
@@ -290,7 +308,17 @@ export function DashboardPage() {
           label="Échéances sous 7 jours"
           value={d.echeancesProches}
           tone={d.echeancesProches > 0 ? 'alerte' : 'bien'}
-          hint={d.echeancesProches > 0 ? 'à relancer' : 'rien à relancer'}
+          /* « À relancer » supposait qu'on sache où joindre les gens. Ce
+             nombre-là décidera de l'utilité de l'avertissement par SMS le
+             jour où la passerelle existera : prévenir personne n'aide
+             personne. */
+          hint={
+            d.echeancesProches === 0
+              ? 'rien à relancer'
+              : d.echeancesProchesInjoignables > 0
+                ? `dont ${d.echeancesProchesInjoignables} sans numéro`
+                : 'à relancer'
+          }
           to="/subscriptions"
         />
       </section>
@@ -363,8 +391,13 @@ export function DashboardPage() {
         </Card>
 
         <Occupation />
+      </div>
 
-      <Card title="Derniers paiements">
+      {/* Les deux listes « derniers… » côte à côte. « Derniers paiements »
+          était la quatrième carte d'une grille de trois : elle tombait seule
+          sur sa ligne, les deux tiers de l'écran vides à côté d'elle. */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card title="Derniers paiements">
           {d.recentPayments.length === 0 ? (
             <p className="text-sm text-slate-400">Aucun paiement enregistré.</p>
           ) : (
@@ -383,9 +416,8 @@ export function DashboardPage() {
             </ul>
           )}
         </Card>
-      </div>
 
-      <Card title="Derniers clients">
+        <Card title="Derniers clients">
         {d.recentCustomers.length === 0 ? (
           <p className="text-sm text-slate-400">Aucun client enregistré.</p>
         ) : (
@@ -408,7 +440,8 @@ export function DashboardPage() {
             ))}
           </ul>
         )}
-      </Card>
+        </Card>
+      </div>
     </div>
   );
 }

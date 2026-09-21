@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PaymentStatus } from '@prisma/client';
+import { PaymentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 
@@ -31,8 +31,6 @@ export class DashboardService {
       revenueToday,
       revenueThisWeek,
       revenueThisMonth,
-      revenueByPlan,
-      revenueByMethod,
       recentPayments,
       recentCustomers,
       hotspotActiveUsers,
@@ -41,18 +39,6 @@ export class DashboardService {
       this.sumVerifiedSince(startOfDay()),
       this.sumVerifiedSince(startOfWeek()),
       this.sumVerifiedSince(startOfMonth()),
-      this.prisma.scoped.payment.groupBy({
-        by: ['planId'],
-        where: { status: PaymentStatus.VERIFIED },
-        _sum: { amount: true },
-        _count: { _all: true },
-      }),
-      this.prisma.scoped.payment.groupBy({
-        by: ['method'],
-        where: { status: PaymentStatus.VERIFIED },
-        _sum: { amount: true },
-        _count: { _all: true },
-      }),
       this.prisma.scoped.payment.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
       this.prisma.scoped.customer.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
       // Le routeur peut être injoignable : le dashboard reste consultable.
@@ -66,12 +52,25 @@ export class DashboardService {
     // lui reste a vendre, qui arrive a echeance, et ce qui attend une
     // validation. Trois questions, trois comptages — et non trois ecrans.
     const dansSeptJours = new Date(Date.now() + 7 * 86_400_000);
+    /**
+     * Les fiches qu'on ne peut joindre.
+     *
+     * Le routeur ne stocke aucun telephone : l'import en ecrit un provisoire
+     * de la forme `import:<compte>`, faute de mieux. Le champ etant obligatoire
+     * et unique par exploitant, c'est la seule forme que prend l'absence de
+     * numero -- il n'y a pas de case vide a chercher a cote.
+     */
+    const sansNumero: Prisma.CustomerWhereInput = { phone: { startsWith: 'import:' } };
+
     const [
       ticketsDisponibles,
       abonnesActifs,
       echeancesProches,
+      echeancesProchesInjoignables,
       paiementsEnAttente,
       plusAncienEnAttente,
+      clients,
+      clientsInjoignables,
     ] =
       await Promise.all([
         this.prisma.scoped.voucher.count({ where: { status: 'CREATED' } }),
@@ -80,6 +79,22 @@ export class DashboardService {
           where: {
             status: { in: ['ACTIVE', 'GRACE'] },
             currentPeriodEnd: { lte: dansSeptJours },
+          },
+        }),
+        /**
+         * Parmi ces echeances, celles qu'on ne peut prevenir de rien.
+         *
+         * << A relancer >> supposait qu'on sache ou joindre les gens. Le
+         * routeur ne stocke aucun numero : une fiche importee en porte un
+         * provisoire, qui ressemble a un vrai. Compte des maintenant, parce
+         * que c'est ce qui decidera de l'utilite de l'avertissement par SMS
+         * le jour ou la passerelle existera.
+         */
+        this.prisma.scoped.subscription.count({
+          where: {
+            status: { in: ['ACTIVE', 'GRACE'] },
+            currentPeriodEnd: { lte: dansSeptJours },
+            customer: sansNumero,
           },
         }),
         this.prisma.scoped.payment.count({ where: { status: PaymentStatus.PENDING } }),
@@ -92,16 +107,22 @@ export class DashboardService {
           orderBy: { createdAt: 'asc' },
           select: { createdAt: true },
         }),
+        // Les clients : le tableau de bord en montrait les dix derniers sans
+        // jamais dire combien il y en a. Une liste de dix noms se lit pareil
+        // qu'on en ait douze ou six cents.
+        this.prisma.scoped.customer.count(),
+        this.prisma.scoped.customer.count({ where: sansNumero }),
       ]);
 
     return {
       vouchersByStatus,
       revenue: { today: revenueToday, thisWeek: revenueThisWeek, thisMonth: revenueThisMonth },
-      revenueByPlan,
-      revenueByMethod,
       recentPayments,
       recentCustomers,
       connectedClients: hotspotActiveUsers.length,
+      clients,
+      clientsInjoignables,
+      echeancesProchesInjoignables,
       ticketsDisponibles,
       abonnesActifs,
       echeancesProches,
