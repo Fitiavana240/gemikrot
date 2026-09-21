@@ -104,6 +104,44 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
+/**
+ * Télécharge un fichier servi par l'API, jeton compris.
+ *
+ * Un simple lien `href` ne peut pas porter l'en-tête `Authorization` : le
+ * navigateur y arriverait sans jeton et recevrait un 401, c'est-à-dire un
+ * fichier vide sans explication. On récupère donc le corps nous-mêmes, puis
+ * on déclenche l'enregistrement.
+ *
+ * Le nom vient de `Content-Disposition` quand le serveur en donne un : c'est
+ * lui qui sait sur quelles dates porte l'export.
+ */
+export async function telecharger(path: string, nomParDefaut: string): Promise<void> {
+  const token = getToken();
+  const headers = new Headers();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const tenantCible = getTenantCible();
+  if (tenantCible) headers.set('X-Tenant-Id', tenantCible);
+
+  const res = await fetch(`/api${path}`, { headers });
+  if (!res.ok) throw new ApiError(res.status, `Téléchargement refusé (${res.status})`);
+
+  const disposition = res.headers.get('content-disposition') ?? '';
+  const nom = /filename="([^"]+)"/.exec(disposition)?.[1] ?? nomParDefaut;
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const lien = document.createElement('a');
+  lien.href = url;
+  lien.download = nom;
+  document.body.appendChild(lien);
+  lien.click();
+  lien.remove();
+  // Sans cette libération, le contenu du fichier reste en mémoire tant que
+  // l'onglet est ouvert — sur un export de plusieurs milliers de lignes
+  // rejoué chaque mois, cela finit par compter.
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, data?: unknown) =>

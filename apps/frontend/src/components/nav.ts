@@ -43,6 +43,7 @@ export const NAV_GROUPS: NavGroup[] = [
         hint: 'Générer, suivre les lots, imprimer, couper',
       },
       { to: '/payments', label: 'Paiements', hint: 'Encaissements et validations' },
+      { to: '/recettes', label: 'Recettes', hint: 'Ce qui rentre, par offre et par période' },
     ],
   },
   {
