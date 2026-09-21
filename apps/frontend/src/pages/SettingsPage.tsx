@@ -4,6 +4,7 @@ import { tenantsApi, type UpdateTenantInput } from '../api/tenants';
 import type { PaymentMethod } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
+import { MotDePasseCard } from '../components/MotDePasseCard';
 import {
   Badge,
   Button,
@@ -243,6 +244,8 @@ export function SettingsPage() {
           </div>
         )}
       </Card>
+
+      <MotDePasseCard />
     </div>
   );
 }
