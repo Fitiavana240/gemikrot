@@ -287,6 +287,8 @@ export const umTabsApi = {
    * La route existait côté serveur et aucun écran ne l'appelait : attribuer
    * un profil supposait donc d'ouvrir WinBox.
    */
+  profileLimitations: (routerId?: string) =>
+    api.get<UmProfileLimitation[]>(`/user-manager/profile-limitations${q(routerId)}`),
   attribuer: (username: string, profileName: string, routerId?: string) =>
     api.post<UmAssignment>(
       `/user-manager/users/${encodeURIComponent(username)}/profiles${q(routerId)}`,
@@ -333,4 +335,20 @@ export function formatDuree(secondes: number | null): string {
   if (j > 0) return `${j} j ${h} h`;
   if (h > 0) return `${h} h ${m.toString().padStart(2, '0')}`;
   return `${m} min`;
+}
+
+/**
+ * Quelle limitation s'applique à quel forfait, et sous quelles conditions.
+ *
+ * Les trois derniers champs faisaient défaut : une limitation peut n'être
+ * active qu'à certaines heures ou certains jours.
+ */
+export interface UmProfileLimitation {
+  id: string;
+  profileName: string;
+  limitationName: string;
+  /** Secondes depuis minuit. `0` est une heure valide, pas une absence. */
+  fromTimeSeconds: number | null;
+  tillTimeSeconds: number | null;
+  weekdays: string[];
 }

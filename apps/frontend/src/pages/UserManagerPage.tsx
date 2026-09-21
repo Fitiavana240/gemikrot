@@ -15,6 +15,7 @@ import {
   type UserManagerLimitation,
   type UserManagerProfile,
 } from '../api/user-manager';
+import { ProfileLimitationsTab } from './ProfileLimitationsTab';
 import { useAuth } from '../auth/AuthContext';
 import { ETAT_COMPTE_UM, libellé } from '../api/libelles';
 import { FormulaireLimitation } from '../components/FormulaireLimitation';
@@ -61,6 +62,10 @@ const ONGLETS = {
   profils: { titre: 'Profils', rendu: () => <ProfilesTab /> },
   attributions: { titre: 'Attributions', rendu: () => <UmAssignmentsTab /> },
   limitations: { titre: 'Limitations', rendu: () => <LimitationsTab /> },
+  'limitations-profil': {
+    titre: 'Limitations par forfait',
+    rendu: () => <ProfileLimitationsTab />,
+  },
   attributs: { titre: 'Attributs RADIUS', rendu: () => <UmAttributesTab /> },
   paiements: { titre: 'Paiements du routeur', rendu: () => <UmPaymentsTab /> },
 } as const;

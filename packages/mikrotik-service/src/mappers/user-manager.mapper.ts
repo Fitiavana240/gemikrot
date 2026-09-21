@@ -99,6 +99,14 @@ export function mapUserManagerProfileLimitation(raw: any): UserManagerProfileLim
     id: raw?.['.id'] ?? '',
     profileName: raw?.profile ?? '',
     limitationName: raw?.limitation ?? '',
+    // `0s` est une heure valide — minuit — et non une absence : le rendre
+    // `null` ferait passer « à partir de minuit » pour « sans restriction ».
+    fromTimeSeconds: raw?.['from-time'] != null ? parseRouterOsDuration(raw['from-time']) : null,
+    tillTimeSeconds: raw?.['till-time'] != null ? parseRouterOsDuration(raw['till-time']) : null,
+    weekdays: String(raw?.weekdays ?? '')
+      .split(',')
+      .map((j) => j.trim())
+      .filter(Boolean),
   };
 }
 

@@ -161,6 +161,18 @@ export class UserManagerService {
     return mikrotik.getUserManagerUserProfiles(username);
   }
 
+  /**
+   * Les jonctions profil ↔ limitation, avec leurs conditions.
+   *
+   * `listProfiles` les lit déjà mais les réduit à une liste de noms : les
+   * heures et les jours y sont perdus. Or c'est eux qui font la différence
+   * entre « ce forfait est bridé » et « ce forfait est bridé le soir ».
+   */
+  async listProfileLimitations(routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    return mikrotik.getUserManagerProfileLimitations();
+  }
+
   async listProfiles(routerId?: string): Promise<ProfileView[]> {
     const mikrotik = await this.client(routerId);
     const [profiles, junctions, assignments, plans] = await Promise.all([

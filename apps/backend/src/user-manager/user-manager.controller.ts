@@ -128,6 +128,12 @@ export class UserManagerController {
 
   // ---------- Limitations ----------
 
+  /** Jonctions profil ↔ limitation, avec heures et jours. */
+  @Get('profile-limitations')
+  profileLimitations(@Query('routerId') routerId?: string) {
+    return this.userManager.listProfileLimitations(routerId);
+  }
+
   @Get('limitations')
   listLimitations(@Query('routerId') routerId?: string) {
     return this.userManager.listLimitations(routerId);

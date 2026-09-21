@@ -73,11 +73,25 @@ export interface UserManagerLimitationDto {
   resetCountersStartTime: string | null;
 }
 
-/** Jonction profil ↔ limitation. */
+/**
+ * Jonction profil ↔ limitation, et **sous quelles conditions**.
+ *
+ * Les trois derniers champs étaient ignorés, et ils changent tout : une
+ * limitation peut ne s'appliquer qu'à certaines heures ou certains jours.
+ * C'est de quoi faire un tarif de nuit ou un bridage aux heures de pointe —
+ * une capacité que la console ne montrait pas, donc que personne ne pouvait
+ * lire ni poser.
+ */
 export interface UserManagerProfileLimitationDto {
   id: string;
   profileName: string;
   limitationName: string;
+  /** Heure de début dans la journée, en secondes depuis minuit. */
+  fromTimeSeconds: number | null;
+  /** Heure de fin. `23h59m59s` — la valeur par défaut — veut dire « toute la journée ». */
+  tillTimeSeconds: number | null;
+  /** Jours concernés. Les sept = aucune restriction de jour. */
+  weekdays: string[];
 }
 
 /** États réellement renvoyés par RouterOS pour une attribution de profil. */
