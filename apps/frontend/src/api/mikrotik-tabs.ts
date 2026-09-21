@@ -281,6 +281,21 @@ export const umTabsApi = {
   assignments: (routerId?: string, username?: string) =>
     api.get<UmAssignment[]>(`/user-manager/assignments${q(routerId, { username: username ?? '' })}`),
   payments: (routerId?: string) => api.get<UmPayment[]>(`/user-manager/payments${q(routerId)}`),
+  /**
+   * Attribue un profil à un compte — le « User Profile > New » de WinBox.
+   *
+   * La route existait côté serveur et aucun écran ne l'appelait : attribuer
+   * un profil supposait donc d'ouvrir WinBox.
+   */
+  attribuer: (username: string, profileName: string, routerId?: string) =>
+    api.post<UmAssignment>(
+      `/user-manager/users/${encodeURIComponent(username)}/profiles${q(routerId)}`,
+      { profileName },
+    ),
+  retirer: (username: string, profileName: string, routerId?: string) =>
+    api.delete<void>(
+      `/user-manager/users/${encodeURIComponent(username)}/profiles/${encodeURIComponent(profileName)}${q(routerId)}`,
+    ),
 };
 
 /**

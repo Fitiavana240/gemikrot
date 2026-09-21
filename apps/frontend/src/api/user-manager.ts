@@ -80,6 +80,14 @@ export interface CreateProfileInput {
   startsWhen: ProfileStartsWhen;
   price?: number;
   sharedUsers?: number;
+  /**
+   * Le nom que le client verra, s'il diffère du nom interne.
+   *
+   * « Name For Users » dans WinBox. Vide, le routeur reprend le nom du
+   * profil : `2Heure-500Ar` s'affiche alors tel quel au client.
+   */
+  nameForUsers?: string;
+  comment?: string;
 }
 
 export interface CreateLimitationInput {

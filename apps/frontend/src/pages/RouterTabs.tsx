@@ -12,6 +12,7 @@ import {
   type UpdateHotspotProfile,
   type UpdateHotspotUser,
 } from '../api/mikrotik-tabs';
+import { userManagerApi } from '../api/user-manager';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
 import { phraseCoupure } from '../api/coupure';
@@ -1001,9 +1002,50 @@ export function UmSessionsTab() {
 
 export function UmAssignmentsTab() {
   const { currentId } = useRouterSelection();
+  const { canWrite } = useAuth();
+  const queryClient = useQueryClient();
   const requête = useQuery({
     queryKey: ['um-assignments', currentId],
     queryFn: () => umTabsApi.assignments(currentId),
+  });
+  // Les deux listes qui alimentent le formulaire : on choisit un compte
+  // existant et un profil existant, comme dans WinBox — taper un nom libre
+  // ne produirait qu'une erreur du routeur.
+  const comptes = useQuery({
+    queryKey: ['um-accounts', currentId],
+    queryFn: () => userManagerApi.listAccounts(currentId),
+  });
+  const profils = useQuery({
+    queryKey: ['um-profiles', currentId],
+    queryFn: () => userManagerApi.listProfiles(currentId),
+  });
+
+  const [compte, setCompte] = useState('');
+  const [profil, setProfil] = useState('');
+  const [erreur, setErreur] = useState<string | null>(null);
+
+  const rafraichir = () =>
+    queryClient.invalidateQueries({ queryKey: ['um-assignments', currentId] });
+
+  const attribuer = useMutation({
+    mutationFn: () => umTabsApi.attribuer(compte, profil, currentId),
+    onSuccess: () => {
+      setErreur(null);
+      setCompte('');
+      setProfil('');
+      rafraichir();
+    },
+    onError: (e: unknown) => setErreur(e instanceof ApiError ? e.message : 'Erreur inconnue'),
+  });
+
+  const retirer = useMutation({
+    mutationFn: ({ username, profileName }: { username: string; profileName: string }) =>
+      umTabsApi.retirer(username, profileName, currentId),
+    onSuccess: () => {
+      setErreur(null);
+      rafraichir();
+    },
+    onError: (e: unknown) => setErreur(e instanceof ApiError ? e.message : 'Erreur inconnue'),
   });
 
   const TON: Record<string, 'green' | 'amber' | 'slate' | 'red'> = {
@@ -1027,9 +1069,59 @@ export function UmAssignmentsTab() {
           elles continuaient d'être comptées comme des comptes sur l'écran Profils.
         </p>
       )}
+      {erreur && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {erreur}
+        </p>
+      )}
+
+      {/* Le « User Profile > New » de WinBox. La route existait côté serveur
+          et aucun écran ne l'appelait : attribuer un profil supposait donc
+          d'ouvrir WinBox. */}
+      {canWrite && (
+        <Card title="Attribuer un profil à un compte">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <FormField label="Compte">
+              <Select value={compte} onChange={(e) => setCompte(e.target.value)}>
+                <option value="">Choisir…</option>
+                {(comptes.data ?? []).map((c) => (
+                  <option key={c.username} value={c.username}>
+                    {c.username}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+            <FormField label="Profil">
+              <Select value={profil} onChange={(e) => setProfil(e.target.value)}>
+                <option value="">Choisir…</option>
+                {(profils.data ?? []).map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+            <div className="flex items-end">
+              <Button
+                className="w-full"
+                disabled={!compte || !profil || attribuer.isPending}
+                onClick={() => attribuer.mutate()}
+              >
+                {attribuer.isPending ? 'Attribution…' : 'Attribuer'}
+              </Button>
+            </div>
+          </div>
+          <p className="mt-3 max-w-3xl text-xs text-slate-500">
+            L&apos;échéance dépend du profil : « à l&apos;attribution » lance le compte à
+            rebours tout de suite, « à la 1re connexion » attend que le client se connecte.
+            Un compte peut porter plusieurs attributions — un rachat en ajoute une.
+          </p>
+        </Card>
+      )}
+
       <ListeDuRouteur
         requête={requête}
-        colonnes={['Compte', 'Profil', 'Expire le', 'État']}
+        colonnes={canWrite ? ['Compte', 'Profil', 'Expire le', 'État', ''] : ['Compte', 'Profil', 'Expire le', 'État']}
         vide={{
           titre: 'Aucune attribution',
           aide: 'Un compte reçoit son attribution à la première authentification.',
@@ -1055,6 +1147,25 @@ export function UmAssignmentsTab() {
                 <Badge tone={TON[a.state] ?? 'slate'}>{a.state}</Badge>
               )}
             </td>
+            {canWrite && (
+              <td className="px-3 py-2 text-right">
+                {/* Rien à retirer pour une attribution dont le compte a
+                    disparu : le routeur la cherche par nom de compte, et ce
+                    nom n'existe plus. Proposer le bouton promettrait un geste
+                    qui échouerait. */}
+                {!a.usernameIntrouvable && (
+                  <Button
+                    variant="secondary"
+                    disabled={retirer.isPending}
+                    onClick={() =>
+                      retirer.mutate({ username: a.username, profileName: a.profileName })
+                    }
+                  >
+                    Retirer
+                  </Button>
+                )}
+              </td>
+            )}
           </tr>
         )}
       />

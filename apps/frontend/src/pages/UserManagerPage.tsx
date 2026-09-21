@@ -259,6 +259,41 @@ function ProfilesTab() {
                 }
               />
             </FormField>
+            {/* Les trois champs que WinBox propose et qui manquaient ici. Le
+                routeur les acceptait déjà : seul le formulaire les ignorait,
+                si bien qu'un profil créé depuis la console ne pouvait ni
+                porter de nom public, ni de commentaire, ni relever le nombre
+                d'appareils simultanés. */}
+            <FormField label="Nom vu par le client">
+              <Input
+                value={form.nameForUsers ?? ''}
+                placeholder={form.name || 'le nom du profil'}
+                onChange={(e) =>
+                  setForm({ ...form, nameForUsers: e.target.value || undefined })
+                }
+              />
+            </FormField>
+            <FormField label="Appareils simultanés">
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={form.sharedUsers ?? ''}
+                placeholder="1"
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    sharedUsers: e.target.value ? Number(e.target.value) : undefined,
+                  })
+                }
+              />
+            </FormField>
+            <FormField label="Commentaire">
+              <Input
+                value={form.comment ?? ''}
+                onChange={(e) => setForm({ ...form, comment: e.target.value || undefined })}
+              />
+            </FormField>
             <div className="flex items-end">
               <Button type="submit" disabled={create.isPending} className="w-full">
                 {create.isPending ? 'Création…' : 'Créer'}

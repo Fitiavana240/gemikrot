@@ -212,6 +212,8 @@ export class UserManagerService {
       startsWhen: dto.startsWhen,
       price: dto.price,
       sharedUsers: dto.sharedUsers,
+      nameForUsers: dto.nameForUsers,
+      comment: dto.comment,
     });
     await this.log(adminUserId, 'CREATE_UM_PROFILE', profile.name, { ...dto });
     return profile;

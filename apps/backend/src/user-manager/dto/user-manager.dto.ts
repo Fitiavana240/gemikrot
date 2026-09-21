@@ -47,6 +47,22 @@ export class CreateUserManagerProfileDto {
   @Min(1)
   @Max(50)
   sharedUsers?: number;
+
+  /**
+   * Le nom que le client verra sur le portail, s'il diffère du nom interne.
+   *
+   * WinBox l'appelle « Name For Users ». Vide, le routeur reprend le nom du
+   * profil — ce que fait déjà le service.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  nameForUsers?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  comment?: string;
 }
 
 export class UpdateUserManagerProfileDto {
@@ -69,6 +85,22 @@ export class UpdateUserManagerProfileDto {
   @Min(1)
   @Max(50)
   sharedUsers?: number;
+
+  /**
+   * Le nom que le client verra sur le portail, s'il diffère du nom interne.
+   *
+   * WinBox l'appelle « Name For Users ». Vide, le routeur reprend le nom du
+   * profil — ce que fait déjà le service.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  nameForUsers?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  comment?: string;
 }
 
 export class CreateLimitationDto {
