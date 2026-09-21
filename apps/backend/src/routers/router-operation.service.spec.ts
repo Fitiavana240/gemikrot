@@ -50,6 +50,13 @@ function createFakePrisma(seed: Record<string, unknown>[] = []) {
     }),
   };
 
+  (model as any).groupBy = vi.fn(async ({ where }: any) => {
+    const ids = new Set(
+      rows.filter((r) => !where?.status || r.status === where.status).map((r) => r.routerId),
+    );
+    return [...ids].map((routerId) => ({ routerId }));
+  });
+
   const client: any = { routerOperation: model, _rows: rows };
   client.scopedStrict = client;
   return client;
@@ -208,5 +215,73 @@ describe('RouterOperationQueue', () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(prisma._rows[0].status).toBe('TERMINEE');
+  });
+});
+
+/**
+ * La reprise au démarrage.
+ *
+ * L'état de santé des routeurs vit en mémoire : après un redémarrage, tout
+ * routeur repart d'`INCONNU`, si bien que le premier appel réussi ne compte
+ * pas comme un retour — `recordSuccess` ne prévient ses écoutes que si l'état
+ * était `INJOIGNABLE`. Ce qui avait été mis en file avant l'arrêt y restait
+ * donc jusqu'à ce que le routeur retombe puis revienne. Or les deux se
+ * produisent ensemble : une coupure de courant emporte serveur et routeur.
+ */
+describe('RouterOperationQueue, reprise au démarrage', () => {
+  function monter(prisma: any, mikrotik: Record<string, any>) {
+    const health = new RouterHealthService();
+    const queue = new RouterOperationQueue(
+      prisma,
+      { forRouter: vi.fn(async () => mikrotik) } as never,
+      new RouterAccessService(),
+      health as never,
+      tenantContext as never,
+    );
+    return { queue, health };
+  }
+
+  const mikrotikSain = () => ({
+    getHotspotCookies: vi.fn(async () => []),
+    getHotspotActiveUsers: vi.fn(async () => []),
+    deleteHotspotCookie: vi.fn(async () => undefined),
+    disconnectHotspotUser: vi.fn(async () => undefined),
+    setUserManagerUserDisabled: vi.fn(async () => ({})),
+  });
+
+  it('rejoue ce qui attendait, sans attendre de reconnexion', async () => {
+    const prisma = createFakePrisma([
+      { kind: ROUTER_OPERATIONS.COUPER_ACCES, payload: { username: 'KF77' } },
+    ]);
+    const { queue } = monter(prisma, mikrotikSain());
+
+    queue.onModuleInit();
+    // La reprise est détachée : on laisse la micro-tâche s'exécuter.
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(prisma._rows[0].status).toBe('TERMINEE');
+  });
+
+  it('ne touche à rien quand la file est vide', async () => {
+    const prisma = createFakePrisma([]);
+    const { queue } = monter(prisma, mikrotikSain());
+
+    queue.onModuleInit();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(prisma.routerOperation.update).not.toHaveBeenCalled();
+  });
+
+  it('laisse l’application démarrer même si la reprise échoue', async () => {
+    // Une base indisponible au démarrage ne doit pas empêcher le service de
+    // se monter : la file sera reprise au prochain retour du routeur.
+    const prisma = createFakePrisma([]);
+    prisma.routerOperation.groupBy = vi.fn(async () => {
+      throw new Error('base injoignable');
+    });
+    const { queue } = monter(prisma, mikrotikSain());
+
+    expect(() => queue.onModuleInit()).not.toThrow();
+    await new Promise((r) => setTimeout(r, 0));
   });
 });

@@ -71,6 +71,47 @@ export class RouterOperationQueue implements OnModuleInit {
         this.logger.error(`Vidange du routeur ${routerId} en échec : ${String(error)}`),
       );
     });
+
+    // Et au démarrage, sans attendre de reconnexion.
+    //
+    // L'état de santé vit en mémoire : après un redémarrage, tout routeur
+    // repart d'`INCONNU`, si bien que le premier appel réussi ne compte pas
+    // comme un retour — `wasDown` teste `INJOIGNABLE`. Sans ce rattrapage, ce
+    // qui avait été mis en file avant l'arrêt y restait jusqu'à ce que le
+    // routeur retombe puis revienne. Or les deux se produisent ensemble : à
+    // Toliara, une coupure de courant emporte le serveur et le routeur.
+    void this.vidangeAuDemarrage();
+  }
+
+  /**
+   * Reprend les files laissées par le processus précédent.
+   *
+   * Détachée : le démarrage de l'application n'attend pas un routeur qui
+   * peut être encore éteint. `drain` s'arrête de lui-même dès le premier
+   * échec si le lien est mort, donc au pire un essai par routeur.
+   */
+  private async vidangeAuDemarrage(): Promise<void> {
+    try {
+      // Client brut : aucun exploitant n'est encore posé, et il s'agit
+      // justement de reprendre les files de tous.
+      const enAttente = await this.prisma.routerOperation.groupBy({
+        by: ['routerId'],
+        where: { status: RouterOperationStatus.EN_ATTENTE },
+      });
+      if (enAttente.length === 0) return;
+
+      this.logger.log(
+        `Reprise au démarrage : ${enAttente.length} routeur(s) avec des opérations en attente`,
+      );
+      for (const { routerId } of enAttente) {
+        await this.drain(routerId).catch((error) =>
+          this.logger.error(`Reprise du routeur ${routerId} en échec : ${String(error)}`),
+        );
+      }
+    } catch (error) {
+      // Une reprise impossible ne doit pas empêcher l'application de démarrer.
+      this.logger.error(`Reprise au démarrage en échec : ${String(error)}`);
+    }
   }
 
   /**
