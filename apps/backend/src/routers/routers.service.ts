@@ -3,6 +3,7 @@ import { Router } from '@prisma/client';
 import { connect as tlsConnect } from 'node:tls';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
+import { AbonnementPlateformeService } from '../tenants/abonnement-plateforme.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { RouterCredentialsService } from './router-credentials.service.js';
 import type { RouterHealth, RouterReachability } from './router-health.service.js';
@@ -49,6 +50,7 @@ export class RoutersService {
     private readonly audit: AuditService,
     private readonly health: RouterHealthService,
     private readonly tenantContext: TenantContextService,
+    private readonly abonnement: AbonnementPlateformeService,
   ) {}
 
   async findAll(): Promise<RouterView[]> {
@@ -62,6 +64,11 @@ export class RoutersService {
   }
 
   async create(dto: CreateRouterDto, adminUserId?: string): Promise<RouterView> {
+    // Le plafond de l'offre se vérifie **à la création**, jamais après :
+    // retirer l'accès à un routeur déjà raccordé parce que l'offre a changé
+    // couperait la main à quelqu'un qui s'en sert.
+    await this.abonnement.exigerRouteurDisponible(this.tenantContext.requireTenantId());
+
     const router = await this.prisma.scoped.router.create({
       data: {
         tenantId: this.tenantContext.requireTenantId(),

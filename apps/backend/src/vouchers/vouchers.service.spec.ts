@@ -107,6 +107,9 @@ describe('VouchersService.generateBatch', () => {
       // échouer. L'écriture a ses propres tests.
       { findAll: async () => [{ perPage: 30, isDefault: true }] } as any,
       { écrire: async () => ({ planches: [], échecs: [], emplacement: '' }) } as any,
+      // Abonnement plateforme : à jour par défaut. Son refus a ses propres
+      // tests ; ici il ne doit pas se mettre en travers de ceux des tickets.
+      { exigerAbonnementValide: async () => undefined } as any,
     );
   }
 

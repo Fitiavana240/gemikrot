@@ -23,6 +23,7 @@ import {
 } from '../components/ui';
 import { Occupation } from '../components/Occupation';
 import { MiseEnRoute } from '../components/MiseEnRoute';
+import { AbonnementPlateforme } from '../components/AbonnementPlateforme';
 
 const VOUCHER_LABEL: Record<string, string> = {
   CREATED: 'disponibles',
@@ -131,6 +132,10 @@ export function DashboardPage() {
         title="Vue d'ensemble"
         description="Ce qu'il faut savoir en ouvrant la console : ce qui est encaissé, ce qui reste à vendre, et ce qui demande une décision."
       />
+
+      {/* Avant même l'état du routeur : si la vente est fermée, c'est la
+          première chose à savoir en ouvrant la console. */}
+      <AbonnementPlateforme />
 
       {/* Avant tout le reste sur un compte neuf : des chiffres à zéro
           n'apprennent rien à qui n'a pas encore branché son routeur. La carte

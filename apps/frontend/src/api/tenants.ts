@@ -22,6 +22,10 @@ export interface Tenant {
   supportWhatsapp: string | null;
   currency: string;
   status: TenantStatus;
+  /** SAS-2 : ce que l'exploitant doit à la plateforme. `null` = rien souscrit. */
+  platformPlanName: string | null;
+  maxRouters: number | null;
+  platformEndsAt: string | null;
   createdAt: string;
   mobileMoneyAccounts?: MobileMoneyAccount[];
 }
@@ -65,6 +69,12 @@ export interface MiseEnRoute {
 }
 
 export const tenantsApi = {
+  /** SAS-2 : où en est l'exploitant de son abonnement à la plateforme. */
+  monAbonnement: () => api.get<AbonnementPlateforme>('/tenants/me/abonnement'),
+  definirAbonnement: (
+    id: string,
+    dto: { platformPlanName?: string | null; maxRouters?: number | null; platformEndsAt?: string | null },
+  ) => api.patch<AbonnementPlateforme>(`/tenants/${id}/abonnement`, dto),
   miseEnRoute: () => api.get<MiseEnRoute>('/tenants/me/mise-en-route'),
   mine: () => api.get<Tenant>('/tenants/me'),
   update: (input: UpdateTenantInput) => api.patch<Tenant>('/tenants/me', input),
@@ -85,3 +95,22 @@ export const signupApi = {
   signup: (input: SignupInput) =>
     api.post<{ tenantId: string; status: TenantStatus; message: string }>('/auth/signup', input),
 };
+
+/**
+ * L'abonnement d'un exploitant à la plateforme.
+ *
+ * `ecritureBloquee` ne coupe que la vente. La lecture reste ouverte —
+ * fermer la consultation reviendrait à prendre en otage les données de
+ * quelqu'un pour une facture — et les clients finaux gardent leur accès,
+ * le routeur appliquant seul les validités.
+ */
+export interface AbonnementPlateforme {
+  offre: string | null;
+  maxRouteurs: number | null;
+  routeursUtilises: number;
+  echeance: string | null;
+  finDeTolerance: string | null;
+  etat: 'sans-abonnement' | 'a-jour' | 'en-tolerance' | 'expire';
+  joursRestants: number | null;
+  ecritureBloquee: boolean;
+}

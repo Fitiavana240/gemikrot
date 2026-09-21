@@ -5,6 +5,7 @@ import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { AuthenticatedUser } from '../auth/jwt.strategy.js';
 import { TenantsService } from './tenants.service.js';
 import { MiseEnRouteService } from './mise-en-route.service.js';
+import { AbonnementPlateformeService } from './abonnement-plateforme.service.js';
 import { UpdateTenantDto } from './dto/update-tenant.dto.js';
 import { MobileMoneyAccountDto } from './dto/mobile-money-account.dto.js';
 
@@ -13,7 +14,32 @@ export class TenantsController {
   constructor(
     private readonly tenants: TenantsService,
     private readonly miseEnRoute: MiseEnRouteService,
+    private readonly abonnement: AbonnementPlateformeService,
   ) {}
+
+  /**
+   * SAS-2 : l'abonnement a la plateforme, vu par l'exploitant lui-meme.
+   *
+   * Lisible par tous ses comptes : savoir que l'echeance approche n'est pas
+   * une information d'administrateur, c'est ce qui evite de decouvrir la
+   * vente fermee un matin.
+   */
+  @Get('me/abonnement')
+  monAbonnement() {
+    return this.abonnement.etatDeLExploitantCourant();
+  }
+
+  /** Reserve au SUPER_ADMIN : pose l'offre, le plafond et l'echeance. */
+  @Roles(AdminRole.SUPER_ADMIN)
+  @Patch(':id/abonnement')
+  definirAbonnement(
+    @Param('id') id: string,
+    @Body()
+    dto: { platformPlanName?: string | null; maxRouters?: number | null; platformEndsAt?: string | null },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.abonnement.definir(id, dto, user.id);
+  }
 
   /** Paramètres de l'exploitant connecté (marque, devise, puces Mobile Money). */
   @Get('me')

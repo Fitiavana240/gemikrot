@@ -3,11 +3,12 @@ import { AuditModule } from '../audit/audit.module.js';
 import { TenantsService } from './tenants.service.js';
 import { TenantsController } from './tenants.controller.js';
 import { MiseEnRouteService } from './mise-en-route.service.js';
+import { AbonnementPlateformeService } from './abonnement-plateforme.service.js';
 
 @Module({
   imports: [AuditModule],
   controllers: [TenantsController],
-  providers: [TenantsService, MiseEnRouteService],
-  exports: [TenantsService],
+  providers: [TenantsService, MiseEnRouteService, AbonnementPlateformeService],
+  exports: [TenantsService, AbonnementPlateformeService],
 })
 export class TenantsModule {}

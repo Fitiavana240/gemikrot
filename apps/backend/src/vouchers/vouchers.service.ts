@@ -3,6 +3,7 @@ import { Prisma, Voucher, VoucherStatus, VoucherTarget } from '@prisma/client';
 import { MikrotikNotFoundError } from '@wifitati/mikrotik-service';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
+import { AbonnementPlateformeService } from '../tenants/abonnement-plateforme.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 import { parseRouterTime } from '../routers/router-time.util.js';
@@ -26,6 +27,7 @@ export class VouchersService {
     private readonly tenantContext: TenantContextService,
     private readonly modèles: TicketTemplatesService,
     private readonly planches: PlancheRouteurService,
+    private readonly abonnement: AbonnementPlateformeService,
   ) {}
 
   private readonly logger = new Logger(VouchersService.name);
@@ -170,6 +172,12 @@ export class VouchersService {
 
   /** Génération synchrone d'un lot (Section 18). Adapté jusqu'à ~1000 vouchers. */
   async generateBatch(dto: CreateVoucherBatchDto, adminUserId: string): Promise<Voucher[]> {
+    // Générer un lot, c'est mettre du stock en vente : c'est là que
+    // l'abonnement à la plateforme se fait sentir, et nulle part ailleurs.
+    // Bloquer une correction de numéro de téléphone pour une facture impayée
+    // serait une punition sans rapport avec la faute.
+    await this.abonnement.exigerAbonnementValide(this.tenantContext.requireTenantId());
+
     const plan = await this.getActivePlan(dto.planId);
     const routerId = dto.routerId ?? (await this.getDefaultRouterId());
 

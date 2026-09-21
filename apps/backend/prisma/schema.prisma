@@ -40,6 +40,27 @@ model Tenant {
   /// l'attend `wa.me` : `261340000000`. Vide, aucun lien n'est proposé —
   /// mieux vaut pas d'assistance annoncée qu'une porte qui ne mène nulle part.
   supportWhatsapp String?  @map("support_whatsapp")
+
+  // ---------- Abonnement à la plateforme ----------
+  //
+  // Un exploitant était actif ou suspendu, et rien ne le faisait payer. Ces
+  // trois champs portent ce qu'il doit, jusqu'à quand, et combien de
+  // routeurs son offre autorise.
+  //
+  // **L'expiration ne coupe jamais les clients finaux.** Le routeur applique
+  // seul les validités : une plateforme impayée n'a aucun moyen — ni aucune
+  // raison — de priver d'Internet des gens qui ont payé leur ticket. Elle
+  // ferme la console, pas le Wi-Fi.
+
+  /// Nom de l'offre souscrite, tel qu'il se lit. `null` = aucune souscription.
+  platformPlanName String?   @map("platform_plan_name")
+  /// Combien de routeurs l'offre autorise. `null` = sans limite.
+  maxRouters       Int?      @map("max_routers")
+  /// Échéance de la période payée. `null` = pas d'échéance, donc pas de blocage.
+  platformEndsAt   DateTime? @map("platform_ends_at")
+  /// Fin de la tolérance après échéance. Une console qui se ferme le jour
+  /// même d'un retard de virement ferait perdre des ventes pour rien.
+  platformGraceEndsAt DateTime? @map("platform_grace_ends_at")
   /// Code ISO 4217 : MGA, USD, EUR… choisi par l'exploitant.
   currency  String       @default("MGA")
   status    TenantStatus @default(PENDING)

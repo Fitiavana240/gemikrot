@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuditModule } from '../audit/audit.module.js';
+import { TenantsModule } from '../tenants/tenants.module.js';
 import { DevicesModule } from '../devices/devices.module.js';
 import { RouterAccessService } from './router-access.service.js';
 import { RouterCredentialsService } from './router-credentials.service.js';
@@ -28,7 +29,7 @@ import { RouterMonitoringController } from './router-monitoring.controller.js';
  */
 @Global()
 @Module({
-  imports: [ConfigModule, AuditModule, DevicesModule, TicketsModule],
+  imports: [ConfigModule, AuditModule, DevicesModule, TicketsModule, TenantsModule],
   controllers: [
     RoutersController,
     RouterMonitoringController,
