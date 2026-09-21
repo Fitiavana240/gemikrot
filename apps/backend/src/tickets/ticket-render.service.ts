@@ -40,13 +40,31 @@ export interface TicketPlaceholders {
 }
 
 export const PLACEHOLDER_HELP: { name: keyof TicketPlaceholders; description: string }[] = [
-  { name: 'code', description: "Code d'accès du ticket — à la fois identifiant et mot de passe" },
+  { name: 'code', description: "Identifiant du ticket — ce que le client tape dans « User »" },
+  {
+    name: 'password',
+    description:
+      'Mot de passe du ticket. Le même que le code sur un ticket imprimé ; la référence du transfert sur un accès acheté en ligne',
+  },
   { name: 'planName', description: "Nom de l'offre, par exemple 1Jour-2000Ar" },
   { name: 'price', description: 'Prix formaté dans votre devise' },
   { name: 'currency', description: 'Code de la devise (MGA, EUR…)' },
   { name: 'validity', description: 'Durée de validité en clair, par exemple « 1 j »' },
   { name: 'wifiName', description: 'Nom de votre réseau Wi-Fi' },
   { name: 'logoUrl', description: 'Adresse de votre logo, à placer dans un src d\'image' },
+  { name: 'tagline', description: 'Phrase sous le nom du réseau, réglée dans le portail captif' },
+  {
+    name: 'site',
+    description: 'Votre premier domaine, tel qu’il est déclaré dans Paramètres',
+  },
+  {
+    name: 'telephones',
+    description: 'Vos numéros, repris des réglages du portail captif',
+  },
+  {
+    name: 'reseauSocial',
+    description: 'Votre page Facebook, reprise des réglages du portail captif',
+  },
   { name: 'createdAt', description: 'Date de génération du ticket' },
   { name: 'ticketIndex', description: 'Numéro du ticket dans le lot' },
   { name: 'ticketTotal', description: 'Nombre de tickets du lot' },
