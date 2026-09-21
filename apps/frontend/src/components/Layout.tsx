@@ -8,7 +8,8 @@ import { APP_NAME, BrandMark } from './Brand';
 import { useRouterSelection } from '../routers/RouterContext';
 import { REACHABILITY_LABEL } from '../api/routers';
 import { SideNav } from './SideNav';
-import { Pied } from './Pied';
+import { BandeauÉtat, Pied } from './Pied';
+import { Notifications } from './Notifications';
 
 /** Le SUPER_ADMIN pilote la plateforme, pas un réseau en particulier. */
 
@@ -268,12 +269,21 @@ export function Layout() {
             <SelecteurExploitant />
             <RouterSelector />
           </div>
-          <button
-            onClick={logout}
-            className="shrink-0 text-sm text-slate-500 hover:text-red-600"
-          >
-            Déconnexion
-          </button>
+          <div className="flex shrink-0 items-center gap-2 lg:gap-3">
+            {/* L'heure du routeur, montee du pied de page : c'est elle qui
+                decide des expirations, et elle etait sous l'ecran des qu'on
+                faisait defiler une liste -- c'est-a-dire presque toujours. */}
+            <div className="hidden md:block">
+              <BandeauÉtat />
+            </div>
+            <Notifications />
+            <button
+              onClick={logout}
+              className="text-sm text-slate-500 hover:text-red-600"
+            >
+              Déconnexion
+            </button>
+          </div>
         </header>
         {/* Agir au nom de quelqu'un doit se voir en permanence, pas se
             deviner dans un menu deroulant : on oublie tres vite qu'on est

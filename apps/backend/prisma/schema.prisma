@@ -87,6 +87,27 @@ model Tenant {
   @@map("tenants")
 }
 
+/// Une notification qu'un administrateur a ecartee.
+///
+/// Les notifications elles-memes ne sont pas stockees : elles se recalculent
+/// a chaque lecture, sinon elles vieilliraient -- on lirait << paiement en
+/// attente >> sur un paiement valide la veille. Seul le geste << j'ai vu >>
+/// merite d'etre garde, et en base plutot que dans le navigateur :
+/// l'exploitant ouvre sa console depuis le comptoir et depuis son telephone.
+///
+/// La clef porte le compte (<< paiements-en-attente:3 >>) : ecarter trois
+/// paiements n'enterre pas le cinquieme, parce que ce n'est plus la meme clef.
+model NotificationLue {
+  id          String   @id @default(uuid())
+  adminUserId String   @map("admin_user_id")
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  cle         String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([adminUserId, cle])
+  @@map("notifications_lues")
+}
+
 /// Ce que l'exploitant regle de sa page de connexion captive.
 ///
 /// Le modele etait un fichier unique du depot, identique pour tous : seules
@@ -330,6 +351,7 @@ model AdminUser {
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
   auditLogs      AuditLog[]
+  notificationsLues NotificationLue[]
   createdBatches VoucherBatch[]
   verifiedPayments Payment[]
 

@@ -81,7 +81,14 @@ function duréeLisible(uptime: string | undefined): string {
   return parties.slice(0, 2).join(' ') || uptime;
 }
 
-export function Pied() {
+/**
+ * Le relevé du routeur, partagé par la bande du haut et le pied.
+ *
+ * Même clef de requête : React Query n'appelle qu'une fois, et les deux
+ * affichages battent à la même seconde. Les séparer donnerait deux pendules
+ * légèrement décalées sur le même écran, ce qui est pire que pas de pendule.
+ */
+function useÉtatRouteur() {
   const { currentId, current } = useRouterSelection();
 
   const état = useQuery({
@@ -104,6 +111,56 @@ export function Pied() {
   const désaccord = Math.abs(écartMs) > ÉCART_NOTABLE_MS;
 
   const res = état.data?.resource;
+
+  return { état, current, heure, horloge, désaccord, écartMs, res };
+}
+
+/**
+ * L'heure du routeur, en tête et toujours visible.
+ *
+ * Elle était en pied de page, donc sous l'écran dès qu'on faisait défiler une
+ * liste — c'est-à-dire presque toujours. Or c'est **elle** qui décide des
+ * expirations : une console dont la pendule avance de dix minutes annonce des
+ * coupures qui n'ont pas eu lieu, et on ne peut pas s'en apercevoir si le
+ * chiffre n'est pas sous les yeux au moment où on lit la liste.
+ *
+ * Compacte, et sans ce que le pied dit déjà : le nom du routeur est à côté
+ * dans la même barre, et la durée de marche ne se lit pas toutes les
+ * minutes.
+ */
+export function BandeauÉtat() {
+  const { état, heure, horloge, désaccord, écartMs } = useÉtatRouteur();
+
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="font-mono tabular-nums font-medium text-slate-700">
+        {heure
+          ? heure.toLocaleTimeString('fr-FR', { hour12: false })
+          : état.isPending
+            ? '—'
+            : '—'}
+      </span>
+      {horloge?.gmtOffset && (
+        <span className="hidden text-slate-400 sm:inline">UTC{horloge.gmtOffset}</span>
+      )}
+      {/* Le désaccord se dit ici aussi, et c'est tout l'intérêt de monter
+          l'heure : le voir au moment où on lit une échéance. */}
+      {désaccord && (
+        <span
+          className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800"
+          title={`Votre appareil est ${écartMs < 0 ? 'en avance' : 'en retard'} de ${Math.round(
+            Math.abs(écartMs) / 60_000,
+          )} min sur le routeur`}
+        >
+          ⚠ {Math.round(Math.abs(écartMs) / 60_000)} min d&apos;écart
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function Pied() {
+  const { état, current, heure, horloge, désaccord, écartMs, res } = useÉtatRouteur();
 
   return (
     <footer className="mt-8 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 lg:px-6">

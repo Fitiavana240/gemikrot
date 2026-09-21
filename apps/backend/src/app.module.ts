@@ -5,6 +5,7 @@ import { AppService } from './app.service.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { TenancyModule } from './tenancy/tenancy.module.js';
 import { TenantsModule } from './tenants/tenants.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 import { AdminUsersModule } from './admin-users/admin-users.module.js';
 import { RoutersModule } from './routers/routers.module.js';
 import { AuditModule } from './audit/audit.module.js';
@@ -28,6 +29,7 @@ import { PublicModule } from './public/public.module.js';
     TenancyModule,
     PrismaModule,
     TenantsModule,
+    NotificationsModule,
     AdminUsersModule,
     RoutersModule,
     AuditModule,
