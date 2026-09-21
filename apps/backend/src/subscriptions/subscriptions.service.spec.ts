@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { ConflictException } from '@nestjs/common';
 import { GRACE_PERIOD_DAYS, SubscriptionsService } from './subscriptions.service.js';
+import { MikrotikNotFoundError } from '@wifitati/mikrotik-service';
 
 const tenantContext = { requireTenantId: () => 'tenant-1', get: () => ({ tenantId: 'tenant-1', isSuperAdmin: false }) };
 
@@ -208,4 +209,83 @@ describe('SubscriptionsService', () => {
     });
   });
 
+});
+
+/**
+ * Le compte a disparu du routeur entre-temps.
+ *
+ * Relevé dans le journal d'audit de ce parc : une suspension avait écrit un
+ * ÉCHEC et une RÉUSSITE pour le même geste, à la même seconde. `pushAccessState`
+ * avalait l'absence du compte, si bien que l'appelant marquait l'abonnement
+ * suspendu et journalisait un succès — alors que le routeur n'avait rien reçu
+ * et que le client gardait son accès.
+ */
+describe('SubscriptionsService, compte absent du routeur', () => {
+  function service(prisma: any, audit: any, access: any) {
+    return new SubscriptionsService(
+      prisma,
+      audit,
+      {
+        forRouter: vi.fn(async () => ({
+          setUserManagerUserDisabled: vi.fn(async () => ({})),
+          setIpBindingType: vi.fn(async () => ({})),
+        })),
+        getDefaultRouterId: vi.fn(async () => 'router-1'),
+      } as any,
+      { reconcile: vi.fn() } as any,
+      tenantContext as any,
+      access,
+    );
+  }
+
+  it('journalise un échec, et non une réussite, quand le routeur n’a rien reçu', async () => {
+    const prisma = createFakePrisma();
+    const audit = { log: vi.fn(async () => {}) };
+    const access = {
+      revoke: vi.fn(async () => {
+        throw new MikrotikNotFoundError('Compte', 'Mario');
+      }),
+    };
+
+    await service(prisma, audit, access).suspend('sub-1', 'admin-1');
+
+    const suspensions = audit.log.mock.calls
+      .map((c: any[]) => c[0])
+      .filter((e: any) => e.action === 'SUSPEND_SUBSCRIPTION');
+    // Une seule ligne, et c'est un échec : plus de couple contradictoire.
+    expect(suspensions.filter((e: any) => e.result === 'SUCCESS')).toHaveLength(0);
+    expect(suspensions.some((e: any) => e.payloadDiff?.routeurNonMisAJour === true)).toBe(true);
+  });
+
+  it('marque quand même l’abonnement suspendu en base', async () => {
+    // Sinon un abonné dont le compte a disparu resterait actif à jamais dans
+    // le suivi, et aucune relance ne partirait.
+    const prisma = createFakePrisma();
+    const access = {
+      revoke: vi.fn(async () => {
+        throw new MikrotikNotFoundError('Compte', 'Mario');
+      }),
+    };
+
+    const r = await service(prisma, { log: vi.fn(async () => {}) }, access).suspend('sub-1');
+
+    expect(r.status).toBe('SUSPENDED');
+  });
+
+  it('bloque les appareils en contournement malgré le compte absent', async () => {
+    // Le compte peut manquer alors que les bindings existent : les laisser
+    // passer serait le pire des deux mondes.
+    const prisma = createFakePrisma();
+    const access = {
+      revoke: vi.fn(async () => {
+        throw new MikrotikNotFoundError('Compte', 'Mario');
+      }),
+    };
+
+    await service(prisma, { log: vi.fn(async () => {}) }, access).suspend('sub-1');
+
+    expect(prisma.device.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { bypassEnabled: false } }),
+    );
+  });
 });

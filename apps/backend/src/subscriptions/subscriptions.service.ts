@@ -170,7 +170,7 @@ export class SubscriptionsService {
       throw new ConflictException(`L'abonnement ${id} est déjà suspendu`);
     }
 
-    await this.pushAccessState(subscription, false, adminUserId);
+    const { appliqué } = await this.pushAccessState(subscription, false, adminUserId);
 
     const updated = await this.prisma.scoped.subscription.update({
       where: { id },
@@ -182,7 +182,14 @@ export class SubscriptionsService {
       action: 'SUSPEND_SUBSCRIPTION',
       targetType: 'Subscription',
       targetId: id,
-      payloadDiff: { username: subscription.hotspotUsername },
+      // Le suivi passe à « suspendu » dans tous les cas, sinon l'abonnement
+      // resterait actif à jamais. Mais le journal ne doit pas annoncer une
+      // réussite quand le routeur n'a rien reçu : sans ce drapeau, le même
+      // geste écrivait un échec et une réussite à la même seconde.
+      payloadDiff: appliqué
+        ? { username: subscription.hotspotUsername }
+        : { username: subscription.hotspotUsername, routeurNonMisAJour: true },
+      result: appliqué ? 'SUCCESS' : 'FAILURE',
     });
     return updated;
   }
@@ -206,7 +213,7 @@ export class SubscriptionsService {
       );
     }
 
-    await this.pushAccessState(subscription, true, adminUserId);
+    const { appliqué } = await this.pushAccessState(subscription, true, adminUserId);
 
     const updated = await this.prisma.scoped.subscription.update({
       where: { id },
@@ -218,7 +225,10 @@ export class SubscriptionsService {
       action: 'RESUME_SUBSCRIPTION',
       targetType: 'Subscription',
       targetId: id,
-      payloadDiff: { username: subscription.hotspotUsername },
+      payloadDiff: appliqué
+        ? { username: subscription.hotspotUsername }
+        : { username: subscription.hotspotUsername, routeurNonMisAJour: true },
+      result: appliqué ? 'SUCCESS' : 'FAILURE',
     });
     return updated;
   }
@@ -306,8 +316,9 @@ export class SubscriptionsService {
     subscription: Subscription,
     allowed: boolean,
     adminUserId?: string,
-  ): Promise<void> {
+  ): Promise<{ appliqué: boolean }> {
     const mikrotik = await this.clients.forRouter(subscription.routerId);
+    let compteTrouvé = true;
 
     try {
       // Suspendre par ce chemin était plus faible que la suspension
@@ -333,12 +344,23 @@ export class SubscriptionsService {
         targetType: 'Subscription',
         targetId: subscription.id,
         payloadDiff: {
-          warning: `compte User Manager "${subscription.hotspotUsername}" absent du routeur`,
+          // « User Manager » était de trop : le compte peut aussi bien vivre
+          // dans le HotSpot, et c'est le cas de tous ceux de ce parc.
+          warning: `compte "${subscription.hotspotUsername}" absent du routeur`,
         },
         result: 'FAILURE',
       });
+      // L'appelant doit le savoir. Avaler l'échec ici lui faisait écrire un
+      // SUCCESS juste après, pour le même geste et à la même seconde : le
+      // journal montrait une réussite et un échec contradictoires, et l'écran
+      // annonçait « suspendu » alors que le routeur n'avait rien reçu — le
+      // client gardait son accès.
+      compteTrouvé = false;
     }
 
+    // Les appareils en contournement sont traités dans les deux cas : le
+    // compte peut manquer alors que les bindings, eux, existent — et laisser
+    // passer un appareil d'abonné suspendu serait le pire des deux mondes.
     const devices = await this.prisma.scoped.device.findMany({
       where: { subscriptionId: subscription.id, mikrotikBindingId: { not: null } },
     });
@@ -349,5 +371,7 @@ export class SubscriptionsService {
         data: { bypassEnabled: allowed },
       });
     }
+
+    return { appliqué: compteTrouvé };
   }
 }
