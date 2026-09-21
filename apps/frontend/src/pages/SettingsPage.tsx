@@ -45,6 +45,7 @@ export function SettingsPage() {
         wifiName: tenant.data.wifiName,
         domains: tenant.data.domains,
         logoUrl: tenant.data.logoUrl ?? '',
+        supportWhatsapp: tenant.data.supportWhatsapp ?? '',
         currency: tenant.data.currency,
       });
     }
@@ -174,6 +175,20 @@ export function SettingsPage() {
               value={form.logoUrl ?? ''}
               onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
             />
+          </FormField>
+          {/* Le canal d'ici quand un paiement n'aboutit pas : personne
+              n'appelle pour un ticket à 500 Ar, mais tout le monde écrit. */}
+          <FormField label="WhatsApp d'assistance">
+            <Input
+              value={form.supportWhatsapp ?? ''}
+              placeholder="261340000000"
+              onChange={(e) => setForm({ ...form, supportWhatsapp: e.target.value })}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Chiffres seuls, indicatif compris, sans « + » ni espaces. Laissez vide pour ne
+              proposer aucune assistance — mieux vaut rien qu&apos;un lien qui ne mène nulle
+              part.
+            </p>
           </FormField>
           <div className="col-span-2 flex items-end md:col-span-3">
             {canWrite && (

@@ -102,6 +102,7 @@ export function PublicPaymentPage() {
       onLang={setLang}
       wifiName={data.wifiName}
       logoUrl={data.logoUrl}
+      whatsapp={data.supportWhatsapp}
       footer={
         <button
           onClick={() => {
@@ -186,6 +187,7 @@ function Shell({
   logoUrl,
   children,
   footer,
+  whatsapp,
 }: {
   lang: Lang;
   onLang: (lang: Lang) => void;
@@ -193,7 +195,10 @@ function Shell({
   logoUrl?: string | null;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** Numéro d'assistance, chiffres seuls. Absent, aucun lien n'est proposé. */
+  whatsapp?: string | null;
 }) {
+  const t = TRANSLATIONS[lang];
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8">
       <div className="mx-auto w-full max-w-md">
@@ -227,6 +232,26 @@ function Shell({
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">{children}</div>
 
         {footer && <div className="mt-5 text-center">{footer}</div>}
+
+        {/* Sur toutes les étapes, et non sur la seule page d'attente : un
+            paiement qui n'aboutit pas peut se bloquer n'importe où, et
+            c'est précisément là qu'on cherche quelqu'un à qui écrire.
+            WhatsApp parce que c'est le canal d'ici — un numéro de
+            téléphone supposerait d'appeler, ce que personne ne fait pour
+            un ticket à 500 Ar. */}
+        {whatsapp && (
+          <div className="mt-6 text-center text-sm">
+            <span className="text-slate-500">{t.needHelp}</span>{' '}
+            <a
+              href={`https://wa.me/${whatsapp}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-emerald-700 hover:underline"
+            >
+              {t.whatsapp}
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

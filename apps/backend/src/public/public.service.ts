@@ -23,6 +23,14 @@ export interface PublicTenantView {
     maxSharedUsers: number | null;
   }[];
   paymentAccounts: { id: string; provider: string; phoneNumber: string; accountName: string }[];
+  /**
+   * Numéro WhatsApp d'assistance, ou `null`.
+   *
+   * `null` plutôt qu'une chaîne vide : la page n'affiche le lien que s'il y
+   * a un numéro, et une porte d'assistance qui ne mène nulle part est pire
+   * que pas d'assistance annoncée.
+   */
+  supportWhatsapp: string | null;
 }
 
 export type ClaimState = 'EN_ATTENTE' | 'VALIDE' | 'REFUSE';
@@ -92,6 +100,7 @@ export class PublicService {
         wifiName: tenant.wifiName,
         logoUrl: tenant.logoUrl,
         currency: tenant.currency,
+        supportWhatsapp: tenant.supportWhatsapp || null,
         plans: plans.map((plan) => ({ ...plan, price: plan.price.toString() })),
         paymentAccounts: accounts,
       };

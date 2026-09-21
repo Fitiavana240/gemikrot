@@ -27,6 +27,14 @@ export interface PublicTenant {
   currency: string;
   plans: PublicPlan[];
   paymentAccounts: PublicPaymentAccount[];
+  /**
+   * Numéro WhatsApp d'assistance, ou `null` si l'exploitant n'en a pas posé.
+   *
+   * `null` et non chaîne vide : la page n'affiche le lien que s'il y a
+   * quelqu'un derrière. Une porte d'assistance qui ne mène nulle part est
+   * pire que pas d'assistance annoncée.
+   */
+  supportWhatsapp: string | null;
 }
 
 export type ClaimState = 'EN_ATTENTE' | 'VALIDE' | 'REFUSE';

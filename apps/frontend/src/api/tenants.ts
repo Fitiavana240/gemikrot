@@ -18,6 +18,8 @@ export interface Tenant {
   wifiName: string;
   domains: string[];
   logoUrl: string | null;
+  /** Numéro WhatsApp d'assistance, chiffres seuls. Vide = pas d'assistance. */
+  supportWhatsapp: string | null;
   currency: string;
   status: TenantStatus;
   createdAt: string;
@@ -29,6 +31,7 @@ export interface UpdateTenantInput {
   wifiName?: string;
   domains?: string[];
   logoUrl?: string;
+  supportWhatsapp?: string;
   currency?: string;
 }
 
@@ -37,6 +40,7 @@ export interface SignupInput {
   wifiName: string;
   domains?: string[];
   logoUrl?: string;
+  supportWhatsapp?: string;
   currency: string;
   email: string;
   password: string;

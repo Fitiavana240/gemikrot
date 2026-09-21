@@ -35,6 +35,11 @@ model Tenant {
   /// Domaines du portail captif (ex: wifitati.net).
   domains   String[]     @default([])
   logoUrl   String?      @map("logo_url")
+  /// Numéro WhatsApp d'assistance, affiché au client quand son paiement
+  /// n'aboutit pas. Au format international sans « + » ni espaces, tel que
+  /// l'attend `wa.me` : `261340000000`. Vide, aucun lien n'est proposé —
+  /// mieux vaut pas d'assistance annoncée qu'une porte qui ne mène nulle part.
+  supportWhatsapp String?  @map("support_whatsapp")
   /// Code ISO 4217 : MGA, USD, EUR… choisi par l'exploitant.
   currency  String       @default("MGA")
   status    TenantStatus @default(PENDING)
