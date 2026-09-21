@@ -260,6 +260,28 @@ export interface RouterStorage {
    * RouterBOARD, où la question ne se pose pas.
    */
   routerboard: Routerboard | null;
+  /**
+   * Où en est RouterOS par rapport à ce que MikroTik publie.
+   *
+   * À ne pas confondre avec le RouterBOOT ci-dessus : les deux se mettent à
+   * jour séparément, et c'est précisément ce qui laisse un micrologiciel
+   * d'amorçage en retard sous un système à jour.
+   */
+  miseAJour: MiseAJourRouterOs | null;
+}
+
+export interface MiseAJourRouterOs {
+  channel: string | null;
+  installedVersion: string | null;
+  /**
+   * `null` tant que le routeur n'a jamais vérifié. Le cas compte : sans
+   * vérification, « à jour » ne veut rien dire, on ne sait pas.
+   */
+  latestVersion: string | null;
+  status: string | null;
+  miseAJourDisponible: boolean;
+  /** Sans cette vérification, le routeur installe ce qu'on lui sert. */
+  verifieLeCertificat: boolean;
 }
 
 export interface Routerboard {

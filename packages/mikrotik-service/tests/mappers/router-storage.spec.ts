@@ -1,5 +1,6 @@
 import {
   evaluerUserManager,
+  mapMiseAJour,
   lireProgrammation,
   mapRouterDisk,
   mapRouterPackage,
@@ -546,5 +547,51 @@ describe('evaluerUserManager', () => {
       expect(mapRouterboard({ routerboard: 'false' })).toBeNull();
       expect(mapRouterboard(null)).toBeNull();
     });
+  });
+});
+
+describe('mapMiseAJour', () => {
+  /** Charge relevée sur le hAP le 21/09/2026 : le routeur est à jour. */
+  const À_JOUR = {
+    channel: 'stable',
+    'check-certificate': 'yes',
+    'installed-version': '7.24.4',
+    'latest-version': '7.24.4',
+    'ip-version': 'auto',
+    mode: 'https',
+    status: 'System is already up to date',
+  };
+
+  it('ne signale rien quand les deux versions concordent', () => {
+    const m = mapMiseAJour(À_JOUR);
+    expect(m?.miseAJourDisponible).toBe(false);
+    expect(m?.installedVersion).toBe('7.24.4');
+    expect(m?.latestVersion).toBe('7.24.4');
+    expect(m?.verifieLeCertificat).toBe(true);
+  });
+
+  it('signale une version publiée plus récente', () => {
+    const m = mapMiseAJour({ ...À_JOUR, 'latest-version': '7.25.1' });
+    expect(m?.miseAJourDisponible).toBe(true);
+  });
+
+  it('ne conclut rien tant que le routeur n’a jamais vérifié', () => {
+    // Sans vérification, `latest-version` est vide. Écrire « à jour » dans
+    // ce cas serait un mensonge tranquille : on ne sait simplement pas.
+    const m = mapMiseAJour({ ...À_JOUR, 'latest-version': '', status: '' });
+    expect(m?.latestVersion).toBeNull();
+    expect(m?.miseAJourDisponible).toBe(false);
+    expect(m?.status).toBeNull();
+  });
+
+  it('relève un serveur de mise à jour non vérifié', () => {
+    // Sans cette vérification le routeur installe ce qu'on lui sert : c'est
+    // la seule chose qui sépare une mise à jour d'une compromission.
+    const m = mapMiseAJour({ ...À_JOUR, 'check-certificate': 'no' });
+    expect(m?.verifieLeCertificat).toBe(false);
+  });
+
+  it('rend null quand le menu ne répond pas', () => {
+    expect(mapMiseAJour(null)).toBeNull();
   });
 });

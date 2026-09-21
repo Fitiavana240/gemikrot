@@ -802,10 +802,42 @@ function StockageTab() {
                 {stockage.data.routerboard.serialNumber ?? '—'}
               </span>
             </Field>
-            <Field label="RouterOS">{stockage.data.version ?? '—'}</Field>
+            <Field label="RouterOS">
+              {stockage.data.version ?? '—'}{' '}
+              {/* Trois états, et non deux. « Pas vérifié » n'est pas « à
+                  jour » : tant que le routeur n'a jamais interrogé MikroTik,
+                  on ne sait simplement pas, et l'écrire « à jour » serait un
+                  mensonge tranquille. */}
+              {stockage.data.miseAJour?.miseAJourDisponible ? (
+                <Badge tone="amber">{stockage.data.miseAJour.latestVersion} disponible</Badge>
+              ) : stockage.data.miseAJour?.latestVersion ? (
+                <Badge tone="green">à jour</Badge>
+              ) : (
+                <Badge tone="slate">jamais vérifié</Badge>
+              )}
+            </Field>
             <Field label="Micrologiciel d'amorçage">
               {stockage.data.routerboard.currentFirmware ?? '—'}{' '}
-              {stockage.data.routerboard.miseANiveauDisponible && (
+              {stockage.data.miseAJour && (
+            <p className="mt-3 max-w-3xl text-xs text-slate-500">
+              Canal <strong>{stockage.data.miseAJour.channel ?? '—'}</strong> — c&apos;est lui
+              qui décide de ce que le routeur se voit proposer.{' '}
+              {stockage.data.miseAJour.latestVersion
+                ? `Dernière vérification : « ${stockage.data.miseAJour.status ?? '—'} ».`
+                : 'Le routeur n’a jamais interrogé MikroTik : la version publiée lui est inconnue.'}{' '}
+              {/* Sans vérification du certificat, le routeur installe ce
+                  qu'on lui sert. C'est la seule chose qui sépare une mise à
+                  jour d'une compromission, et elle se règle en un mot. */}
+              {!stockage.data.miseAJour.verifieLeCertificat && (
+                <span className="text-red-700">
+                  Le certificat du serveur de mise à jour <strong>n&apos;est pas vérifié</strong> :
+                  le routeur installerait ce qu&apos;on lui servirait.
+                </span>
+              )}
+            </p>
+          )}
+
+          {stockage.data.routerboard.miseANiveauDisponible && (
                 <Badge tone="amber">
                   {stockage.data.routerboard.upgradeFirmware} disponible
                 </Badge>

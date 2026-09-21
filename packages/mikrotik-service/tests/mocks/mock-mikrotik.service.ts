@@ -934,6 +934,7 @@ export class MockMikrotikService implements IMikrotikService {
       packages: [],
       parRacine: [],
       routerboard: null,
+      miseAJour: null,
     };
   }
 

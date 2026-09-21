@@ -1540,7 +1540,7 @@ export class RouterOSMikrotikService implements IMikrotikService {
   }
 
   async getRouterStorage() {
-    const [resource, disks, packages, files, routerboard] = await Promise.all([
+    const [resource, disks, packages, files, routerboard, miseAJour] = await Promise.all([
       this.client.get<any>('/system/resource'),
       this.client.get<any[]>('/disk'),
       this.client.get<any[]>('/system/package'),
@@ -1548,6 +1548,9 @@ export class RouterOSMikrotikService implements IMikrotikService {
       // Le micrologiciel d'amorçage se met à jour séparément de RouterOS :
       // l'écart entre les deux ne se voit nulle part sans aller le chercher.
       this.client.get<any>('/system/routerboard').catch(() => null),
+      // LECTURE seule : c'est `check-for-updates` qui interroge MikroTik, pas
+      // ce menu, qui ne rend que ce que le routeur a retenu la dernière fois.
+      this.client.get<any>('/system/package/update').catch(() => null),
     ]);
     return StorageMapper.mapRouterStorage(
       Array.isArray(resource) ? resource[0] : resource,
@@ -1555,6 +1558,7 @@ export class RouterOSMikrotikService implements IMikrotikService {
       packages,
       files,
       Array.isArray(routerboard) ? routerboard[0] : routerboard,
+      Array.isArray(miseAJour) ? miseAJour[0] : miseAJour,
     );
   }
 

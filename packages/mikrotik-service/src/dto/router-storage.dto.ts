@@ -126,6 +126,42 @@ export interface RouterStorageDto {
    * disait, et rien ne le dit dans WinBox non plus sans aller le chercher.
    */
   routerboard: RouterboardDto | null;
+  /**
+   * Où en est RouterOS par rapport à ce que MikroTik publie.
+   *
+   * `null` quand le routeur ne répond pas sur ce menu. À ne pas confondre
+   * avec le micrologiciel d'amorçage ci-dessus : les deux se mettent à jour
+   * séparément, et c'est ce qui laisse un RouterBOOT en 6.42.3 sous un
+   * RouterOS en 7.24.4 sans que rien ne le signale.
+   */
+  miseAJour: MiseAJourRouterOsDto | null;
+}
+
+/** L'état des mises à jour — `/system/package/update`. */
+export interface MiseAJourRouterOsDto {
+  /** `stable`, `long-term`, `testing`… Le canal décide de ce qui est proposé. */
+  channel: string | null;
+  installedVersion: string | null;
+  /**
+   * La dernière version publiée sur ce canal, **telle que le routeur l'a
+   * retenue lors de sa dernière vérification**.
+   *
+   * `null` tant qu'aucune vérification n'a eu lieu — et c'est le cas qui
+   * compte : sans elle, « à jour » ne veut rien dire, on ne sait
+   * simplement pas. Lire ce menu ne déclenche aucune vérification.
+   */
+  latestVersion: string | null;
+  /** La phrase du routeur, reprise telle quelle. */
+  status: string | null;
+  /** Vrai seulement si les deux versions sont connues ET diffèrent. */
+  miseAJourDisponible: boolean;
+  /**
+   * Le routeur vérifie-t-il le certificat du serveur de mise à jour ?
+   *
+   * Sans cette vérification, le routeur installe ce qu'on lui sert : c'est
+   * la seule chose qui distingue une mise à jour d'une compromission.
+   */
+  verifieLeCertificat: boolean;
 }
 
 export interface RouterboardDto {

@@ -1,5 +1,6 @@
 import {
   ConstatDto,
+  MiseAJourRouterOsDto,
   RouterDiskDto,
   RouterFileDto,
   RouterPackageDto,
@@ -100,12 +101,36 @@ export function mapRouterPackage(raw: any): RouterPackageDto {
   };
 }
 
+/**
+ * L'état des mises à jour de RouterOS.
+ *
+ * `latest-version` n'a de sens qu'après une vérification : tant qu'il est
+ * vide, on ne sait pas si le routeur est à jour, et le dire quand même
+ * serait un mensonge tranquille. D'où `latestVersion: null` plutôt qu'une
+ * chaîne vide, et `miseAJourDisponible: false` qui ne veut alors dire que
+ * « rien de connu », pas « rien à faire ».
+ */
+export function mapMiseAJour(raw: any): MiseAJourRouterOsDto | null {
+  if (!raw) return null;
+  const installée = orNull(raw?.['installed-version']);
+  const dernière = orNull(raw?.['latest-version']);
+  return {
+    channel: orNull(raw?.channel),
+    installedVersion: installée,
+    latestVersion: dernière,
+    status: orNull(raw?.status),
+    miseAJourDisponible: installée != null && dernière != null && installée !== dernière,
+    verifieLeCertificat: flag(raw?.['check-certificate']),
+  };
+}
+
 export function mapRouterStorage(
   resource: any,
   disksRaw: any[],
   packagesRaw: any[],
   filesRaw: any[],
   routerboardRaw?: any,
+  miseAJourRaw?: any,
 ): RouterStorageDto {
   const fichiers = filesRaw.map(mapRouterFile);
 
@@ -133,6 +158,7 @@ export function mapRouterStorage(
       .map(([root, v]) => ({ root, ...v }))
       .sort((a, b) => b.bytes - a.bytes),
     routerboard: mapRouterboard(routerboardRaw),
+    miseAJour: mapMiseAJour(miseAJourRaw),
   };
 }
 
