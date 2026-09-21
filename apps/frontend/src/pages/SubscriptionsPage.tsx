@@ -1,18 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { subscriptionsApi } from '../api/subscriptions';
-import { customersApi } from '../api/customers';
+import { customersApi, lienWhatsapp } from '../api/customers';
+import { tenantsApi } from '../api/tenants';
 import { plansApi } from '../api/plans';
 import { useAuth } from '../auth/AuthContext';
 import { libellé, STATUT_ABONNEMENT } from '../api/libelles';
 import { ApiError } from '../api/client';
 import { useState } from 'react';
 import { Confirmation } from '../components/Edition';
+import { Modale } from '../components/Modale';
 import {
   Badge,
   Button,
   Card,
   EmptyRow,
   PageHeader,
+  FormField,
+  Input,
   PanneDeLecture,
   Table,
   TableSkeleton,
@@ -47,6 +51,13 @@ export function SubscriptionsPage() {
     queryFn: subscriptionsApi.recommendations,
   });
   const customers = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
+  // Même clé que l'écran Réglages : le cache est partagé, pas dupliqué. Le nom
+  // du réseau entre dans le message — « votre accès arrive à échéance » sans
+  // dire de quel réseau il s'agit ne veut rien dire pour qui en a deux.
+  const exploitant = useQuery({ queryKey: ['tenant-me'], queryFn: tenantsApi.mine });
+  /** Le client dont on s'apprête à corriger le numéro. */
+  const [àJoindre, setÀJoindre] = useState<{ id: string; name: string } | null>(null);
+  const [numéro, setNuméro] = useState('');
   const plans = useQuery({ queryKey: ['plans'], queryFn: plansApi.list });
 
   function refresh() {
@@ -87,7 +98,39 @@ export function SubscriptionsPage() {
     onError,
   });
 
-  const customerName = (id: string) => customers.data?.find((c) => c.id === id)?.name ?? '—';
+  const clientDe = (id: string) => customers.data?.find((c) => c.id === id) ?? null;
+  const customerName = (id: string) => clientDe(id)?.name ?? '—';
+
+  /**
+   * Poser le numéro d'un client depuis l'écran qui dit de le prévenir.
+   *
+   * L'application conseillait « prévenir le client » sans donner aucun moyen
+   * de le faire, et pour cause : le routeur ne stocke aucun téléphone, donc
+   * une fiche importée en porte un provisoire. Renvoyer vers la fiche client
+   * pour revenir ensuite ferait perdre la liste qu'on était en train de
+   * traiter.
+   */
+  const poserNuméro = useMutation({
+    mutationFn: ({ id, phone }: { id: string; phone: string }) =>
+      customersApi.update(id, { phone }),
+    onSuccess: () => {
+      setError(null);
+      setÀJoindre(null);
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Erreur inconnue'),
+  });
+
+  /**
+   * Le message qui part, écrit une fois pour toutes.
+   *
+   * Nominatif, daté, et il nomme le réseau : un avertissement qui ne dit pas
+   * de quoi il parle se lit comme une arnaque, ce qui est exactement l'effet
+   * inverse de celui recherché.
+   */
+  const messageRelance = (nom: string, fin: string) =>
+    `Bonjour ${nom}, votre acces ${exploitant.data?.wifiName ?? 'Wi-Fi'} arrive a echeance le ${formatDate(fin)}. Passez renouveler avant cette date pour ne pas etre coupe. Merci !`;
   const planName = (id: string) => plans.data?.find((p) => p.id === id)?.name ?? '—';
 
   return (
@@ -127,7 +170,45 @@ export function SubscriptionsPage() {
         </Confirmation>
       )}
 
-      {error && !àConfirmer && (
+      {àJoindre && (
+        <Modale
+          titre={`Numéro de « ${àJoindre.name} »`}
+          onFermer={() => setÀJoindre(null)}
+          actions={
+            <Button
+              disabled={poserNuméro.isPending || numéro.trim() === ''}
+              onClick={() => poserNuméro.mutate({ id: àJoindre.id, phone: numéro.trim() })}
+            >
+              {poserNuméro.isPending ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+          }
+          note={
+            <>
+              Le routeur ne stocke aucun téléphone : les fiches venues de
+              l&apos;import portent un numéro provisoire, qui ressemble à un vrai dans la
+              liste. Tant qu&apos;il n&apos;est pas corrigé, <strong>ce client ne peut être
+              prévenu de rien</strong> — ni par WhatsApp aujourd&apos;hui, ni par SMS quand
+              l&apos;envoi automatique existera.
+            </>
+          }
+        >
+          <FormField
+            label="Téléphone"
+            aide="Comme il se compose : 034 03 941 88, ou +261 34 03 941 88."
+          >
+            <Input
+              value={numéro}
+              placeholder="034 03 941 88"
+              onChange={(e) => setNuméro(e.target.value)}
+            />
+          </FormField>
+          {poserNuméro.isError && error && (
+            <p className="mt-2 text-sm text-red-600">{error}</p>
+          )}
+        </Modale>
+      )}
+
+      {error && !àConfirmer && !àJoindre && (
         <Card>
           <p className="text-sm text-red-600">{error}</p>
         </Card>
@@ -149,7 +230,7 @@ export function SubscriptionsPage() {
                 <td className="px-3 py-2 text-slate-600">
                   {recommendedAction === 'SUSPEND' ? 'Suspendre' : 'Prévenir le client'}
                 </td>
-                <td className="px-3 py-2 text-right">
+                <td className="space-x-2 whitespace-nowrap px-3 py-2 text-right">
                   {/* Le bouton coupait l'accès d'un client payant sur un seul
                       clic, sans rien demander. */}
                   {canWrite && recommendedAction === 'SUSPEND' && (
@@ -162,6 +243,43 @@ export function SubscriptionsPage() {
                       Suspendre
                     </Button>
                   )}
+                  {/* « Prévenir le client » était écrit dans la colonne d'à
+                      côté, et rien ne permettait de le faire. L'avertissement
+                      par SMS attend une passerelle qui n'existe pas ; WhatsApp
+                      existe, et c'est par là que tout le monde écrit ici.
+                      Quand le numéro est provisoire, le bouton demande le vrai
+                      plutôt que d'ouvrir une discussion avec personne. */}
+                  {canWrite &&
+                    recommendedAction !== 'SUSPEND' &&
+                    (() => {
+                      const client = clientDe(subscription.customerId);
+                      if (!client) return null;
+                      const lien = lienWhatsapp(
+                        client.phone,
+                        messageRelance(client.name, subscription.currentPeriodEnd),
+                      );
+                      return lien ? (
+                        <a
+                          href={lien}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
+                        >
+                          Prévenir sur WhatsApp
+                        </a>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setError(null);
+                            setNuméro('');
+                            setÀJoindre({ id: client.id, name: client.name });
+                          }}
+                        >
+                          Renseigner le numéro
+                        </Button>
+                      );
+                    })()}
                 </td>
               </tr>
             ))}

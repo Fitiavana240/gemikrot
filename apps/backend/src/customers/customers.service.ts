@@ -5,6 +5,28 @@ import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import type { CreateCustomerDto } from './dto/create-customer.dto.js';
 import type { UpdateCustomerDto } from './dto/update-customer.dto.js';
 import type { RegisterDeviceDto } from './dto/register-device.dto.js';
+import { isUsablePhone, normalizePhone } from '../public/payment-normalization.js';
+
+/**
+ * Le numéro tel qu'il se range en base.
+ *
+ * `034 03 941 88`, `+261 34 03 941 88` et `0340394188` sont le même numéro.
+ * Rangés tels quels, ils faisaient trois fiches là où la contrainte d'unicité
+ * `(tenantId, phone)` ne voyait aucun doublon — et le jour où l'on cherche
+ * « qui a ce numéro », on n'en trouve qu'un tiers.
+ *
+ * Deux valeurs restent intouchées, et c'est délibéré. L'identifiant
+ * provisoire de l'import (`import:<compte>`) n'est pas un numéro : le
+ * normaliser le réduirait à rien, et tout ce qui le reconnaît par son préfixe
+ * cesserait de fonctionner. Et ce qui ne donne pas un numéro malgache
+ * plausible est gardé tel que tapé, plutôt que réduit à des chiffres
+ * méconnaissables : mieux vaut un numéro étranger lisible qu'une bouillie.
+ */
+function rangerNuméro(brut: string): string {
+  if (brut.startsWith('import:')) return brut;
+  const normalisé = normalizePhone(brut);
+  return isUsablePhone(normalisé) ? normalisé : brut;
+}
 
 @Injectable()
 export class CustomersService {
@@ -28,7 +50,7 @@ export class CustomersService {
 
   create(dto: CreateCustomerDto): Promise<Customer> {
     return this.prisma.scoped.customer.create({
-      data: { ...dto, tenantId: this.tenantContext.requireTenantId() },
+      data: { ...dto, phone: rangerNuméro(dto.phone), tenantId: this.tenantContext.requireTenantId() },
     });
   }
 
@@ -107,7 +129,10 @@ export class CustomersService {
 
   async update(id: string, dto: UpdateCustomerDto): Promise<Customer> {
     await this.findOne(id);
-    return this.prisma.scoped.customer.update({ where: { id }, data: dto });
+    return this.prisma.scoped.customer.update({
+      where: { id },
+      data: dto.phone === undefined ? dto : { ...dto, phone: rangerNuméro(dto.phone) },
+    });
   }
 
   async disable(id: string): Promise<Customer> {

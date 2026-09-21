@@ -72,6 +72,38 @@ export function telephoneAffiche(phone: string | null | undefined): {
   return { texte: phone, provisoire: false };
 }
 
+/**
+ * Le numéro ramené à sa forme nationale : neuf chiffres, sans indicatif.
+ *
+ * Le même numéro s'écrit `+261 34 03 941 88`, `0340394188` ou `261340394188`
+ * selon qui l'a tapé. Même règle que la normalisation du serveur — deux
+ * normalisations divergentes donneraient des liens qui ouvrent la discussion
+ * de quelqu'un d'autre, ce qui est bien pire que pas de lien du tout.
+ */
+function nationalise(brut: string): string {
+  const chiffres = brut.replace(/\D/g, '');
+  if (!chiffres) return '';
+  return chiffres.replace(/^00261/, '').replace(/^261/, '').replace(/^0/, '');
+}
+
+/**
+ * Lien WhatsApp vers ce client, ou `null`.
+ *
+ * `null` dès que le numéro n'est pas exploitable — provisoire écrit par
+ * l'import, vide, ou d'une longueur invraisemblable. Un lien approximatif
+ * ouvrirait la discussion d'un inconnu avec un message nominatif : mieux vaut
+ * pas de bouton qu'un bouton qui se trompe de personne.
+ *
+ * `261` est ajouté parce que ce produit vend à Madagascar et que la forme
+ * nationale n'en porte pas ; `wa.me` exige l'indicatif.
+ */
+export function lienWhatsapp(phone: string | null | undefined, message: string): string | null {
+  if (!phone || phone.startsWith('import:')) return null;
+  const national = nationalise(phone);
+  if (!/^[0-9]{9}$/.test(national)) return null;
+  return `https://wa.me/261${national}?text=${encodeURIComponent(message)}`;
+}
+
 export const customersApi = {
   list: () => api.get<Customer[]>('/customers'),
   get: (id: string) => api.get<Customer>(`/customers/${id}`),
