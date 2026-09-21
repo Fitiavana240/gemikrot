@@ -536,3 +536,63 @@ export interface HorlogeRouteurDto {
   /** Durée de marche, pour situer le dernier redémarrage. */
   uptime: string;
 }
+
+/**
+ * Un compte d'administration du routeur — `/user`.
+ *
+ * À ne pas confondre avec un compte HotSpot : celui-ci ouvre le routeur
+ * lui-même. `address` vide veut dire « depuis n'importe où », ce qui est le
+ * cas des trois comptes de ce parc.
+ */
+export interface RouterAccountDto {
+  id: string;
+  name: string;
+  /** Le groupe porte les droits ; le compte n'en a aucun en propre. */
+  group: string;
+  /** Adresses autorisées. Vide = aucune restriction. */
+  address: string | null;
+  disabled: boolean;
+  /** `null` si le compte ne s'est jamais connecté. */
+  lastLoggedIn: string | null;
+  comment: string | null;
+}
+
+/** Un groupe de droits — `/user/group`. */
+export interface RouterAccountGroupDto {
+  id: string;
+  name: string;
+  /** Les permissions accordées, celles niées (`!x`) étant écartées. */
+  policy: string[];
+  /**
+   * Vrai quand le groupe permet de **se donner** n'importe quel droit.
+   *
+   * C'est `policy` : créer des comptes et changer les permissions. Qui l'a
+   * peut tout obtenir, y compris ce qu'on lui a refusé. Le distinguer de
+   * `write` est indispensable — sinon les comptes de service, qui doivent
+   * écrire, se retrouvent signalés au même titre que l'administrateur, et
+   * l'avertissement ne veut plus rien dire.
+   */
+  controleTotal: boolean;
+  /** Vrai quand le groupe peut modifier la configuration du routeur. */
+  ecriture: boolean;
+  /** Vrai quand le groupe donne accès aux secrets : mots de passe, capture. */
+  secrets: boolean;
+}
+
+/**
+ * Les portes d'entrée du routeur autres que l'API — `/tool/mac-server`,
+ * `/ip/proxy`, `/ip/upnp`, `/snmp`.
+ *
+ * Elles se lisent ensemble parce que la question est unique : par où peut-on
+ * entrer ? Relevé sur ce parc, `mac-server` accepte **toutes** les interfaces,
+ * y compris le pont des clients — WinBox par adresse MAC est donc joignable
+ * depuis le Wi-Fi public, sans passer par une adresse IP.
+ */
+export interface RouterExpositionDto {
+  /** Liste d'interfaces où WinBox par MAC répond. `all` = partout. */
+  macServerInterfaces: string;
+  macPingEnabled: boolean;
+  proxyEnabled: boolean;
+  upnpEnabled: boolean;
+  snmpEnabled: boolean;
+}

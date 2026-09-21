@@ -311,6 +311,7 @@ export const routerToolsApi = {
   ethernet: (routerId: string) => api.get<PortEthernet[]>(`${base(routerId)}/ethernet`),
   certificats: (routerId: string) => api.get<Certificat[]>(`${base(routerId)}/certificates`),
   horloge: (routerId: string) => api.get<HorlogeRouteur>(`${base(routerId)}/horloge`),
+  acces: (routerId: string) => api.get<AccesRouteur>(`${base(routerId)}/acces`),
   services: (routerId: string) => api.get<IpService[]>(`${base(routerId)}/services`),
   cloud: (routerId: string) => api.get<IpCloud>(`${base(routerId)}/cloud`),
   arp: (routerId: string) => api.get<ArpEntry[]>(`${base(routerId)}/arp`),
@@ -574,4 +575,46 @@ export interface HorlogeRouteur {
   ntpStratum: number | null;
   ntpOffsetMs: number | null;
   uptime: string;
+}
+
+/**
+ * Un compte d'administration du routeur. `address` nul veut dire « depuis
+ * n'importe où » — à ne pas confondre avec un compte HotSpot, qui n'ouvre
+ * que l'accès à Internet.
+ */
+export interface CompteRouteur {
+  id: string;
+  name: string;
+  group: string;
+  address: string | null;
+  disabled: boolean;
+  lastLoggedIn: string | null;
+  comment: string | null;
+}
+
+export interface GroupeRouteur {
+  id: string;
+  name: string;
+  policy: string[];
+  /** Peut se donner n'importe quel droit : `policy`. Le seul qui compte vraiment. */
+  controleTotal: boolean;
+  /** Peut modifier la configuration : `write`. Normal pour un compte de service. */
+  ecriture: boolean;
+  /** Peut lire ou emporter des secrets : mots de passe, capture, fichiers. */
+  secrets: boolean;
+}
+
+/** Les portes d'entrée autres que l'API. */
+export interface ExpositionRouteur {
+  macServerInterfaces: string;
+  macPingEnabled: boolean;
+  proxyEnabled: boolean;
+  upnpEnabled: boolean;
+  snmpEnabled: boolean;
+}
+
+export interface AccesRouteur {
+  comptes: CompteRouteur[];
+  groupes: GroupeRouteur[];
+  exposition: ExpositionRouteur;
 }

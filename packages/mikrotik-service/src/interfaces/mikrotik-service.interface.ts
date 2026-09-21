@@ -84,6 +84,9 @@ import {
   EthernetPortDto,
   CertificateDto,
   HorlogeRouteurDto,
+  RouterAccountDto,
+  RouterAccountGroupDto,
+  RouterExpositionDto,
   SimpleQueueDto,
   WirelessInterfaceDto,
   WirelessClientDto,
@@ -294,6 +297,13 @@ export interface IMikrotikService {
 
   /** L'heure du routeur, son fuseau, et l'état du recalage NTP. */
   getHorloge(): Promise<HorlogeRouteurDto>;
+
+  /** Qui peut entrer dans le routeur, et par où. */
+  getAcces(): Promise<{
+    comptes: RouterAccountDto[];
+    groupes: RouterAccountGroupDto[];
+    exposition: RouterExpositionDto;
+  }>;
 
   /** Les certificats du routeur, dont celui qui sert l'API. */
   getCertificates(): Promise<CertificateDto[]>;

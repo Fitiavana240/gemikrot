@@ -19,6 +19,7 @@ import { JournalTab } from './JournalTab';
 import { PortsTab } from './PortsTab';
 import { CertificatsTab } from './CertificatsTab';
 import { HorlogeTab } from './HorlogeTab';
+import { AccesRouteurTab } from './AccesRouteurTab';
 import { TabBar, type TabDef } from '../components/TabBar';
 import {
   Badge,
@@ -1087,6 +1088,10 @@ const ONGLETS = {
   wifi: { titre: 'Wi-Fi et RADIUS', rendu: () => <WifiTab /> },
   tunnel: { titre: 'Tunnel (VPN)', rendu: () => <TunnelTab /> },
   certificats: { titre: 'Certificats', rendu: () => <CertificatsTab /> },
+  'acces-routeur': {
+    titre: 'Qui peut entrer',
+    rendu: () => <AccesRouteurTab />,
+  },
   horloge: { titre: 'Heure du routeur', rendu: () => <HorlogeTab /> },
   automatisations: {
     titre: 'Ce qui tourne tout seul',

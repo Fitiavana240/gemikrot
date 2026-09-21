@@ -8,6 +8,9 @@ import {
   mapEthernetPort,
   mapCertificate,
   mapHorlogeRouteur,
+  mapRouterAccount,
+  mapRouterAccountGroup,
+  mapRouterExposition,
   mapRouterSchedule,
   mapSimpleQueue,
   splitPaire,
@@ -403,5 +406,99 @@ describe('mapHorlogeRouteur', () => {
     // `null` l'afficherait comme une mesure manquante.
     expect(mapHorlogeRouteur(CLOCK, { ...NTP, 'system-offset': '0' }, {}).ntpOffsetMs).toBe(0);
     expect(mapHorlogeRouteur(CLOCK, { ...NTP, 'system-offset': '' }, {}).ntpOffsetMs).toBeNull();
+  });
+});
+
+/**
+ * Qui peut entrer dans le routeur.
+ *
+ * Relevés exacts du hAP. Le premier essai rangeait les CINQ groupes du parc
+ * dans la même case « administration » — y compris `read` et les deux comptes
+ * de service — parce qu'il suffisait d'avoir `winbox` ou `write`. Un
+ * avertissement qui vise tout le monde ne vise personne ; ces tests figent
+ * la distinction.
+ */
+const GROUPE_LECTURE = {
+  '.id': '*1',
+  name: 'read',
+  policy:
+    'local,telnet,ssh,reboot,read,test,winbox,password,web,sniff,sensitive,api,romon,rest-api,!ftp,!write,!policy',
+};
+const GROUPE_COMPLET = {
+  '.id': '*3',
+  name: 'full',
+  policy:
+    'local,telnet,ssh,ftp,reboot,read,write,policy,test,winbox,password,web,sniff,sensitive,api,romon,rest-api',
+};
+const GROUPE_SERVICE = {
+  '.id': '*4',
+  name: 'wifitati-api',
+  policy:
+    'read,write,api,rest-api,!local,!telnet,!ssh,!ftp,!reboot,!policy,!test,!winbox,!password,!web,!sniff,!sensitive',
+};
+
+describe('mapRouterAccountGroup', () => {
+  it('ne reconnaît « peut tout faire » qu’au droit policy', () => {
+    expect(mapRouterAccountGroup(GROUPE_COMPLET).controleTotal).toBe(true);
+    // Écrire n'est pas tout pouvoir : c'est le travail normal d'un compte de
+    // service, et le signaler noierait le seul compte qui compte.
+    expect(mapRouterAccountGroup(GROUPE_SERVICE).controleTotal).toBe(false);
+    expect(mapRouterAccountGroup(GROUPE_LECTURE).controleTotal).toBe(false);
+  });
+
+  it('sépare l’écriture de l’accès aux secrets', () => {
+    // Le groupe de service écrit sans voir les secrets : c'est exactement ce
+    // qu'on attend d'un compte d'API, et l'écran doit pouvoir le montrer.
+    expect(mapRouterAccountGroup(GROUPE_SERVICE).ecriture).toBe(true);
+    expect(mapRouterAccountGroup(GROUPE_SERVICE).secrets).toBe(false);
+    // `read` n'écrit pas, mais lit les mots de passe et capture le trafic.
+    expect(mapRouterAccountGroup(GROUPE_LECTURE).ecriture).toBe(false);
+    expect(mapRouterAccountGroup(GROUPE_LECTURE).secrets).toBe(true);
+  });
+
+  it('écarte les permissions niées', () => {
+    // `!policy` ne doit pas compter comme `policy`.
+    expect(mapRouterAccountGroup(GROUPE_SERVICE).policy).not.toContain('!policy');
+    expect(mapRouterAccountGroup(GROUPE_SERVICE).policy).toContain('write');
+  });
+});
+
+describe('mapRouterAccount', () => {
+  it('distingue « depuis n’importe où » d’une adresse', () => {
+    // Le champ vide est le cas des trois comptes du parc, et c'est lui qui
+    // rend le compte joignable depuis le réseau des clients.
+    expect(mapRouterAccount({ '.id': '*1', name: 'admin', address: '' }).address).toBeNull();
+    expect(
+      mapRouterAccount({ '.id': '*1', name: 'admin', address: '10.88.0.0/16' }).address,
+    ).toBe('10.88.0.0/16');
+  });
+
+  it('rend `null` pour un compte qui ne s’est jamais connecté', () => {
+    expect(mapRouterAccount({ '.id': '*1', name: 'neuf' }).lastLoggedIn).toBeNull();
+  });
+});
+
+describe('mapRouterExposition', () => {
+  it('relève la liste d’interfaces de WinBox par MAC', () => {
+    // `all` veut dire « toutes », dont le pont des clients : c'est le
+    // relevé de ce parc, et la trouvaille de cet écran.
+    const e = mapRouterExposition(
+      { 'allowed-interface-list': 'all' },
+      { enabled: 'true' },
+      { enabled: 'false' },
+      { enabled: 'false' },
+      { enabled: 'false' },
+    );
+    expect(e.macServerInterfaces).toBe('all');
+    expect(e.macPingEnabled).toBe(true);
+    expect(e.proxyEnabled).toBe(false);
+  });
+
+  it('ne plante pas quand un menu est absent', () => {
+    // Ces cinq lectures sont tolérantes à l'échec côté service : le mapper
+    // doit l'être aussi, sinon l'écran entier tombe pour un menu manquant.
+    const e = mapRouterExposition({}, {}, {}, {}, {});
+    expect(e.macServerInterfaces).toBe('');
+    expect(e.snmpEnabled).toBe(false);
   });
 });

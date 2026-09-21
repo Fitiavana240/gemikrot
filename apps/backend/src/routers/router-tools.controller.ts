@@ -166,6 +166,12 @@ export class RouterToolsController {
     return (await this.clients.forRouter(routerId)).getHorloge();
   }
 
+  /** Qui peut entrer dans le routeur, et par où. */
+  @Get('acces')
+  async acces(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getAcces();
+  }
+
   /** Les certificats du routeur, dont celui qui sert l'API. */
   @Get('certificates')
   async certificates(@Param('routerId') routerId: string) {

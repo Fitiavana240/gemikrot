@@ -26,6 +26,9 @@ import {
   EthernetPortDto,
   CertificateDto,
   HorlogeRouteurDto,
+  RouterAccountDto,
+  RouterAccountGroupDto,
+  RouterExpositionDto,
 } from '../dto/router-tools.dto';
 
 /** RouterOS rend ses booléens en chaînes. */
@@ -526,5 +529,59 @@ export function mapHorlogeRouteur(
     ntpStratum: nombreOuNull(ntp?.['synced-stratum']),
     ntpOffsetMs: nombreOuNull(ntp?.['system-offset']),
     uptime: resource?.uptime ?? '',
+  };
+}
+
+/**
+ * Les droits qui permettent de lire ou d'emporter des secrets.
+ *
+ * Distincts de l'écriture : un compte de service doit écrire, il n'a aucune
+ * raison de lire les mots de passe ni de capturer le trafic.
+ */
+const DROITS_SECRETS = new Set(['password', 'sensitive', 'sniff', 'ftp']);
+
+export function mapRouterAccount(raw: any): RouterAccountDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    name: raw?.name ?? '',
+    group: raw?.group ?? '',
+    // Vide veut dire « depuis n'importe où » : le distinguer d'une liste
+    // d'adresses est tout l'intérêt du champ.
+    address: raw?.address || null,
+    disabled: flag(raw?.disabled),
+    lastLoggedIn: raw?.['last-logged-in'] || null,
+    comment: raw?.comment || null,
+  };
+}
+
+export function mapRouterAccountGroup(raw: any): RouterAccountGroupDto {
+  const accordées = listePolitique(raw?.policy).filter((p) => !p.startsWith('!'));
+  return {
+    id: raw?.['.id'] ?? '',
+    name: raw?.name ?? '',
+    policy: accordées,
+    // Trois niveaux, et non un seul drapeau. Le premier essai rangeait les
+    // cinq groupes du parc dans la même case — y compris `read` et les deux
+    // comptes de service — parce qu'il suffisait de `winbox` ou de `write`.
+    // Un avertissement qui vise tout le monde ne vise personne.
+    controleTotal: accordées.includes('policy'),
+    ecriture: accordées.includes('write'),
+    secrets: accordées.some((p) => DROITS_SECRETS.has(p)),
+  };
+}
+
+export function mapRouterExposition(
+  macServer: any,
+  macPing: any,
+  proxy: any,
+  upnp: any,
+  snmp: any,
+): RouterExpositionDto {
+  return {
+    macServerInterfaces: macServer?.['allowed-interface-list'] ?? '',
+    macPingEnabled: flag(macPing?.enabled),
+    proxyEnabled: flag(proxy?.enabled),
+    upnpEnabled: flag(upnp?.enabled),
+    snmpEnabled: flag(snmp?.enabled),
   };
 }

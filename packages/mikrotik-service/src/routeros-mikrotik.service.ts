@@ -1332,6 +1332,32 @@ export class RouterOSMikrotikService implements IMikrotikService {
     return ToolsMapper.mapHorlogeRouteur(clock, ntp, resource);
   }
 
+  /**
+   * Qui peut entrer dans le routeur, et par où.
+   *
+   * Les comptes d'administration, leurs droits, et les portes autres que
+   * l'API. Une seule question pour l'exploitant — « qui a la main sur mon
+   * routeur ? » — et six menus pour y répondre, qui ne veulent rien dire
+   * séparément : un compte ne dit rien sans son groupe, et un groupe ne dit
+   * rien sans savoir d'où l'on peut s'en servir.
+   */
+  async getAcces() {
+    const [comptes, groupes, macServer, macPing, proxy, upnp, snmp] = await Promise.all([
+      this.client.get<any[]>('/user'),
+      this.client.get<any[]>('/user/group'),
+      this.client.get<any>('/tool/mac-server').catch(() => ({})),
+      this.client.get<any>('/tool/mac-server/ping').catch(() => ({})),
+      this.client.get<any>('/ip/proxy').catch(() => ({})),
+      this.client.get<any>('/ip/upnp').catch(() => ({})),
+      this.client.get<any>('/snmp').catch(() => ({})),
+    ]);
+    return {
+      comptes: comptes.map(ToolsMapper.mapRouterAccount),
+      groupes: groupes.map(ToolsMapper.mapRouterAccountGroup),
+      exposition: ToolsMapper.mapRouterExposition(macServer, macPing, proxy, upnp, snmp),
+    };
+  }
+
   /** Les certificats du routeur, dont celui qui sert l'API. */
   async getCertificates() {
     const raw = await this.client.get<any[]>('/certificate').catch(() => []);
