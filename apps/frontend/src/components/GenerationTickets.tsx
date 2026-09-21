@@ -7,7 +7,8 @@ import {
   type CibleGeneration,
   type GenerationResultat,
 } from '../api/ticket-generation';
-import { Badge, Button, Card, ErrorNote, FormField, Input } from './ui';
+import { Badge, Button, ErrorNote, FormField, Input } from './ui';
+import { Modale } from './Modale';
 
 /**
  * Générer des tickets pour un profil, directement sur le routeur.
@@ -65,7 +66,30 @@ export function GenerationTickets({
 
   if (resultat) {
     return (
-      <Card title={`${resultat.codes.length} ticket(s) créé(s) — ${profileName}`}>
+      <Modale
+        titre={`${resultat.codes.length} ticket(s) créé(s) — ${profileName}`}
+        onFermer={onFermer}
+        actions={
+          <>
+            <Button
+              onClick={() => {
+                void navigator.clipboard?.writeText(resultat.codes.join('\n'));
+              }}
+            >
+              Copier les codes
+            </Button>
+            <Button variant="secondary" onClick={() => setResultat(null)}>
+              En générer d&apos;autres
+            </Button>
+          </>
+        }
+        note={
+          <>
+            Les codes sont déjà sur le routeur et fonctionnent. Copiez-les maintenant : le mot
+            de passe est identique au code, et le routeur ne le rendra plus en clair ensuite.
+          </>
+        }
+      >
         {/* Le plafond cumulé est ce qui borne réellement un ticket HotSpot :
             le `session-timeout` du profil repart à zéro à chaque reconnexion,
             et le cookie rend cette reconnexion automatique. Le dire ici, c'est
@@ -137,11 +161,6 @@ export function GenerationTickets({
           </div>
         )}
 
-        <p className="mb-2 text-sm text-slate-600">
-          Les codes sont déjà sur le routeur et fonctionnent. Copiez-les maintenant : le mot de
-          passe est identique au code, et le routeur ne le rendra plus en clair ensuite.
-        </p>
-
         <textarea
           readOnly
           rows={Math.min(12, Math.max(3, resultat.codes.length))}
@@ -150,27 +169,34 @@ export function GenerationTickets({
           className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-800"
         />
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button
-            onClick={() => {
-              void navigator.clipboard?.writeText(resultat.codes.join('\n'));
-            }}
-          >
-            Copier les codes
-          </Button>
-          <Button variant="secondary" onClick={() => setResultat(null)}>
-            En générer d'autres
-          </Button>
-          <Button variant="secondary" onClick={onFermer}>
-            Fermer
-          </Button>
-        </div>
-      </Card>
+      </Modale>
     );
   }
 
   return (
-    <Card title={`Générer des tickets — ${profileName}`}>
+    <Modale
+      titre={`Générer des tickets — ${profileName}`}
+      onFermer={onFermer}
+      actions={
+        <Button
+          disabled={generer.isPending || !quantiteValide}
+          onClick={() => generer.mutate()}
+        >
+          {generer.isPending ? 'Création sur le routeur…' : `Générer ${quantiteValide ? n : ''}`}
+        </Button>
+      }
+      note={
+        <>
+          Cible :{' '}
+          <Badge tone="slate">{cible === 'user-manager' ? 'User Manager' : 'HotSpot'}</Badge>{' '}
+          {cible === 'user-manager'
+            ? '— la validité sera calendaire, elle court même client déconnecté.'
+            : '— le plafond comptera le temps passé connecté, pas les jours.'}{' '}
+          Au-delà de 200 d&apos;un coup, la requête dépasserait son délai ; faites plusieurs
+          lots.
+        </>
+      }
+    >
       <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         Ces tickets ne seront <strong>pas suivis comme des ventes</strong> : aucun prix, aucun
         encaissement rattaché, et ils apparaîtront « hors application ». Pour de la vente suivie,
@@ -218,25 +244,9 @@ export function GenerationTickets({
           </FormField>
         </div>
 
-        <p className="text-xs text-slate-500">
-          Cible : <Badge tone="slate">{cible === 'user-manager' ? 'User Manager' : 'HotSpot'}</Badge>{' '}
-          {cible === 'user-manager'
-            ? "— la validité sera calendaire, elle court même client déconnecté."
-            : '— le plafond comptera le temps passé connecté, pas les jours.'}{' '}
-          Au-delà de 200 d'un coup, la requête dépasserait son délai ; faites plusieurs lots.
-        </p>
-
         {erreur && <ErrorNote>{erreur}</ErrorNote>}
-
-        <div className="flex gap-2">
-          <Button type="submit" disabled={generer.isPending || !quantiteValide}>
-            {generer.isPending ? 'Création sur le routeur…' : `Générer ${quantiteValide ? n : ''}`}
-          </Button>
-          <Button type="button" variant="secondary" onClick={onFermer}>
-            Annuler
-          </Button>
-        </div>
+        <button type="submit" className="hidden" aria-hidden />
       </form>
-    </Card>
+    </Modale>
   );
 }

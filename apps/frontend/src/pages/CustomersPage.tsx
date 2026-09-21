@@ -1,11 +1,12 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { customersApi, telephoneAffiche, type CreateCustomerInput } from '../api/customers';
 import { useAuth } from '../auth/AuthContext';
 import { libellé, STATUT_SIMPLE } from '../api/libelles';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, FormField, Input, PageHeader, PanneDeLecture, Table, TableSkeleton } from '../components/ui';
+import { Badge, Button, FormField, Input, PageHeader, PanneDeLecture, Table, TableSkeleton } from '../components/ui';
+import { Modale } from '../components/Modale';
 
 const EMPTY_FORM: CreateCustomerInput = { name: '', phone: '' };
 
@@ -19,6 +20,7 @@ export function CustomersPage() {
   const sansNumero = (customers ?? []).filter((c) => telephoneAffiche(c.phone).provisoire);
   const [form, setForm] = useState<CreateCustomerInput>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
+  const [créer, setCréer] = useState(false);
 
   const createMutation = useMutation({
     mutationFn: customersApi.create,
@@ -26,6 +28,7 @@ export function CustomersPage() {
       queryClient.invalidateQueries({ queryKey: ['customers'] });
       setForm(EMPTY_FORM);
       setError(null);
+      setCréer(false);
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Erreur inconnue'),
   });
@@ -59,8 +62,7 @@ export function CustomersPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['customers'] }),
   });
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  function handleSubmit() {
     createMutation.mutate(form);
   }
 
@@ -94,8 +96,36 @@ export function CustomersPage() {
       )}
 
       {canWrite && (
-        <Card title="Nouveau client">
-          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div>
+          <Button onClick={() => setCréer(true)}>Nouveau client</Button>
+        </div>
+      )}
+
+      {canWrite && créer && (
+        <Modale
+          titre="Nouveau client"
+          onFermer={() => setCréer(false)}
+          actions={
+            <Button disabled={createMutation.isPending} onClick={() => handleSubmit()}>
+              {createMutation.isPending ? 'Création…' : 'Ajouter'}
+            </Button>
+          }
+          note={
+            <>
+              Le numéro de téléphone n&apos;est pas décoratif : c&apos;est sur lui que se
+              rapproche un paiement déclaré depuis la page publique, et c&apos;est par lui
+              qu&apos;on prévient d&apos;une échéance. Un client sans numéro ne peut recevoir
+              ni l&apos;un ni l&apos;autre.
+            </>
+          }
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSubmit();
+            }}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          >
             <FormField label="Nom">
               <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </FormField>
@@ -115,14 +145,12 @@ export function CustomersPage() {
                 onChange={(e) => setForm({ ...form, address: e.target.value || undefined })}
               />
             </FormField>
-            <div className="col-span-2 md:col-span-4">
-              {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? 'Création…' : 'Ajouter'}
-              </Button>
+            <div className="sm:col-span-2">
+              {error && <p className="text-sm text-red-600">{error}</p>}
             </div>
+            <button type="submit" className="hidden" aria-hidden />
           </form>
-        </Card>
+        </Modale>
       )}
 
       {clients.isPending ? (

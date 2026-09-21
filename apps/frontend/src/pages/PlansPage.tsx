@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { plansApi, validitéEnHeures, type CreatePlanInput } from '../api/plans';
 import { hotspotTabsApi } from '../api/mikrotik-tabs';
@@ -8,7 +8,8 @@ import { useAuth } from '../auth/AuthContext';
 import { libellé, STATUT_SIMPLE } from '../api/libelles';
 import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
-import { Badge, Button, Card, FormField, Input, PageHeader, PanneDeLecture, Select, Table, TableSkeleton } from '../components/ui';
+import { Badge, Button, FormField, Input, PageHeader, PanneDeLecture, Select, Table, TableSkeleton } from '../components/ui';
+import { Modale } from '../components/Modale';
 
 const EMPTY_FORM: CreatePlanInput = {
   name: '',
@@ -46,6 +47,7 @@ export function PlansPage() {
   const plans = offres.data;
   const [form, setForm] = useState<CreatePlanInput>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
+  const [créer, setCréer] = useState(false);
 
   const createMutation = useMutation({
     mutationFn: plansApi.create,
@@ -53,6 +55,7 @@ export function PlansPage() {
       queryClient.invalidateQueries({ queryKey: ['plans'] });
       setForm(EMPTY_FORM);
       setError(null);
+      setCréer(false);
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Erreur inconnue'),
   });
@@ -72,8 +75,7 @@ export function PlansPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['plans'] }),
   });
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  function handleSubmit() {
     createMutation.mutate(form);
   }
 
@@ -85,8 +87,37 @@ export function PlansPage() {
       />
 
       {canWrite && (
-        <Card title="Nouvelle offre">
-          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div>
+          <Button onClick={() => setCréer(true)}>Nouvelle offre</Button>
+        </div>
+      )}
+
+      {canWrite && créer && (
+        <Modale
+          titre="Nouvelle offre"
+          onFermer={() => setCréer(false)}
+          actions={
+            <Button disabled={createMutation.isPending} onClick={() => handleSubmit()}>
+              {createMutation.isPending ? 'Création…' : 'Créer l’offre'}
+            </Button>
+          }
+          note={
+            <>
+              Créer l&apos;offre crée aussi son profil sur le routeur : les deux restent liés
+              par le nom. <strong>Démarre</strong> décide de quand court la validité — à la
+              première connexion, un ticket vendu aujourd&apos;hui et utilisé la semaine
+              prochaine reste entier ; dès l&apos;attribution, il s&apos;écoule sans que
+              personne s&apos;en serve.
+            </>
+          }
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSubmit();
+            }}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          >
             <FormField label="Nom">
               <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </FormField>
@@ -120,14 +151,12 @@ export function PlansPage() {
                 <option value="ASSIGNED">Dès l'attribution</option>
               </Select>
             </FormField>
-            <div className="col-span-2 md:col-span-4">
-              {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? 'Création…' : 'Créer l’offre'}
-              </Button>
+            <div className="sm:col-span-2">
+              {error && <p className="text-sm text-red-600">{error}</p>}
             </div>
+            <button type="submit" className="hidden" aria-hidden />
           </form>
-        </Card>
+        </Modale>
       )}
 
       {nomsProfils &&

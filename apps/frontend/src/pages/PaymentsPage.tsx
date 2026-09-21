@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { paymentsApi, PAYMENT_STATUS, type CreatePaymentInput } from '../api/payments';
 import { customersApi } from '../api/customers';
@@ -10,6 +10,7 @@ import { useCurrency } from '../api/money';
 import { ApiError } from '../api/client';
 import type { Payment, PaymentMethod } from '../api/types';
 import { Badge, Button, Card, FormField, Input, PageHeader, PanneDeLecture, Select, Table, TableSkeleton } from '../components/ui';
+import { Modale } from '../components/Modale';
 
 const EMPTY_FORM: CreatePaymentInput = { customerId: '', planId: '', amount: 0, method: 'CASH', reference: '' };
 
@@ -46,6 +47,7 @@ export function PaymentsPage() {
   const [form, setForm] = useState<CreatePaymentInput>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
   const [lastVerifiedVoucherCode, setLastVerifiedVoucherCode] = useState<string | null>(null);
+  const [créer, setCréer] = useState(false);
 
   const createMutation = useMutation({
     mutationFn: paymentsApi.create,
@@ -53,6 +55,7 @@ export function PaymentsPage() {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       setForm(EMPTY_FORM);
       setError(null);
+      setCréer(false);
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Erreur inconnue'),
   });
@@ -82,8 +85,7 @@ export function PaymentsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payments'] }),
   });
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  function handleSubmit() {
     createMutation.mutate(form);
   }
 
@@ -109,8 +111,36 @@ export function PaymentsPage() {
       )}
 
       {canWrite && (
-        <Card title="Nouveau paiement">
-          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div>
+          <Button onClick={() => setCréer(true)}>Nouveau paiement</Button>
+        </div>
+      )}
+
+      {canWrite && créer && (
+        <Modale
+          titre="Nouveau paiement"
+          onFermer={() => setCréer(false)}
+          actions={
+            <Button disabled={createMutation.isPending} onClick={() => handleSubmit()}>
+              {createMutation.isPending ? 'Enregistrement…' : 'Enregistrer le paiement'}
+            </Button>
+          }
+          note={
+            <>
+              Enregistrer un paiement ne délivre <strong>aucun ticket</strong> : il part en
+              attente, et c&apos;est <em>Vérifier</em>, dans la liste, qui produit le code à
+              remettre au client. La <strong>référence</strong> est ce qui permettra de le
+              retrouver — pour les espèces, un numéro de reçu vaut mieux qu&apos;un mot.
+            </>
+          }
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSubmit();
+            }}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          >
             <FormField label="Client">
               <Select value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })}>
                 <option value="">— choisir —</option>
@@ -160,14 +190,12 @@ export function PaymentsPage() {
             <FormField label="Référence">
               <Input required value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} />
             </FormField>
-            <div className="col-span-2 md:col-span-5">
-              {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? 'Enregistrement…' : 'Enregistrer le paiement'}
-              </Button>
+            <div className="sm:col-span-2">
+              {error && <p className="text-sm text-red-600">{error}</p>}
             </div>
+            <button type="submit" className="hidden" aria-hidden />
           </form>
-        </Card>
+        </Modale>
       )}
 
       {règlements.isPending ? (

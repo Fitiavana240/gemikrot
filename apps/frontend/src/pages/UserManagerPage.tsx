@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -19,6 +19,7 @@ import { ProfileLimitationsTab } from './ProfileLimitationsTab';
 import { useAuth } from '../auth/AuthContext';
 import { ETAT_COMPTE_UM, libellé } from '../api/libelles';
 import { FormulaireLimitation } from '../components/FormulaireLimitation';
+import { Modale } from '../components/Modale';
 import { phraseCoupure } from '../api/coupure';
 import { PanneDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
@@ -34,7 +35,6 @@ import { ApiError } from '../api/client';
 import {
   Badge,
   Button,
-  Card,
   Compteur,
   EmptyRow,
   FormField,
@@ -133,6 +133,7 @@ function ProfilesTab() {
   /** Le profil pour lequel on génère, quand le panneau est ouvert. */
   const [àGenerer, setÀGenerer] = useState<string | null>(null);
   const [àModifier, setÀModifier] = useState<UserManagerProfile | null>(null);
+  const [créer, setCréer] = useState(false);
 
   const { currentId } = useRouterSelection();
   const profiles = useQuery({
@@ -146,6 +147,7 @@ function ProfilesTab() {
     onSuccess: () => {
       setError(null);
       setForm(EMPTY_PROFILE);
+      setCréer(false);
       refresh();
     },
     onError,
@@ -176,8 +178,7 @@ function ProfilesTab() {
     onError,
   });
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  function handleSubmit() {
     if (!form.name.trim()) {
       setError("Indiquez le nom du profil");
       return;
@@ -223,8 +224,36 @@ function ProfilesTab() {
       )}
 
       {canWrite && (
-        <Card title="Créer un profil">
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 md:grid-cols-5">
+        <div>
+          <Button onClick={() => setCréer(true)}>Nouveau profil</Button>
+        </div>
+      )}
+
+      {canWrite && créer && (
+        <Modale
+          large
+          titre="Nouveau profil"
+          onFermer={() => setCréer(false)}
+          actions={
+            <Button disabled={create.isPending} onClick={() => handleSubmit()}>
+              {create.isPending ? 'Création…' : 'Créer'}
+            </Button>
+          }
+          note={
+            <>
+              Un profil créé ici vit uniquement sur le routeur. Pour une offre vendue dans
+              l&apos;application, passez par l&apos;écran Offres : elle y est tenue
+              synchronisée.
+            </>
+          }
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSubmit();
+            }}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          >
             <FormField label="Nom">
               <Input
                 value={form.name}
@@ -299,17 +328,9 @@ function ProfilesTab() {
                 onChange={(e) => setForm({ ...form, comment: e.target.value || undefined })}
               />
             </FormField>
-            <div className="flex items-end">
-              <Button type="submit" disabled={create.isPending} className="w-full">
-                {create.isPending ? 'Création…' : 'Créer'}
-              </Button>
-            </div>
+            <button type="submit" className="hidden" aria-hidden />
           </form>
-          <p className="mt-3 text-xs text-slate-500">
-            Un profil créé ici vit uniquement sur le routeur. Pour une offre vendue dans
-            l'application, passez par l'écran Offres : elle y est tenue synchronisée.
-          </p>
-        </Card>
+        </Modale>
       )}
 
       {/* Une table vide et une table en échec se confondaient à l'œil : sans
@@ -464,7 +485,9 @@ function LimitationsTab() {
         />
       )}
 
-      {canWrite && !créer && !àModifier && (
+      {/* Le bouton reste visible pendant qu'une fenêtre est ouverte : c'est
+          elle qui couvre la liste, plus le formulaire qui la pousse. */}
+      {canWrite && (
         <div>
           <Button onClick={() => setCréer(true)}>Nouvelle limitation</Button>
         </div>
@@ -583,6 +606,7 @@ function AccountsTab() {
   const [sourceFilter, setSourceFilter] = useState<AccountSource | ''>('');
   const [àRecoder, setÀRecoder] = useState<string | null>(null);
   const [àSupprimer, setÀSupprimer] = useState<string | null>(null);
+  const [créer, setCréer] = useState(false);
 
   const { currentId } = useRouterSelection();
   const accounts = useQuery({
@@ -600,6 +624,7 @@ function AccountsTab() {
     onSuccess: () => {
       setError(null);
       setForm(EMPTY_ACCOUNT);
+      setCréer(false);
       refresh();
     },
     onError,
@@ -651,8 +676,7 @@ function AccountsTab() {
     onError,
   });
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  function handleSubmit() {
     if (!form.username.trim() || !form.password) {
       setError('Le nom du compte et le mot de passe sont requis');
       return;
@@ -710,8 +734,35 @@ function AccountsTab() {
       )}
 
       {canWrite && (
-        <Card title="Créer un compte">
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 md:grid-cols-5">
+        <div>
+          <Button onClick={() => setCréer(true)}>Nouveau compte</Button>
+        </div>
+      )}
+
+      {canWrite && créer && (
+        <Modale
+          titre="Nouveau compte"
+          onFermer={() => setCréer(false)}
+          actions={
+            <Button disabled={create.isPending} onClick={() => handleSubmit()}>
+              {create.isPending ? 'Création…' : 'Créer'}
+            </Button>
+          }
+          note={
+            <>
+              Un compte sans profil existe mais n&apos;ouvre rien : c&apos;est le profil qui
+              porte la validité et le débit. Le mot de passe est celui que le client saisira —
+              le routeur ne le redonnera plus en clair une fois enregistré.
+            </>
+          }
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSubmit();
+            }}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          >
             <FormField label="Nom du compte">
               <Input
                 value={form.username}
@@ -745,13 +796,9 @@ function AccountsTab() {
                 onChange={(e) => setForm({ ...form, comment: e.target.value || undefined })}
               />
             </FormField>
-            <div className="flex items-end">
-              <Button type="submit" disabled={create.isPending} className="w-full">
-                {create.isPending ? 'Création…' : 'Créer'}
-              </Button>
-            </div>
+            <button type="submit" className="hidden" aria-hidden />
           </form>
-        </Card>
+        </Modale>
       )}
 
       <div className="flex items-center gap-2">

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { CreateLimitationInput, UserManagerLimitation } from '../api/user-manager';
 import { ChampDuree } from './Edition';
-import { Button, Card, FormField, Input } from './ui';
+import { Button, FormField, Input } from './ui';
+import { Modale } from './Modale';
 
 /** Go saisis → octets, ou `null`. Vide veut dire « aucun plafond », pas zéro. */
 export function octetsDepuisGo(valeur: string): number | null {
@@ -90,14 +91,58 @@ export function FormulaireLimitation({
   );
   const [avancé, setAvancé] = useState(false);
 
+  const valider = () =>
+    onValider({
+      name: modification ? limitation.name : nom.trim(),
+      rateLimitRxBitsPerSecond: bitsDepuisMbps(descendant),
+      rateLimitTxBitsPerSecond: bitsDepuisMbps(montant),
+      transferLimitBytes: octetsDepuisGo(total),
+      downloadLimitBytes: octetsDepuisGo(reçu),
+      uploadLimitBytes: octetsDepuisGo(envoyé),
+      uptimeLimitSeconds: durée,
+      resetCountersIntervalSeconds: période,
+      // RouterOS attend aussi l'heure : minuit, faute de mieux à demander à
+      // quelqu'un qui raisonne en jours.
+      resetCountersStartTime: période != null && départ ? `${départ} 00:00:00` : null,
+      rateLimitMinRxBitsPerSecond: bitsDepuisMbps(minDesc),
+      rateLimitMinTxBitsPerSecond: bitsDepuisMbps(minMont),
+      // Zéro est une priorité valide — la plus forte — donc un champ vide et
+      // « 0 » ne veulent pas dire la même chose ici.
+      rateLimitPriority: priorité.trim() === '' ? null : Number(priorité),
+      rateLimitBurstRxBitsPerSecond: bitsDepuisMbps(pointeDesc),
+      rateLimitBurstTxBitsPerSecond: bitsDepuisMbps(pointeMont),
+      rateLimitBurstThresholdRxBitsPerSecond: bitsDepuisMbps(seuilDesc),
+      rateLimitBurstThresholdTxBitsPerSecond: bitsDepuisMbps(seuilMont),
+      rateLimitBurstTimeRxSeconds: duréePointeDesc,
+      rateLimitBurstTimeTxSeconds: duréePointeMont,
+    });
+
   return (
-    <Card title={modification ? `Modifier « ${limitation.name} »` : 'Créer une limitation'}>
-      {modification && (
-        <p className="mb-3 max-w-3xl text-sm text-amber-800">
-          Ceci <strong>s&apos;applique à tous</strong> les abonnés qui utilisent cette limitation,
-          dès leur prochaine connexion — y compris ceux dont le ticket est déjà vendu.
-        </p>
-      )}
+    <Modale
+      large
+      titre={modification ? `Modifier « ${limitation.name} »` : 'Nouvelle limitation'}
+      onFermer={() => onAnnuler?.()}
+      actions={
+        <Button disabled={enCours} onClick={valider}>
+          {enCours ? 'Enregistrement…' : modification ? 'Enregistrer' : 'Créer'}
+        </Button>
+      }
+      note={
+        modification ? (
+          <>
+            Ceci <strong>s&apos;applique à tous</strong> les abonnés qui utilisent cette
+            limitation, dès leur prochaine connexion — y compris ceux dont le ticket est déjà
+            vendu.
+          </>
+        ) : (
+          <>
+            Une limitation ne s&apos;applique à personne tant qu&apos;elle n&apos;est pas
+            rattachée à un forfait, dans l&apos;onglet <em>Limitations par forfait</em>. Les
+            champs laissés vides valent « aucune limite ».
+          </>
+        )
+      }
+    >
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {!modification && (
@@ -306,45 +351,6 @@ export function FormulaireLimitation({
           </div>
         </div>
       )}
-
-      <div className="mt-4 flex gap-2">
-        <Button
-          disabled={enCours}
-          onClick={() =>
-            onValider({
-              name: modification ? limitation.name : nom.trim(),
-              rateLimitRxBitsPerSecond: bitsDepuisMbps(descendant),
-              rateLimitTxBitsPerSecond: bitsDepuisMbps(montant),
-              transferLimitBytes: octetsDepuisGo(total),
-              downloadLimitBytes: octetsDepuisGo(reçu),
-              uploadLimitBytes: octetsDepuisGo(envoyé),
-              uptimeLimitSeconds: durée,
-              resetCountersIntervalSeconds: période,
-              // RouterOS attend aussi l'heure : minuit, faute de mieux à
-              // demander à quelqu'un qui raisonne en jours.
-              resetCountersStartTime: période != null && départ ? `${départ} 00:00:00` : null,
-              rateLimitMinRxBitsPerSecond: bitsDepuisMbps(minDesc),
-              rateLimitMinTxBitsPerSecond: bitsDepuisMbps(minMont),
-              // Zéro est une priorité valide — la plus forte — donc un champ
-              // vide et « 0 » ne veulent pas dire la même chose ici.
-              rateLimitPriority: priorité.trim() === '' ? null : Number(priorité),
-              rateLimitBurstRxBitsPerSecond: bitsDepuisMbps(pointeDesc),
-              rateLimitBurstTxBitsPerSecond: bitsDepuisMbps(pointeMont),
-              rateLimitBurstThresholdRxBitsPerSecond: bitsDepuisMbps(seuilDesc),
-              rateLimitBurstThresholdTxBitsPerSecond: bitsDepuisMbps(seuilMont),
-              rateLimitBurstTimeRxSeconds: duréePointeDesc,
-              rateLimitBurstTimeTxSeconds: duréePointeMont,
-            })
-          }
-        >
-          {enCours ? 'Enregistrement…' : modification ? 'Enregistrer' : 'Créer'}
-        </Button>
-        {onAnnuler && (
-          <Button variant="secondary" onClick={onAnnuler}>
-            Annuler
-          </Button>
-        )}
-      </div>
-    </Card>
+    </Modale>
   );
 }

@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom';
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { vouchersApi, type GenerateBatchInput } from '../api/vouchers';
 import { plansApi } from '../api/plans';
@@ -30,6 +30,7 @@ import {
   Table,
   TableSkeleton,
 } from '../components/ui';
+import { Modale } from '../components/Modale';
 
 /**
  * Un onglet par façon de regarder les tickets, plus les deux écrans qui les
@@ -358,6 +359,7 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
   const [statusFilter, setStatusFilter] = useState<VoucherStatus | ''>('');
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<GenerateBatchInput>({ planId: '', quantity: 10 });
+  const [créer, setCréer] = useState(false);
 
   const vouchers = useQuery({
     queryKey: ['vouchers', scope, statusFilter],
@@ -369,6 +371,7 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
     mutationFn: vouchersApi.generateBatch,
     onSuccess: () => {
       setError(null);
+      setCréer(false);
       refresh();
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Erreur inconnue'),
@@ -376,8 +379,7 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
   const disable = useMutation({ mutationFn: vouchersApi.disable, onSuccess: refresh });
   const cancel = useMutation({ mutationFn: vouchersApi.cancel, onSuccess: refresh });
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  function handleSubmit() {
     if (!form.planId) {
       setError('Choisir une offre');
       return;
@@ -388,8 +390,36 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
   return (
     <div className="space-y-4">
       {canWrite && generator && (
-        <Card title="Générer un lot">
-          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div>
+          <Button onClick={() => setCréer(true)}>Générer un lot</Button>
+        </div>
+      )}
+
+      {canWrite && generator && créer && (
+        <Modale
+          titre="Générer un lot de tickets"
+          onFermer={() => setCréer(false)}
+          actions={
+            <Button disabled={generate.isPending} onClick={() => handleSubmit()}>
+              {generate.isPending ? 'Génération…' : 'Générer'}
+            </Button>
+          }
+          note={
+            <>
+              Les comptes sont créés sur le routeur dès la génération : un ticket imprimé
+              fonctionne sans qu&apos;on ait à l&apos;activer. Sa validité ne démarre
+              qu&apos;à la première connexion du client — un ticket invendu ne s&apos;use
+              donc pas.
+            </>
+          }
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSubmit();
+            }}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          >
             <FormField label="Offre">
               <Select
                 value={form.planId}
@@ -429,25 +459,16 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
                 <option value="HOTSPOT">HotSpot</option>
               </Select>
             </FormField>
-            <div className="col-span-2 flex items-end md:col-span-1">
-              <Button type="submit" disabled={generate.isPending} className="w-full">
-                {generate.isPending ? 'Génération…' : 'Générer'}
-              </Button>
-            </div>
-            {error && <p className="col-span-2 text-sm text-red-600 md:col-span-4">{error}</p>}
-            <div className="col-span-2 md:col-span-4">
+            {error && <p className="text-sm text-red-600 sm:col-span-2">{error}</p>}
+            <div className="sm:col-span-2">
               <CibleGeneration
                 plan={plans?.find((p) => p.id === form.planId)}
                 cible={form.target ?? 'USER_MANAGER'}
               />
             </div>
+            <button type="submit" className="hidden" aria-hidden />
           </form>
-          <p className="mt-3 text-xs text-slate-500">
-            Les comptes sont créés sur le routeur dès la génération : un ticket imprimé fonctionne
-            sans qu'on ait à l'activer. Sa validité ne démarre qu'à la première connexion du
-            client, un ticket invendu ne s'use donc pas.
-          </p>
-        </Card>
+        </Modale>
       )}
 
       <div className="flex items-center gap-2">

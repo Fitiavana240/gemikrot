@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { Button, Card, FormField, Input } from './ui';
+import { Button, FormField, Input } from './ui';
+import { Modale } from './Modale';
 
 /**
  * Deux panneaux qui remplacent `window.prompt` et `window.confirm`.
@@ -167,39 +168,45 @@ export function EditionDuree({
   const [secondes, setSecondes] = useState<number | null>(secondesInitiales);
   const [erreur, setErreur] = useState<string | null>(null);
 
+  const valider = () => {
+    if (secondes == null) {
+      setErreur('Indiquez une durée supérieure à zéro.');
+      return;
+    }
+    const refus = onValider(secondes);
+    setErreur(typeof refus === 'string' ? refus : null);
+  };
+
   return (
-    <Card title={titre}>
+    <Modale
+      titre={titre}
+      onFermer={onAnnuler}
+      // La portée du geste passe en bas : on la lit une fois la valeur
+      // saisie, juste avant de valider — c'est là qu'elle sert.
+      note={description}
+      actions={
+        <Button disabled={enCours} onClick={valider}>
+          {enCours ? 'Enregistrement…' : 'Enregistrer'}
+        </Button>
+      }
+    >
       <form
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          if (secondes == null) {
-            setErreur('Indiquez une durée supérieure à zéro.');
-            return;
-          }
-          const refus = onValider(secondes);
-          setErreur(typeof refus === 'string' ? refus : null);
+          valider();
         }}
       >
-        <div className="max-w-3xl text-sm text-slate-600">{description}</div>
-
-        <div className="flex flex-wrap items-end gap-3">
-          <FormField label={libellé}>
-            <ChampDuree secondes={secondesInitiales} onChange={setSecondes} autoFocus />
-          </FormField>
-          <div className="flex gap-2 pb-0.5">
-            <Button type="submit" disabled={enCours}>
-              {enCours ? 'Enregistrement…' : 'Enregistrer'}
-            </Button>
-            <Button type="button" variant="secondary" onClick={onAnnuler}>
-              Annuler
-            </Button>
-          </div>
-        </div>
+        <FormField label={libellé}>
+          <ChampDuree secondes={secondesInitiales} onChange={setSecondes} autoFocus />
+        </FormField>
 
         {erreur && <p className="text-sm text-red-600">{erreur}</p>}
+        {/* Entrée valide : sans ce bouton caché, la touche ne ferait rien
+            dans un formulaire dont le bouton vit hors du <form>. */}
+        <button type="submit" className="hidden" aria-hidden />
       </form>
-    </Card>
+    </Modale>
   );
 }
 
@@ -239,46 +246,48 @@ export function EditionUnChamp({
   const [valeur, setValeur] = useState(valeurInitiale);
   const [erreur, setErreur] = useState<string | null>(null);
 
+  // Le refus vient de l'appelant, qui seul connaît les bornes. La fenêtre
+  // reste ouverte : la refermer obligerait à tout ressaisir.
+  const valider = () => {
+    const refus = onValider(valeur);
+    setErreur(typeof refus === 'string' ? refus : null);
+  };
+
   return (
-    <Card title={titre}>
+    <Modale
+      titre={titre}
+      onFermer={onAnnuler}
+      note={description}
+      actions={
+        <Button disabled={enCours} onClick={valider}>
+          {enCours ? 'Enregistrement…' : 'Enregistrer'}
+        </Button>
+      }
+    >
       <form
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          // Le refus vient de l'appelant, qui seul connaît les bornes. Le
-          // panneau reste ouvert : refermer obligerait à tout ressaisir.
-          const refus = onValider(valeur);
-          setErreur(typeof refus === 'string' ? refus : null);
+          valider();
         }}
       >
-        <div className="max-w-3xl text-sm text-slate-600">{description}</div>
-
-        <div className="flex flex-wrap items-end gap-3">
-          <FormField label={libellé}>
-            <div className="flex items-center gap-2">
-              <Input
-                type={type}
-                value={valeur}
-                onChange={(e) => setValeur(e.target.value)}
-                placeholder={placeholder}
-                autoFocus
-                className="w-48"
-              />
-              {unité && <span className="text-sm text-slate-500">{unité}</span>}
-            </div>
-          </FormField>
-          <div className="flex gap-2 pb-0.5">
-            <Button type="submit" disabled={enCours}>
-              {enCours ? 'Enregistrement…' : 'Enregistrer'}
-            </Button>
-            <Button type="button" variant="secondary" onClick={onAnnuler}>
-              Annuler
-            </Button>
+        <FormField label={libellé}>
+          <div className="flex items-center gap-2">
+            <Input
+              type={type}
+              value={valeur}
+              onChange={(e) => setValeur(e.target.value)}
+              placeholder={placeholder}
+              autoFocus
+              className="w-48"
+            />
+            {unité && <span className="text-sm text-slate-500">{unité}</span>}
           </div>
-        </div>
+        </FormField>
 
         {erreur && <p className="text-sm text-red-600">{erreur}</p>}
+        <button type="submit" className="hidden" aria-hidden />
       </form>
-    </Card>
+    </Modale>
   );
 }

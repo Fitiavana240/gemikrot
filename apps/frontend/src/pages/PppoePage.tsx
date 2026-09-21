@@ -8,10 +8,10 @@ import { ListeDuRouteur } from '../components/ListeDuRouteur';
 import { useRouterSelection } from '../routers/RouterContext';
 import { TabBar, type TabDef } from '../components/TabBar';
 import { ConfirmationInline } from '../components/Edition';
+import { Modale } from '../components/Modale';
 import {
   Badge,
   Button,
-  Card,
   EmptyState,
   FormField,
   Input,
@@ -75,16 +75,43 @@ function FormulaireCompte({
   const [remoteAddress, setRemoteAddress] = useState(compte?.remoteAddress ?? '');
   const [comment, setComment] = useState(compte?.comment ?? '');
 
+  const valider = () =>
+    onValider({ username, password, profile, service, remoteAddress, comment });
+
   return (
-    <Card title={modification ? `Modifier « ${compte.username} »` : 'Nouveau compte PPPoE'}>
+    <Modale
+      titre={modification ? `Modifier « ${compte.username} »` : 'Nouveau compte PPPoE'}
+      onFermer={onAnnuler}
+      actions={
+        <Button disabled={enCours} onClick={valider}>
+          {enCours ? 'Enregistrement…' : modification ? 'Enregistrer' : 'Créer le compte'}
+        </Button>
+      }
+      note={
+        modification ? (
+          <>
+            Le nom ne se change pas : il identifie le compte côté routeur, et le modifier
+            reviendrait à en créer un autre sans son historique. Un mot de passe laissé vide
+            reste celui d&apos;avant.
+          </>
+        ) : (
+          <>
+            Un compte PPPoE ouvre une <strong>liaison dédiée</strong>, pas un accès HotSpot :
+            l&apos;abonné se connecte avec ce nom et ce mot de passe depuis son propre
+            routeur. Sans <em>adresse imposée</em>, il reçoit une adresse du bassin de son
+            profil.
+          </>
+        )
+      }
+    >
       <form
         className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
-          onValider({ username, password, profile, service, remoteAddress, comment });
+          valider();
         }}
       >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           <FormField label="Nom du compte">
             <Input
               value={username}
@@ -135,16 +162,9 @@ function FormulaireCompte({
             <Input value={comment} onChange={(e) => setComment(e.target.value)} />
           </FormField>
         </div>
-        <div className="flex gap-2">
-          <Button type="submit" disabled={enCours}>
-            {enCours ? 'Enregistrement…' : modification ? 'Enregistrer' : 'Créer le compte'}
-          </Button>
-          <Button type="button" variant="secondary" onClick={onAnnuler}>
-            Annuler
-          </Button>
-        </div>
+        <button type="submit" className="hidden" aria-hidden />
       </form>
-    </Card>
+    </Modale>
   );
 }
 
@@ -233,16 +253,18 @@ function ComptesTab() {
         </ConfirmationInline>
       )}
 
-      {formulaire === 'aucun' ? (
-        <div className="flex justify-between gap-3">
-          <p className="max-w-2xl text-sm text-slate-600">
-            Un compte par abonné raccordé. Suspendre ne coupe pas la session en cours — PPPoE ne
-            revérifie l'authentification qu'à la reconnexion ; pour couper tout de suite, fermez
-            aussi sa session dans l'onglet Sessions.
-          </p>
-          <Button onClick={() => setFormulaire('creation')}>Nouveau compte</Button>
-        </div>
-      ) : (
+      {/* L'en-tête reste : c'est la fenêtre qui recouvre la liste, plus le
+          formulaire qui la pousse hors de vue. */}
+      <div className="flex justify-between gap-3">
+        <p className="max-w-2xl text-sm text-slate-600">
+          Un compte par abonné raccordé. Suspendre ne coupe pas la session en cours — PPPoE ne
+          revérifie l'authentification qu'à la reconnexion ; pour couper tout de suite, fermez
+          aussi sa session dans l'onglet Sessions.
+        </p>
+        <Button onClick={() => setFormulaire('creation')}>Nouveau compte</Button>
+      </div>
+
+      {formulaire !== 'aucun' && (
         <FormulaireCompte
           compte={formulaire === 'creation' ? undefined : formulaire}
           profils={nomsProfils}
