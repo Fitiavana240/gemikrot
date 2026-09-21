@@ -1,4 +1,6 @@
+import { useId } from 'react';
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
+import { BoutonColonnes, useColonnes } from './Colonnes';
 
 export function Card({ title, children }: { title?: string; children: ReactNode }) {
   return (
@@ -106,21 +108,82 @@ export function Badge({ tone, children }: { tone: 'green' | 'amber' | 'slate' | 
   );
 }
 
-export function Table({ head, children }: { head: string[]; children: ReactNode }) {
+/** En deçà, tout tient à l'écran : proposer de masquer n'apporte rien. */
+const COLONNES_AVANT_SELECTEUR = 5;
+
+/**
+ * Une table, avec le choix des colonnes quand elle en a assez pour gêner.
+ *
+ * Les colonnes sont masquées **en CSS, par leur rang**, et non retirées du
+ * rendu. C'est ce qui permet au réglage de valoir pour les quarante-huit
+ * tables de la console sans toucher à une seule d'entre elles : chacune écrit
+ * ses lignes à sa façon, avec ses `colSpan` et ses cellules composées, et
+ * aucune n'a à savoir qu'une colonne est cachée.
+ */
+export function Table({
+  head,
+  children,
+  colonnes,
+}: {
+  head: string[];
+  children: ReactNode;
+  /**
+   * Sous quel nom retenir le choix. Par défaut, les libellés eux-mêmes.
+   * `false` retire le sélecteur — pour une table de trois colonnes qui sert
+   * de fiche plus que de liste.
+   */
+  colonnes?: string | false;
+}) {
+  const { masquées, cachées, basculer, toutMontrer, réglables } = useColonnes(
+    head,
+    colonnes === false ? undefined : colonnes,
+  );
+  // `useId` rend un identifiant contenant « : », que les sélecteurs CSS ne
+  // savent pas viser sans échappement.
+  const id = `t${useId().replace(/:/g, '')}`;
+  const offert = colonnes !== false && head.length >= COLONNES_AVANT_SELECTEUR;
+
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-      <table className="min-w-full divide-y divide-slate-200 text-sm">
-        <thead className="bg-slate-50">
-          <tr>
-            {head.map((h) => (
-              <th key={h} className="px-3 py-2 text-left font-medium text-slate-500">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">{children}</tbody>
-      </table>
+    <div className="space-y-1">
+      {offert && (
+        <div className="flex justify-end">
+          <BoutonColonnes
+            réglables={réglables}
+            cachées={cachées}
+            basculer={basculer}
+            toutMontrer={toutMontrer}
+          />
+        </div>
+      )}
+      <div id={id} className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        {masquées.size > 0 && (
+          <style>
+            {[...masquées]
+              .map(
+                (rang) =>
+                  `#${id} th:nth-child(${rang + 1}),#${id} td:nth-child(${rang + 1}){display:none}`,
+              )
+              .join('')}
+          </style>
+        )}
+        <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <thead className="bg-slate-50">
+            <tr>
+              {head.map((h, rang) => (
+                // Deux colonnes d'actions sans titre cohabitent sur certains
+                // écrans : le libellé seul ne fait pas une clé.
+                <th
+                  key={`${h}-${rang}`}
+                  className="px-3 py-2 text-left font-medium text-slate-500"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">{children}</tbody>
+        </table>
+      </div>
     </div>
   );
 }
