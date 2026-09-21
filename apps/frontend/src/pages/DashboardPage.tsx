@@ -161,8 +161,17 @@ export function DashboardPage() {
           label="Tickets suivis ici"
           value={d.ticketsDisponibles}
           tone={d.ticketsDisponibles === 0 ? 'alerte' : 'neutre'}
-          hint={d.ticketsDisponibles === 0 ? "aucun créé dans l'application" : 'créés ici, prêts à vendre'}
-          to="/vouchers"
+          // « Prêts à vendre » était une promesse que la base ne peut pas
+          // tenir : elle ignore si le compte existe encore sur le routeur.
+          // Relevé ici — les quinze l'étaient tous, et aucun n'ouvrait quoi
+          // que ce soit, leurs comptes ayant été supprimés depuis WinBox.
+          // L'onglet « Vérifier sur le routeur » est le seul à savoir.
+          hint={
+            d.ticketsDisponibles === 0
+              ? "aucun créé dans l'application"
+              : 'à vérifier sur le routeur'
+          }
+          to="/vouchers/rapprochement"
         />
         <Stat
           label="En stock sur le routeur"

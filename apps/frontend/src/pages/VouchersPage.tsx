@@ -10,6 +10,7 @@ import { TabBar, type TabDef } from '../components/TabBar';
 import { userManagerApi } from '../api/user-manager';
 import { hotspotTabsApi } from '../api/mikrotik-tabs';
 import { BatchesPage } from './BatchesPage';
+import { RapprochementTab } from './RapprochementTab';
 import { TicketPrintPage } from './TicketTemplatesPage';
 import { useRouterSelection } from '../routers/RouterContext';
 import { useCurrency } from '../api/money';
@@ -41,6 +42,7 @@ const ONGLETS = {
   expires: { titre: 'Expirés', rendu: () => <ExpiredTab /> },
   lots: { titre: 'Lots', rendu: () => <BatchesPage /> },
   impression: { titre: 'Imprimer', rendu: () => <TicketPrintPage /> },
+  rapprochement: { titre: 'Vérifier sur le routeur', rendu: () => <RapprochementTab /> },
   historique: { titre: 'Historique HotSpot', rendu: () => <ListTab scope="legacy" /> },
 } as const;
 

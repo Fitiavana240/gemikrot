@@ -36,6 +36,13 @@ export interface ReconcileReport {
   activated: number;
   accessCut: number;
   /**
+   * Opérations que le routeur n'a pas pu recevoir, mises en attente.
+   *
+   * Le serveur le rend depuis toujours ; ce type l'ignorait, si bien qu'un
+   * écran ne pouvait pas dire qu'une coupure restait à appliquer.
+   */
+  deferred: number;
+  /**
    * Codes des tickets qu'aucun compte ne porte sur le routeur.
    *
    * Un ticket « vendu » dans cette liste veut dire qu'un client a payé pour
