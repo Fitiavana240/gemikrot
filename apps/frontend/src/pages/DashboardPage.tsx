@@ -22,6 +22,7 @@ import {
   TableSkeleton,
 } from '../components/ui';
 import { Occupation } from '../components/Occupation';
+import { MiseEnRoute } from '../components/MiseEnRoute';
 
 const VOUCHER_LABEL: Record<string, string> = {
   CREATED: 'disponibles',
@@ -130,6 +131,11 @@ export function DashboardPage() {
         title="Vue d'ensemble"
         description="Ce qu'il faut savoir en ouvrant la console : ce qui est encaissé, ce qui reste à vendre, et ce qui demande une décision."
       />
+
+      {/* Avant tout le reste sur un compte neuf : des chiffres à zéro
+          n'apprennent rien à qui n'a pas encore branché son routeur. La carte
+          s'efface d'elle-même une fois les quatre étapes franchies. */}
+      <MiseEnRoute />
 
       {/* Un routeur injoignable passe avant les chiffres : ils sont peut-être
           faux, et surtout plus rien ne s'écrit sur le matériel. */}

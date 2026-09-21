@@ -4,17 +4,32 @@ import { Roles } from '../auth/roles.decorator.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { AuthenticatedUser } from '../auth/jwt.strategy.js';
 import { TenantsService } from './tenants.service.js';
+import { MiseEnRouteService } from './mise-en-route.service.js';
 import { UpdateTenantDto } from './dto/update-tenant.dto.js';
 import { MobileMoneyAccountDto } from './dto/mobile-money-account.dto.js';
 
 @Controller('tenants')
 export class TenantsController {
-  constructor(private readonly tenants: TenantsService) {}
+  constructor(
+    private readonly tenants: TenantsService,
+    private readonly miseEnRoute: MiseEnRouteService,
+  ) {}
 
   /** Paramètres de l'exploitant connecté (marque, devise, puces Mobile Money). */
   @Get('me')
   findMine() {
     return this.tenants.findMine();
+  }
+
+  /**
+   * SAS-3 : les quatre pas qui separent un compte neuf d'une premiere vente.
+   *
+   * Chaque etape est constatee, jamais declaree : « routeur connecte » se
+   * coche parce que le routeur a repondu, pas parce qu'une ligne existe.
+   */
+  @Get('me/mise-en-route')
+  miseEnRouteDeLExploitant() {
+    return this.miseEnRoute.etat();
   }
 
   @Roles(AdminRole.SUPER_ADMIN, AdminRole.ADMIN)

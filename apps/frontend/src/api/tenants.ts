@@ -43,7 +43,25 @@ export interface SignupInput {
   mobileMoneyAccounts?: { provider: PaymentMethod; phoneNumber: string; accountName: string }[];
 }
 
+/** SAS-3 : les quatre pas d'une mise en route, constatés et non déclarés. */
+export interface ÉtapeMiseEnRoute {
+  clé: 'routeur' | 'offres' | 'puce' | 'vente';
+  titre: string;
+  aide: string;
+  lien: string;
+  fait: boolean;
+  /** Ce qu'on a constaté : « 3 offres actives », « aucun routeur ». */
+  constat: string;
+}
+
+export interface MiseEnRoute {
+  étapes: ÉtapeMiseEnRoute[];
+  faites: number;
+  terminée: boolean;
+}
+
 export const tenantsApi = {
+  miseEnRoute: () => api.get<MiseEnRoute>('/tenants/me/mise-en-route'),
   mine: () => api.get<Tenant>('/tenants/me'),
   update: (input: UpdateTenantInput) => api.patch<Tenant>('/tenants/me', input),
   addMobileMoney: (input: Omit<MobileMoneyAccount, 'id' | 'isActive'>) =>
