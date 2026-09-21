@@ -46,7 +46,10 @@ export function TabBar({ base, tabs }: { base: string; tabs: TabDef[] }) {
   }, [pathname]);
 
   return (
-    <div ref={piste} className="-mx-1 overflow-x-auto">
+    // La bande colle à ce qu'elle surmonte : le conteneur de page espace ses
+    // enfants, et cet écart poussait la table à mi-hauteur. Une barre
+    // d'onglets détachée de son contenu ne dit plus de quoi elle est l'onglet.
+    <div ref={piste} className="-mx-1 -mb-2 overflow-x-auto">
       <nav className="flex min-w-max gap-1 border-b border-slate-200 px-1">
         {tabs.map((tab) => (
           <NavLink

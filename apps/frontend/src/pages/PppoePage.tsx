@@ -601,7 +601,7 @@ export function PppoePage() {
   const { current, isLoading } = useRouterSelection();
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader
         title="PPPoE"
         description="L'abonné raccordé à demeure : la connexion s'authentifie d'elle-même, sans portail à ouvrir. C'est ce qu'on pose chez quelqu'un qui paie au mois."

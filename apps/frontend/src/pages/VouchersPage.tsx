@@ -95,7 +95,7 @@ export function VouchersPage() {
   });
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader
         title="Tickets"
         description="Les accès vendus à l'unité. L'échéance est tenue par le routeur : elle court à partir de la première connexion du client, et s'applique même cette console fermée."

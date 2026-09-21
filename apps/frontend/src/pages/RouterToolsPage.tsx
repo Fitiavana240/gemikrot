@@ -1196,7 +1196,7 @@ export function RouterToolsPage() {
   const { current, isLoading } = useRouterSelection();
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader
         title="Diagnostic"
         description="Ce que le routeur mesure et note. Ces écrans sont en lecture seule : ils servent à comprendre une panne ou une lenteur, pas à changer un réglage — savoir pourquoi un client se plaint vaut mieux que de modifier au hasard."

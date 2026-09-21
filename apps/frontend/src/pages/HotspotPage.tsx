@@ -65,7 +65,7 @@ export function HotspotPage() {
   const courant: Tab = tab && tab in ONGLETS ? (tab as Tab) : 'serveurs';
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader
         title="HotSpot"
         description="La configuration telle qu'elle vit sur le routeur. Rien n'en est recopié ici : ces réglages lui appartiennent, pas au suivi commercial."

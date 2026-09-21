@@ -90,7 +90,7 @@ export function UserManagerPage() {
   const courant: Tab = tab && tab in ONGLETS ? (tab as Tab) : 'comptes';
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader
         title="User Manager"
         description="Ce que porte réellement le routeur. La validité y est calendaire : elle continue de s'appliquer, même cette console fermée."

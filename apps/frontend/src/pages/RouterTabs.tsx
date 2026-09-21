@@ -22,6 +22,7 @@ import { useRouterSelection } from '../routers/RouterContext';
 import { GenerationTickets } from '../components/GenerationTickets';
 import { ChampDuree } from '../components/Edition';
 import { Confirmation } from '../components/Edition';
+import { BarreSelection, CaseLigne, useSelection } from '../components/Selection';
 import {
   Badge,
   Button,
@@ -257,6 +258,8 @@ export function HotspotUsersTab() {
     geste: 'bloquer' | 'debloquer' | 'supprimer';
     compte: string;
   } | null>(null);
+  /** Le geste demandé sur le lot coché, tant qu'il n'est pas confirmé. */
+  const [enLot, setEnLot] = useState<'bloquer' | 'debloquer' | 'supprimer' | null>(null);
   /**
    * La pose en masse des plafonds, tant qu'elle n'est pas confirmée.
    *
@@ -403,22 +406,163 @@ export function HotspotUsersTab() {
     onError,
   });
 
+  const selection = useSelection(filtrés.map((u) => u.username));
+  const choisis = filtrés.filter((u) => selection.estChoisie(u.username));
+
+  /**
+   * Un compte à la fois, et on continue après un échec.
+   *
+   * RouterOS n'a pas d'écriture en lot : ce sont N appels. S'arrêter au
+   * premier refus laisserait la moitié du lot traité sans qu'on sache
+   * laquelle — on va donc au bout et on rend le compte rendu.
+   */
+  const lot = useMutation({
+    mutationFn: async (geste: 'bloquer' | 'debloquer' | 'supprimer') => {
+      const échecs: string[] = [];
+      for (const compte of choisis) {
+        try {
+          if (geste === 'supprimer') {
+            await hotspotTabsApi.deleteUser(compte.username, currentId);
+          } else {
+            await hotspotTabsApi.setUserDisabled(
+              compte.username,
+              geste === 'bloquer',
+              currentId,
+            );
+          }
+        } catch {
+          échecs.push(compte.username);
+        }
+      }
+      return échecs;
+    },
+    onSuccess: (échecs) => {
+      const total = choisis.length;
+      setEnLot(null);
+      selection.vider();
+      rafraîchir();
+      setCompteRendu(
+        échecs.length === 0
+          ? `${total} compte(s) traité(s).`
+          : `${échecs.length} compte(s) sur ${total} n’ont pas abouti : ${échecs.slice(0, 8).join(', ')}${échecs.length > 8 ? '…' : ''}`,
+      );
+    },
+    onError,
+  });
+
+  const VERBE_LOT = {
+    bloquer: 'bloquer',
+    debloquer: 'débloquer',
+    supprimer: 'supprimer',
+  } as const;
+
+  // Les sélections groupées. Chacune dit son nombre avant qu'on clique.
+  const parProfil = [...new Set(filtrés.map((u) => u.profile).filter(Boolean))].map((nom) => ({
+    libellé: nom,
+    clés: filtrés.filter((u) => u.profile === nom).map((u) => u.username),
+  }));
+  const parEtat = [
+    { libellé: 'bloqués', clés: filtrés.filter((u) => u.disabled).map((u) => u.username) },
+    { libellé: 'actifs', clés: filtrés.filter((u) => !u.disabled).map((u) => u.username) },
+    {
+      libellé: 'jamais utilisés',
+      clés: filtrés.filter((u) => u.uptimeSeconds === 0).map((u) => u.username),
+    },
+    {
+      libellé: 'sans plafond de durée',
+      clés: filtrés.filter((u) => u.limitUptimeSeconds == null).map((u) => u.username),
+    },
+  ];
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-3xl text-sm text-slate-600">
-          La table du HotSpot lui-même. Un compte d'ici n'expire pas à une date : son plafond
-          compte le <strong>temps passé connecté</strong> et s'arrête quand le client se
-          déconnecte — c'est l'inverse d'un forfait User Manager, calendaire. Le trafic affiché
-          est cumulé depuis la création du compte.
-        </p>
-        <div className="flex shrink-0 items-center gap-3">
-          <Compteur requête={requête} nombre={filtrés.length} unité="compte(s)" />
-          {canWrite && formulaire === 'aucun' && (
-            <Button onClick={() => setFormulaire('creation')}>Nouveau compte</Button>
-          )}
-        </div>
+    <div className="space-y-2">
+      {/* La barre d'outils d'abord, et rien avant : l'explication est en bas,
+          sinon la table commence à mi-écran et il faut défiler pour la voir. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Input
+          value={terme}
+          onChange={(e) => setTerme(e.target.value)}
+          placeholder="Filtrer par nom, profil ou commentaire"
+          className="max-w-sm"
+        />
+        <Compteur requête={requête} nombre={filtrés.length} unité="compte(s)" />
+        {canWrite && formulaire === 'aucun' && (
+          <Button className="ml-auto" onClick={() => setFormulaire('creation')}>
+            Nouveau compte
+          </Button>
+        )}
       </div>
+
+      {canWrite && filtrés.length > 0 && (
+        <BarreSelection
+          nombre={selection.nombre}
+          total={filtrés.length}
+          onTout={() => selection.poser(filtrés.map((u) => u.username))}
+          onRien={selection.vider}
+          onChoisir={selection.poser}
+          groupes={[
+            { titre: 'Par profil', entrées: parProfil },
+            { titre: 'Par état', entrées: parEtat },
+          ]}
+          actions={
+            <>
+              <Button variant="secondary" onClick={() => setEnLot('bloquer')}>
+                Bloquer{selection.nombre > 1 ? ` les ${selection.nombre}` : ''}
+              </Button>
+              <Button variant="secondary" onClick={() => setEnLot('debloquer')}>
+                Débloquer{selection.nombre > 1 ? ` les ${selection.nombre}` : ''}
+              </Button>
+              <Button variant="danger" onClick={() => setEnLot('supprimer')}>
+                Supprimer{selection.nombre > 1 ? ` les ${selection.nombre}` : ''}
+              </Button>
+            </>
+          }
+        />
+      )}
+
+      {enLot && (
+        <Confirmation
+          titre={`Voulez-vous vraiment ${VERBE_LOT[enLot]} ${selection.nombre} compte${selection.nombre > 1 ? 's' : ''} ?`}
+          enCours={lot.isPending}
+          erreur={lot.isError ? erreur : null}
+          onAnnuler={() => {
+            setErreur(null);
+            setEnLot(null);
+          }}
+          onConfirmer={() => lot.mutate(enLot)}
+        >
+          {/* Le nombre ne se vérifie pas, les noms si. */}
+          <p className="font-mono text-xs">
+            {choisis
+              .slice(0, 12)
+              .map((u) => u.username)
+              .join(', ')}
+            {choisis.length > 12 && ` … et ${choisis.length - 12} autres`}
+          </p>
+          <p className="mt-2">
+            {enLot === 'supprimer' ? (
+              <>
+                Leur trafic consommé et leur commentaire partent avec, sans retour possible —
+                et le commentaire est souvent le seul lien entre un compte et une personne.
+              </>
+            ) : enLot === 'bloquer' ? (
+              <>
+                Les comptes restent et gardent tout ; ils cessent d&apos;être acceptés. Une
+                session déjà ouverte ne se ferme pas d&apos;elle-même.
+              </>
+            ) : (
+              <>Les comptes seront de nouveau acceptés, avec leurs compteurs inchangés.</>
+            )}
+          </p>
+          {selection.nombre > 1 && (
+            <p className="mt-2 text-slate-500">
+              Le routeur ne sait pas écrire en lot : ce sont {selection.nombre} écritures qui
+              partent l&apos;une après l&apos;autre. Un refus sur l&apos;une n&apos;arrête pas
+              les autres, et le compte rendu nomme celles qui ont échoué.
+            </p>
+          )}
+        </Confirmation>
+      )}
 
       {formulaire !== 'aucun' && (
         <FormulaireCompteHotspot
@@ -467,53 +611,11 @@ export function HotspotUsersTab() {
         />
       )}
 
-      <Input
-        value={terme}
-        onChange={(e) => setTerme(e.target.value)}
-        placeholder="Filtrer par nom, profil ou commentaire"
-        className="max-w-sm"
-      />
-
       {erreur && <ErrorNote>{erreur}</ErrorNote>}
       {compteRendu && (
         <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           {compteRendu}
         </p>
-      )}
-
-      {sansPlafond.length > 0 && (
-        <Card title={`${sansPlafond.length} compte(s) sans plafond de temps cumulé`}>
-          <p className="text-sm text-slate-600">
-            Leur profil annonce une durée, mais rien ne la fait respecter :{' '}
-            <strong>la durée de session repart à zéro à chaque reconnexion</strong>, et le cookie
-            rend cette reconnexion automatique. Un ticket de deux heures peut alors servir deux
-            heures par session, sans fin. Poser le plafond reprend la durée écrite sur le profil.
-          </p>
-          <ul className="mt-2 space-y-0.5 text-sm text-slate-700">
-            {sansPlafondParProfil.map(([profil, nombre]) => (
-              <li key={profil}>
-                <span className="font-medium">{nombre}</span> × {profil} — plafond à poser :{' '}
-                {formatDuration(duréeDuProfil.get(profil) ?? 0)}
-              </li>
-            ))}
-          </ul>
-          {canWrite && (
-            <div className="mt-3 flex items-center gap-3">
-              <Button
-                variant="danger"
-                disabled={poserLesPlafonds.isPending}
-                onClick={() => setConfirmerPlafonds(true)}
-              >
-                {poserLesPlafonds.isPending
-                  ? `Écriture… ${pose?.faits ?? 0}/${pose?.total ?? sansPlafond.length}`
-                  : `Poser le plafond sur ces ${sansPlafond.length} compte(s)`}
-              </Button>
-              <span className="text-xs text-slate-500">
-                Une écriture par compte sur le routeur : comptez quelques minutes.
-              </span>
-            </div>
-          )}
-        </Card>
       )}
 
       {confirmerPlafonds && (
@@ -583,10 +685,37 @@ export function HotspotUsersTab() {
 
       <ListeDuRouteur
         requête={{ ...requête, data: filtrés }}
-        colonnes={['Compte', 'Client', 'Profil', 'Durée', 'Reçu', 'Envoyé', 'Plafond total', 'État', '']}
+        colonnes={[
+          ...(canWrite ? [''] : []),
+          'Compte',
+          'Client',
+          'Profil',
+          'Durée',
+          'Reçu',
+          'Envoyé',
+          'Plafond total',
+          'État',
+          '',
+        ]}
         vide={{ titre: 'Aucun compte HotSpot', aide: 'Cette table est vide sur le routeur.' }}
         ligne={(u) => (
-          <tr key={u.id} className={u.disabled ? 'opacity-60' : undefined}>
+          <tr
+            key={u.id}
+            className={
+              selection.estChoisie(u.username)
+                ? 'bg-sky-50'
+                : u.disabled
+                  ? 'opacity-60'
+                  : undefined
+            }
+          >
+            {canWrite && (
+              <CaseLigne
+                cochée={selection.estChoisie(u.username)}
+                libellé={u.username}
+                onBasculer={(avecMaj) => selection.basculer(u.username, avecMaj)}
+              />
+            )}
             <td className="px-3 py-2 font-mono text-xs">{u.username}</td>
             {/* Sur ce parc, le commentaire porte le nom de la personne :
                 c'est le seul lien entre un compte et quelqu'un. */}
@@ -652,6 +781,56 @@ export function HotspotUsersTab() {
           </tr>
         )}
       />
+
+      {sansPlafond.length > 0 && (
+        <Card title={`${sansPlafond.length} compte(s) sans plafond de temps cumulé`}>
+          <p className="text-sm text-slate-600">
+            Leur profil annonce une durée, mais rien ne la fait respecter :{' '}
+            <strong>la durée de session repart à zéro à chaque reconnexion</strong>, et le cookie
+            rend cette reconnexion automatique. Un ticket de deux heures peut alors servir deux
+            heures par session, sans fin. Poser le plafond reprend la durée écrite sur le profil.
+          </p>
+          <ul className="mt-2 space-y-0.5 text-sm text-slate-700">
+            {sansPlafondParProfil.map(([profil, nombre]) => (
+              <li key={profil}>
+                <span className="font-medium">{nombre}</span> × {profil} — plafond à poser :{' '}
+                {formatDuration(duréeDuProfil.get(profil) ?? 0)}
+              </li>
+            ))}
+          </ul>
+          {canWrite && (
+            <div className="mt-3 flex items-center gap-3">
+              <Button
+                variant="danger"
+                disabled={poserLesPlafonds.isPending}
+                onClick={() => setConfirmerPlafonds(true)}
+              >
+                {poserLesPlafonds.isPending
+                  ? `Écriture… ${pose?.faits ?? 0}/${pose?.total ?? sansPlafond.length}`
+                  : `Poser le plafond sur ces ${sansPlafond.length} compte(s)`}
+              </Button>
+              <span className="text-xs text-slate-500">
+                Une écriture par compte sur le routeur : comptez quelques minutes.
+              </span>
+            </div>
+          )}
+        </Card>
+      )}
+
+      <p className="max-w-3xl text-xs text-slate-500">
+        La table du HotSpot lui-même. Un compte d&apos;ici n&apos;expire pas à une date : son
+        plafond compte le <strong>temps passé connecté</strong> et s&apos;arrête quand le
+        client se déconnecte — c&apos;est l&apos;inverse d&apos;un forfait User Manager, qui
+        est calendaire. Le trafic affiché est cumulé depuis la création du compte, et la
+        colonne <em>Client</em> vient du commentaire, seul lien entre un compte et quelqu&apos;un.
+        {canWrite && (
+          <>
+            {' '}
+            Cochez des lignes pour agir sur plusieurs comptes à la fois ; <strong>Maj+clic</strong>{' '}
+            prend toute la plage dans l&apos;ordre affiché.
+          </>
+        )}
+      </p>
     </div>
   );
 }
