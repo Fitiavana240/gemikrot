@@ -5,6 +5,7 @@ import { ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useRouterSelection } from '../routers/RouterContext';
 import { Badge, Button, Card, Table } from '../components/ui';
+import { ConfirmationInline } from '../components/Edition';
 
 /** `7200` → « 2 h ». Les plafonds de tickets se comptent en heures. */
 function heures(secondes: number): string {
@@ -29,12 +30,17 @@ export function PlafondsTab() {
   const queryClient = useQueryClient();
   const [rapport, setRapport] = useState<RapportPlafonds | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
+  // Un clic ne doit pas suffire à écrire sur des centaines de comptes vendus.
+  // Écrit après l'avoir appris de la mauvaise façon : une pose partie sans
+  // qu'on la demande a tourné trois minutes avant qu'on s'en aperçoive.
+  const [confirmation, setConfirmation] = useState(false);
 
   const lancer = useMutation({
     mutationFn: (appliquer: boolean) => hotspotApi.plafonds(currentId, appliquer),
     onSuccess: (r) => {
       setRapport(r);
       setErreur(null);
+      setConfirmation(false);
       if (r.appliqué) {
         queryClient.invalidateQueries({ queryKey: ['hotspot-users'] });
         queryClient.invalidateQueries({ queryKey: ['hotspot-stock'] });
@@ -65,16 +71,35 @@ export function PlafondsTab() {
           <Button disabled={lancer.isPending} onClick={() => lancer.mutate(false)}>
             {lancer.isPending ? 'Lecture…' : 'Voir ce qui manque'}
           </Button>
-          {canWrite && aCorriger.length > 0 && !rapport?.appliqué && (
+          {canWrite && aCorriger.length > 0 && !rapport?.appliqué && !confirmation && (
             <Button
               variant="secondary"
               disabled={lancer.isPending}
-              onClick={() => lancer.mutate(true)}
+              onClick={() => setConfirmation(true)}
             >
-              Poser les {aCorriger.length} plafonds
+              Poser les {aCorriger.length} plafonds…
             </Button>
           )}
         </div>
+
+        {confirmation && (
+          <div className="mt-3">
+            <ConfirmationInline
+              titre={`Écrire sur ${aCorriger.length} comptes du routeur`}
+              libelléConfirmer={`Poser les ${aCorriger.length} plafonds`}
+              enCours={lancer.isPending}
+              onConfirmer={() => lancer.mutate(true)}
+              onAnnuler={() => setConfirmation(false)}
+            >
+              Chacun recevra la durée de son offre en plafond. Ce sont des tickets{' '}
+              <strong>en vente</strong> : après cette écriture, chacun s&apos;arrêtera pour de
+              bon au bout de sa durée, au lieu de se rejouer indéfiniment. Aucun compte déjà
+              entamé, bloqué, ou rattaché à un abonnement au mois n&apos;est touché.{' '}
+              <strong>Il n&apos;y a pas de retour en arrière automatique</strong> : défaire
+              supposerait de retirer le plafond compte par compte.
+            </ConfirmationInline>
+          </div>
+        )}
 
         {erreur && (
           <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">

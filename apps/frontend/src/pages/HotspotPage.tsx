@@ -8,6 +8,7 @@ import { useRouterSelection } from '../routers/RouterContext';
 import { ApiError } from '../api/client';
 import { phrasePanne } from '../api/pannes';
 import { AccesPermanentsTab } from './AccesPermanentsTab';
+import { ConfirmationInline } from '../components/Edition';
 import { PlafondsTab } from './PlafondsTab';
 import {
   Badge,
@@ -400,6 +401,8 @@ function CookiesTab() {
    * un cookie peut avoir expiré entre l'affichage et le clic — et parce que
    * le journal garde ainsi une trace par cookie effacé.
    */
+  const [confirmerPurge, setConfirmerPurge] = useState(false);
+
   const purger = useMutation({
     mutationFn: async (ids: string[]) => {
       for (const id of ids) {
@@ -410,7 +413,10 @@ function CookiesTab() {
         }
       }
     },
-    onSuccess: refresh,
+    onSuccess: () => {
+      setConfirmerPurge(false);
+      refresh();
+    },
     onError,
   });
   const cut = useMutation({
@@ -460,15 +466,28 @@ function CookiesTab() {
               </li>
             ))}
           </ul>
+          {/* Même règle que pour les plafonds : une écriture qui porte sur
+              plusieurs comptes du routeur ne part pas sur un clic. */}
           {canWrite && (
             <div className="mt-3">
-              <Button
-                variant="danger"
-                disabled={purger.isPending}
-                onClick={() => purger.mutate(reliquats.map((c) => c.id))}
-              >
-                {purger.isPending ? 'Effacement…' : `Effacer ces ${reliquats.length} cookie(s)`}
-              </Button>
+              {confirmerPurge ? (
+                <ConfirmationInline
+                  titre={`Effacer ${reliquats.length} cookie(s) sur le routeur`}
+                  libelléConfirmer={`Effacer les ${reliquats.length} cookies`}
+                  enCours={purger.isPending}
+                  onConfirmer={() => purger.mutate(reliquats.map((c) => c.id))}
+                  onAnnuler={() => setConfirmerPurge(false)}
+                >
+                  Ces cookies appartiennent à des comptes bloqués ou supprimés. Les effacer ne
+                  coupe personne en règle — un client valide retape son code — mais{' '}
+                  <strong>l&apos;effacement ne se défait pas</strong> : un cookie retiré ne se
+                  recrée qu&apos;à la prochaine connexion réussie.
+                </ConfirmationInline>
+              ) : (
+                <Button variant="danger" onClick={() => setConfirmerPurge(true)}>
+                  Effacer ces {reliquats.length} cookie(s)…
+                </Button>
+              )}
             </div>
           )}
         </Card>
