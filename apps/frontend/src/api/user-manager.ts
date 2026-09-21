@@ -68,6 +68,16 @@ export interface UserManagerAccount {
   sharedUsers: number;
   comment: string | null;
   profileName: string | null;
+  /**
+   * Quand la validité a commencé à courir. Instant absolu (ISO).
+   *
+   * RouterOS ne range aucune date de début sur l'attribution, seulement
+   * l'échéance : celle-ci vient des sessions quand le routeur les a encore,
+   * sinon d'une soustraction. `startTimeMeasured` dit laquelle des deux.
+   */
+  startTime: string | null;
+  /** Vrai quand la date vient des sessions, faux quand elle est déduite. */
+  startTimeMeasured: boolean;
   /** Instant absolu (ISO) : le backend a converti le fuseau du routeur. */
   endTime: string | null;
   state: AccountState | null;

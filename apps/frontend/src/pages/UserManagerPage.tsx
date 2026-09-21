@@ -827,7 +827,7 @@ function AccountsTab() {
       ) : accounts.isError ? (
         <PanneDuRouteur requête={accounts} />
       ) : (
-        <Table head={['Compte', 'Origine', 'Client', 'Profil', 'Échéance', 'État', '']}>
+        <Table head={['Compte', 'Origine', 'Client', 'Profil', 'Début', 'Fin', 'État', '']}>
           {visible?.map((account) => (
             <tr key={account.username} className={account.disabled ? 'bg-red-50/50' : undefined}>
               <td className="px-3 py-2 font-mono">{account.username}</td>
@@ -845,10 +845,35 @@ function AccountsTab() {
                   </span>
                 )}
               </td>
+              {/* Deux colonnes, et non une. Une seule ne pouvait pas ne pas
+                  tromper : sur un ticket de deux heures, l'échéance tombe le
+                  jour même, souvent l'heure suivante — elle se lit alors comme
+                  une date de début. Les deux côte à côte lèvent l'ambiguïté et
+                  montrent d'un coup d'œil la durée réellement accordée. */}
               <td className="px-3 py-2 text-slate-500">
-                {/* Une colonne de dates ne porte que des dates. « Pas encore
-                    utilisé » est un état, et il est dit dans la colonne État —
-                    l'écrire aux deux endroits ne dit pas deux choses. */}
+                {account.startTime ? (
+                  <>
+                    {new Date(account.startTime).toLocaleString('fr-FR')}
+                    {/* Une date mesurée et une date calculée n'ont pas la
+                        même valeur : la seconde se décale si la validité du
+                        forfait a changé depuis. Le point le dit sans occuper
+                        une colonne de plus. */}
+                    {!account.startTimeMeasured && (
+                      <span
+                        className="ml-1 text-slate-400"
+                        title="Date déduite de l’échéance et de la durée du forfait : le routeur n’a plus la session."
+                      >
+                        ≈
+                      </span>
+                    )}
+                  </>
+                ) : account.state === 'waiting' ? (
+                  <span className="text-slate-400">pas commencé</span>
+                ) : (
+                  '—'
+                )}
+              </td>
+              <td className="px-3 py-2 text-slate-500">
                 {account.endTime ? new Date(account.endTime).toLocaleString('fr-FR') : '—'}
               </td>
               <td className="px-3 py-2">
@@ -890,9 +915,24 @@ function AccountsTab() {
             </tr>
           ))}
           {visible?.length === 0 && (
-            <EmptyRow colSpan={7}>Aucun compte pour ce filtre.</EmptyRow>
+            <EmptyRow colSpan={8}>Aucun compte pour ce filtre.</EmptyRow>
           )}
         </Table>
+      )}
+
+      {/* Dire d'où vient la colonne Début, parce qu'elle ne vient pas du
+          routeur. Le taire donnerait à une valeur calculée le même poids
+          qu'à une valeur lue, et l'écart possible ne se verrait jamais. */}
+      {!accounts.isLoading && !accounts.isError && (
+        <p className="max-w-3xl text-xs text-slate-500">
+          Le routeur ne range <strong>aucune date de départ</strong> : il ne garde que
+          l&apos;échéance. La colonne <strong>Début</strong> vient donc des sessions du compte
+          quand le routeur les a encore — c&apos;est l&apos;heure réelle de la connexion. Sinon
+          elle est calculée, échéance moins durée du forfait, et marquée{' '}
+          <span className="text-slate-400">≈</span> : ce calcul se décale si la durée du
+          forfait a été modifiée depuis l&apos;attribution, car le routeur fige
+          l&apos;échéance mais pas la durée.
+        </p>
       )}
     </div>
   );

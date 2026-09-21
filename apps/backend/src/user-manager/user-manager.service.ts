@@ -22,6 +22,57 @@ import type {
 } from './dto/user-manager.dto.js';
 
 /**
+ * Quand une attribution a commencé à courir.
+ *
+ * RouterOS ne le range nulle part : `/user-manager/user-profile` ne porte
+ * qu'`end-time`. Deux sources, dans cet ordre.
+ *
+ * 1. **La première session tombant dans la fenêtre de l'attribution.** C'est
+ *    l'heure à laquelle le client s'est vraiment connecté.
+ * 2. **Échéance moins validité du forfait**, faute de session. C'est le
+ *    calcul que le routeur a fait à l'endroit.
+ *
+ * L'ordre n'est pas indifférent, et le parc l'a tranché : le forfait
+ * `TEST-1H` valait une heure quand `test1h` l'a consommé, il vaut une minute
+ * aujourd'hui. Le routeur fige l'échéance à l'attribution, **pas la durée** —
+ * soustraire la durée actuelle se trompe alors de 59 minutes, tandis que la
+ * session donne 13:48:58, l'heure exacte.
+ *
+ * La borne basse compte autant que la haute : un compte racheté porte
+ * plusieurs attributions, et sans elle la deuxième période commencerait à la
+ * première connexion du compte, des semaines plus tôt.
+ */
+export function debutAttribution({
+  fin,
+  validitéSecondes,
+  sessionsTriées,
+  échéancesDuCompte,
+}: {
+  fin: Date | null;
+  validitéSecondes: number | null;
+  /** Débuts de session du compte, en millisecondes, du plus ancien au plus récent. */
+  sessionsTriées: number[];
+  /** Échéances de toutes les attributions du compte, pour borner la fenêtre. */
+  échéancesDuCompte: number[];
+}): { date: Date | null; mesuré: boolean } {
+  // Sans échéance, il n'y a ni fenêtre ni soustraction possible : un forfait
+  // illimité, ou une attribution qui n'a pas encore démarré.
+  if (!fin) return { date: null, mesuré: false };
+
+  const précédente = échéancesDuCompte
+    .filter((t) => t < fin.getTime())
+    .sort((a, b) => b - a)[0];
+
+  const mesuré = sessionsTriées.find(
+    (t) => t <= fin.getTime() && (précédente === undefined || t > précédente),
+  );
+  if (mesuré !== undefined) return { date: new Date(mesuré), mesuré: true };
+
+  if (validitéSecondes == null) return { date: null, mesuré: false };
+  return { date: new Date(fin.getTime() - validitéSecondes * 1000), mesuré: false };
+}
+
+/**
  * Parmi les attributions d'un compte, celle qui décrit son accès courant.
  *
  * Un compte en porte une par achat : au rachat, RouterOS en ajoute une et
@@ -60,6 +111,34 @@ export interface AccountView {
   comment: string | null;
   profileName: string | null;
   /** Échéance en instant absolu (ISO), convertie depuis le fuseau du routeur. */
+  /**
+   * Quand la validité a commencé à courir.
+   *
+   * RouterOS ne range **aucune** date de début sur l'attribution :
+   * `/user-manager/user-profile` n'a qu'`end-time`. Elle vient donc de deux
+   * sources, dans cet ordre.
+   *
+   * 1. **Mesurée** : la première session du compte tombant dans la fenêtre de
+   *    cette attribution. C'est la date à laquelle le client s'est vraiment
+   *    connecté.
+   * 2. **Déduite** : échéance moins validité du forfait — le calcul que le
+   *    routeur a fait à l'endroit.
+   *
+   * La déduction seule ne suffisait pas, et le parc le démontre : le forfait
+   * `TEST-1H` valait une heure quand `test1h` l'a consommé, il vaut une
+   * minute aujourd'hui. Le routeur fige l'échéance à l'attribution, pas la
+   * durée — soustraire la durée actuelle se trompait alors de 59 minutes.
+   * Les sessions, elles, donnent 13:48:58, qui est l'heure exacte.
+   */
+  startTime: string | null;
+  /**
+   * Vrai quand `startTime` vient des sessions, faux quand il est déduit.
+   *
+   * Les deux ne se valent pas et l'écran doit pouvoir le dire : le journal
+   * des sessions du routeur est court, la plupart des comptes tomberont donc
+   * sur la déduction.
+   */
+  startTimeMeasured: boolean;
   endTime: string | null;
   state: UserManagerUserProfileState | null;
   /** Nombre d'attributions portées par ce compte : un rachat en ajoute une. */
@@ -333,10 +412,28 @@ export class UserManagerService {
    */
   async listAccounts(routerId?: string): Promise<AccountView[]> {
     const mikrotik = await this.client(routerId);
-    const [users, assignments] = await Promise.all([
+    // Deux lectures de plus, toutes deux pour la date de début : elle ne se
+    // range nulle part sur le routeur. Les profils portent la validité, les
+    // sessions portent l'heure réelle des connexions.
+    const [users, assignments, profiles, sessions] = await Promise.all([
       mikrotik.getUserManagerUsers(),
       mikrotik.getUserManagerUserProfiles(),
+      mikrotik.getUserManagerProfiles(),
+      mikrotik.getUserManagerSessions(),
     ]);
+    const validitéParProfil = new Map(
+      profiles.map((p) => [p.name, p.validityDurationSeconds] as const),
+    );
+
+    const sessionsParUtilisateur = new Map<string, number[]>();
+    for (const session of sessions) {
+      const début = Date.parse(session.startTime);
+      if (Number.isNaN(début)) continue;
+      const liste = sessionsParUtilisateur.get(session.username) ?? [];
+      liste.push(début);
+      sessionsParUtilisateur.set(session.username, liste);
+    }
+    for (const liste of sessionsParUtilisateur.values()) liste.sort((a, b) => a - b);
 
     const usernames = users.map((u) => u.username);
     const [vouchers, subscriptions] = await Promise.all([
@@ -380,13 +477,31 @@ export class UserManagerService {
           ? 'TICKET'
           : 'HORS_APPLICATION';
 
+      // L'échéance d'abord, le début ensuite : c'est de l'une qu'on tire
+      // l'autre, et non l'inverse.
+      const fin = parseRouterTime(assignment?.endTime, gmtOffset);
+      const validité = assignment?.profileName
+        ? (validitéParProfil.get(assignment.profileName) ?? null)
+        : null;
+
+      const début = debutAttribution({
+        fin,
+        validitéSecondes: validité,
+        sessionsTriées: sessionsParUtilisateur.get(user.username) ?? [],
+        échéancesDuCompte: userAssignments
+          .map((a) => parseRouterTime(a.endTime, gmtOffset)?.getTime())
+          .filter((t): t is number => t != null),
+      });
+
       return {
         username: user.username,
         disabled: user.disabled,
         sharedUsers: user.sharedUsers,
         comment: user.comment,
         profileName: assignment?.profileName ?? null,
-        endTime: parseRouterTime(assignment?.endTime, gmtOffset)?.toISOString() ?? null,
+        startTime: début.date?.toISOString() ?? null,
+        startTimeMeasured: début.mesuré,
+        endTime: fin?.toISOString() ?? null,
         state: assignment?.state ?? null,
         assignmentCount: userAssignments.length,
         source,
