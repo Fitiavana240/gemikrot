@@ -29,6 +29,7 @@ import {
   RouterAccountDto,
   RouterAccountGroupDto,
   RouterExpositionDto,
+  ChangementRouteurDto,
 } from '../dto/router-tools.dto';
 
 /** RouterOS rend ses booléens en chaînes. */
@@ -583,5 +584,20 @@ export function mapRouterExposition(
     proxyEnabled: flag(proxy?.enabled),
     upnpEnabled: flag(upnp?.enabled),
     snmpEnabled: flag(snmp?.enabled),
+  };
+}
+
+export function mapChangementRouteur(raw: any): ChangementRouteurDto {
+  return {
+    id: raw?.['.id'] ?? '',
+    action: raw?.action ?? '',
+    par: raw?.by ?? '',
+    time: raw?.time ?? '',
+    // RouterOS termine ses commandes par un retour chariot : il s'afficherait
+    // comme une ligne vide dans un tableau.
+    commande: (raw?.redo ?? '').trim() || null,
+    annulable: flag(raw?.undoable),
+    commandeAnnulation: (raw?.undo ?? '').trim() || null,
+    origine: raw?.trace || null,
   };
 }

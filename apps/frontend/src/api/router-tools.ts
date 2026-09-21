@@ -314,6 +314,8 @@ export const routerToolsApi = {
   acces: (routerId: string) => api.get<AccesRouteur>(`${base(routerId)}/acces`),
   connexions: (routerId: string) =>
     api.get<SuiviConnexions>(`${base(routerId)}/connexions`),
+  historique: (routerId: string) =>
+    api.get<ChangementRouteur[]>(`${base(routerId)}/historique`),
   services: (routerId: string) => api.get<IpService[]>(`${base(routerId)}/services`),
   cloud: (routerId: string) => api.get<IpCloud>(`${base(routerId)}/cloud`),
   arp: (routerId: string) => api.get<ArpEntry[]>(`${base(routerId)}/arp`),
@@ -644,4 +646,22 @@ export interface SuiviConnexions {
   maxEntries: number;
   tcpEstablishedTimeout: string;
   clients: ClientConnexions[];
+}
+
+/**
+ * Un changement de configuration vu par le routeur, quelle qu'en soit
+ * l'origine — console, WinBox ou terminal. Cent lignes au plus : une rafale
+ * efface ce qui la précède.
+ */
+export interface ChangementRouteur {
+  id: string;
+  action: string;
+  par: string;
+  time: string;
+  commande: string | null;
+  /** Le routeur dit pouvoir défaire — mais voir `commandeAnnulation`. */
+  annulable: boolean;
+  /** Nul quand rien n'est noté pour restaurer la valeur d'avant. */
+  commandeAnnulation: string | null;
+  origine: string | null;
 }

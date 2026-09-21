@@ -88,6 +88,7 @@ import {
   RouterAccountGroupDto,
   RouterExpositionDto,
   SuiviConnexionsDto,
+  ChangementRouteurDto,
   SimpleQueueDto,
   WirelessInterfaceDto,
   WirelessClientDto,
@@ -298,6 +299,9 @@ export interface IMikrotikService {
 
   /** L'heure du routeur, son fuseau, et l'état du recalage NTP. */
   getHorloge(): Promise<HorlogeRouteurDto>;
+
+  /** Ce qui a été changé sur le routeur, et par qui — WinBox compris. */
+  getHistoriqueConfiguration(): Promise<ChangementRouteurDto[]>;
 
   /** Qui tient le plus de connexions ouvertes sur le routeur. */
   getSuiviConnexions(): Promise<SuiviConnexionsDto>;

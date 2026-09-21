@@ -1338,6 +1338,19 @@ export class RouterOSMikrotikService implements IMikrotikService {
   }
 
   /**
+   * Ce qui a été changé sur le routeur, et par qui.
+   *
+   * Le seul relevé qui voie **tout**, WinBox compris — le journal d'audit de
+   * la console ne connaît que ce qui passe par elle. Cent lignes au plus :
+   * une rafale d'écritures efface donc ce qui la précède, ce qui vaut d'être
+   * dit à l'écran plutôt que découvert après coup.
+   */
+  async getHistoriqueConfiguration() {
+    const raw = await this.client.get<any[]>('/system/history').catch(() => []);
+    return raw.map(ToolsMapper.mapChangementRouteur);
+  }
+
+  /**
    * Qui tient le plus de connexions ouvertes.
    *
    * Répond à « pourquoi c'est lent » avec un nom, là où le débit par client

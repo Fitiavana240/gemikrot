@@ -166,6 +166,12 @@ export class RouterToolsController {
     return (await this.clients.forRouter(routerId)).getHorloge();
   }
 
+  /** Ce qui a été changé sur le routeur, et par qui. */
+  @Get('historique')
+  async historique(@Param('routerId') routerId: string) {
+    return (await this.clients.forRouter(routerId)).getHistoriqueConfiguration();
+  }
+
   /** Qui tient le plus de connexions ouvertes. */
   @Get('connexions')
   async connexions(@Param('routerId') routerId: string) {

@@ -21,6 +21,7 @@ import { CertificatsTab } from './CertificatsTab';
 import { HorlogeTab } from './HorlogeTab';
 import { AccesRouteurTab } from './AccesRouteurTab';
 import { ConnexionsTab } from './ConnexionsTab';
+import { HistoriqueTab } from './HistoriqueTab';
 import { TabBar, type TabDef } from '../components/TabBar';
 import {
   Badge,
@@ -1100,6 +1101,7 @@ const ONGLETS = {
     rendu: () => <AutomatisationsTab />,
   },
   journal: { titre: 'Journal du routeur', rendu: () => <JournalTab /> },
+  historique: { titre: 'Ce qui a changé', rendu: () => <HistoriqueTab /> },
   acces: { titre: 'Accès et DDNS', rendu: () => <AccesTab /> },
   appareils: { titre: 'DHCP et ARP', rendu: () => <AppareilsTab /> },
   'pare-feu': { titre: 'Pare-feu', rendu: () => <PareFeuTab /> },

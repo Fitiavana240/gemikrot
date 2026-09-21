@@ -11,6 +11,7 @@ import {
   mapRouterAccount,
   mapRouterAccountGroup,
   mapRouterExposition,
+  mapChangementRouteur,
   mapRouterSchedule,
   mapSimpleQueue,
   splitPaire,
@@ -500,5 +501,49 @@ describe('mapRouterExposition', () => {
     const e = mapRouterExposition({}, {}, {}, {}, {});
     expect(e.macServerInterfaces).toBe('');
     expect(e.snmpEnabled).toBe(false);
+  });
+});
+
+/**
+ * L'historique de configuration du routeur.
+ *
+ * Relevé exact d'une des 221 écritures de plafond. Le point du test est le
+ * couple `undoable` / `undo` : le routeur dit « annulable » alors qu'aucune
+ * commande d'annulation n'est enregistrée. Promettre un retour en arrière sur
+ * le seul drapeau serait mentir.
+ */
+const CHANGEMENT = {
+  '.id': '*1B8',
+  action: 'hotspot user H872973 changed',
+  by: 'wifitati-svc',
+  policy: 'write',
+  redo: '/ip hotspot user set *2A9 limit-uptime=2h\r\n',
+  time: '2026-09-21 09:04:06',
+  trace: 'api:wifitati-svc@::/action:220',
+  undo: '',
+  undoable: 'true',
+};
+
+describe('mapChangementRouteur', () => {
+  it('distingue « annulable » de « on sait quoi restaurer »', () => {
+    const c = mapChangementRouteur(CHANGEMENT);
+
+    expect(c.annulable).toBe(true);
+    // Vide, donc `null` : l'écran doit pouvoir dire « sans valeur d'avant ».
+    expect(c.commandeAnnulation).toBeNull();
+  });
+
+  it('nettoie le retour chariot que RouterOS ajoute aux commandes', () => {
+    // Sans cela, la commande s'affiche suivie d'une ligne vide dans un tableau.
+    expect(mapChangementRouteur(CHANGEMENT).commande).toBe(
+      '/ip hotspot user set *2A9 limit-uptime=2h',
+    );
+  });
+
+  it('garde l’origine, qui dit par où le changement est entré', () => {
+    // `api:` ou `winbox:` : c'est ce qui distingue la console de quelqu'un
+    // devant WinBox, et c'est toute la valeur de ce relevé.
+    expect(mapChangementRouteur(CHANGEMENT).origine).toBe('api:wifitati-svc@::/action:220');
+    expect(mapChangementRouteur({ ...CHANGEMENT, trace: '' }).origine).toBeNull();
   });
 });

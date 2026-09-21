@@ -647,3 +647,36 @@ export interface SuiviConnexionsDto {
   tcpEstablishedTimeout: string;
   clients: ClientConnexionsDto[];
 }
+
+/**
+ * Un changement de configuration enregistré par le routeur — `/system/history`.
+ *
+ * C'est le seul endroit qui dise **qui a changé quoi**, WinBox compris. Le
+ * journal d'audit de la console ne voit que ce qui passe par elle ; celui-ci
+ * voit tout.
+ *
+ * Le tampon ne garde que cent lignes. Une rafale d'écritures chasse donc tout
+ * ce qui la précède — constaté de la mauvaise façon sur ce parc, où 221
+ * écritures successives ont effacé l'historique entier.
+ */
+export interface ChangementRouteurDto {
+  id: string;
+  /** `hotspot user H872973 changed`, tel que le routeur le formule. */
+  action: string;
+  /** Le compte auteur du changement. */
+  par: string;
+  time: string;
+  /** La commande qui rejouerait le changement. Souvent le plus parlant. */
+  commande: string | null;
+  /**
+   * Le routeur dit-il pouvoir annuler ce changement ?
+   *
+   * À lire avec `commandeAnnulation` : le drapeau peut être vrai alors que
+   * rien n'est enregistré pour défaire, auquel cas annuler ne restaure pas la
+   * valeur précédente.
+   */
+  annulable: boolean;
+  commandeAnnulation: string | null;
+  /** Par où le changement est arrivé : `api:…`, `winbox:…`, `cli:…`. */
+  origine: string | null;
+}
