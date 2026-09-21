@@ -130,6 +130,22 @@ export function DashboardPage() {
         </ErrorNote>
       )}
 
+      {/* Au-dessus de tout le reste : ce bandeau change la lecture de chaque
+          chiffre en dessous. « Échéances sous 7 jours » n'est un compte à
+          rebours que si quelque chose agit à l'échéance. */}
+      {d.ordonnanceurActif === false && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <strong>Rien n&apos;expire tout seul sur ce serveur.</strong> Les travaux de fond
+          sont désactivés : un ticket arrivé à échéance n&apos;est pas marqué, son accès
+          n&apos;est pas coupé, et un abonné hors tolérance reste connecté.{' '}
+          <strong>Tant que c&apos;est le cas, chaque échéance demande un geste</strong> —
+          l&apos;onglet <em>Vérifier sur le routeur</em> des Tickets et le bouton
+          <em> Suspendre</em> des Abonnements font le travail à la main. Pour les activer,
+          il faut poser <span className="font-mono text-xs">SCHEDULER_ENABLED=&quot;true&quot;</span>{' '}
+          dans la configuration du serveur, puis le redémarrer.
+        </div>
+      )}
+
       {/* Placé au-dessus des recettes, parce que c'est d'elles qu'il parle :
           la page publique montre les offres et leurs prix, et n'a aucun
           numéro à donner. Le client va jusqu'à l'écran de paiement pour n'y

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PaymentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
@@ -21,6 +22,7 @@ export class DashboardService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly clients: MikrotikClientFactory,
+    private readonly config: ConfigService,
   ) {}
 
   async getSummary() {
@@ -103,6 +105,16 @@ export class DashboardService {
       ticketsDisponibles,
       abonnesActifs,
       echeancesProches,
+      /**
+       * Vrai quand les travaux de fond tournent.
+       *
+       * Même lecture que `SchedulerService`, et volontairement la même
+       * expression : tout ce qui n'est pas exactement « true » laisse
+       * l'ordonnanceur éteint. Sur cette installation la variable est
+       * absente du `.env`, donc rien n'expire tout seul — et aucun écran ne
+       * le disait, alors que tous parlent d'échéances.
+       */
+      ordonnanceurActif: this.config.get<string>('SCHEDULER_ENABLED') === 'true',
       paiementsEnAttente,
       /** `null` quand rien n'attend. */
       paiementEnAttenteDepuis: plusAncienEnAttente?.createdAt ?? null,

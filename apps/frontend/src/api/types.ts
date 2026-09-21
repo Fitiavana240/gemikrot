@@ -111,6 +111,14 @@ export interface DashboardSummary {
   abonnesActifs: number;
   /** Abonnements arrivant a echeance sous sept jours : a relancer. */
   echeancesProches: number;
+  /**
+   * Vrai quand les travaux de fond tournent sur le serveur.
+   *
+   * Faux, rien n'expire tout seul : ni les tickets arrivés à échéance, ni la
+   * coupure des accès correspondants, ni la suspension des abonnés hors
+   * tolérance. Les écrans continuent pourtant de parler d'échéances.
+   */
+  ordonnanceurActif: boolean;
   paiementsEnAttente: number;
   /**
    * Date du plus ancien paiement encore en attente, ou `null`.
