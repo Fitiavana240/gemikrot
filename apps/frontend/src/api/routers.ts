@@ -147,6 +147,22 @@ export interface RaccordementAssisteInput {
   label?: string;
 }
 
+/**
+ * L'etat du serveur de tunnel.
+ *
+ * Le pair se pose sur le routeur et le routeur se met a appeler. Si personne
+ * n'ecoute en face, rien ne le dit : WireGuard n'a pas d'erreur, les octets
+ * sortants montent, les entrants restent a zero.
+ */
+export interface EtatServeurTunnel {
+  endpoint: string;
+  endpointPrive: boolean;
+  pilote: boolean;
+  interfaceName: string;
+  manques: string[];
+  pairs: { label: string; commande: string }[];
+}
+
 export interface PendingEnrollment {
   id: string;
   label: string;
@@ -158,6 +174,7 @@ export interface PendingEnrollment {
 export const enrollmentsApi = {
   pending: () => api.get<PendingEnrollment[]>('/router-enrollments'),
   invite: (label: string) => api.post<EnrollmentInvitation>('/router-enrollments', { label }),
+  serveur: () => api.get<EtatServeurTunnel>('/router-enrollments/serveur'),
   sonder: (input: RaccordementAssisteInput) =>
     api.post<SondageRouteur>('/router-enrollments/sonder', input),
   raccorder: (input: RaccordementAssisteInput) =>

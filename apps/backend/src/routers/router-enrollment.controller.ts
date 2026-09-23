@@ -124,6 +124,20 @@ export class RouterEnrollmentController {
     return this.enrollment.invite(body.label);
   }
 
+  /**
+   * L'etat du serveur de tunnel.
+   *
+   * Declare avant `@Get()` n'a pas d'importance ici, les chemins different.
+   * Ce qui importe, c'est qu'il existe : sans lui, un exploitant dont le
+   * serveur n'ecoute pas voit un routeur qui appelle dans le vide et n'a
+   * aucun moyen de l'apprendre.
+   */
+  @Roles(...CAN_CONFIGURE)
+  @Get('serveur')
+  etatDuServeur() {
+    return this.enrollment.etatDuServeur();
+  }
+
   @Roles(...CAN_CONFIGURE)
   @Get()
   pending() {

@@ -15,10 +15,13 @@ import { RaccordementAssisteService } from './raccordement-assiste.service.js';
 
 const ADMIN = { host: '192.168.88.1', username: 'admin', password: 'secret-du-routeur' };
 
-function service(options: { version?: string; refuseSession?: boolean } = {}) {
+function service(
+  options: { version?: string; refuseSession?: boolean; deja?: { id: string } | null } = {},
+) {
   const ecritures: { chemin: string; corps: unknown }[] = [];
   const auditLog = vi.fn(async (_entree: { payloadDiff?: Record<string, unknown> }) => undefined);
   const creerRouteur = vi.fn(async (dto: Record<string, unknown>) => ({ id: 'r-neuf', ...dto }));
+  const majFiche = vi.fn(async (id: string, _dto: Record<string, unknown>) => ({ id }));
   const majRouteur = vi.fn(async (_args: { data: Record<string, unknown> }) => ({}));
 
   const get = vi.fn(async (chemin: string) => {
@@ -46,7 +49,10 @@ function service(options: { version?: string; refuseSession?: boolean } = {}) {
   };
 
   const s = new RaccordementAssisteService(
-    { router: { update: majRouteur } } as never,
+    {
+      router: { update: majRouteur },
+      scopedStrict: { router: { findFirst: vi.fn(async () => options.deja ?? null) } },
+    } as never,
     {} as never,
     {
       settings: {
@@ -62,6 +68,7 @@ function service(options: { version?: string; refuseSession?: boolean } = {}) {
     {
       probeFingerprint: vi.fn(async () => ({ fingerprint256: 'AA:BB' })),
       create: creerRouteur,
+      update: majFiche,
     } as never,
     { allocateAddress: vi.fn(async () => '10.88.0.7') } as never,
     { get: () => 'http://192.168.88.23:3000' } as never,
@@ -70,7 +77,7 @@ function service(options: { version?: string; refuseSession?: boolean } = {}) {
   // remplace ici plutôt que d'ouvrir une vraie connexion.
   (s as never as { client: () => unknown }).client = () => client;
 
-  return { service: s, ecritures, auditLog, creerRouteur, majRouteur, client };
+  return { service: s, ecritures, auditLog, creerRouteur, majFiche, majRouteur, client };
 }
 
 describe('le sondage', () => {
@@ -202,5 +209,36 @@ describe('le raccordement', () => {
     expect(pair['endpoint-address']).toBe('192.168.88.23');
     expect(pair['persistent-keepalive']).toBe('25');
     expect(res.etapes.join(' ')).toMatch(/pair sur le serveur/);
+  });
+});
+
+describe('le routeur deja connu', () => {
+  it('reprend sa fiche au lieu d’en creer une seconde', async () => {
+    // Arrive des le premier usage sur ce parc : deux lignes pour le meme hAP,
+    // deux entrees dans le selecteur, et un import qui compterait en double.
+    const { service: s, creerRouteur, majFiche } = service({ deja: { id: 'r-connu' } });
+
+    const res = await s.raccorder(ADMIN);
+
+    expect(creerRouteur).not.toHaveBeenCalled();
+    expect(majFiche).toHaveBeenCalledTimes(1);
+    expect(majFiche.mock.calls[0][0]).toBe('r-connu');
+    expect(res.routerId).toBe('r-connu');
+    expect(res.etapes.join(' ')).toMatch(/pas dupliqu/);
+  });
+
+  it('remplace les identifiants, que le routeur vient de changer', async () => {
+    // Le script recree le compte dedie avec un nouveau mot de passe : garder
+    // l'ancien en base rendrait la console muette sur un routeur qui repond.
+    const { service: s, majFiche } = service({ deja: { id: 'r-connu' } });
+
+    await s.raccorder(ADMIN);
+
+    const dto = majFiche.mock.calls[0][1];
+    expect(dto.username).toBe('gemikrot-api');
+    expect(dto.password).toBeTruthy();
+    expect(dto.password).not.toBe(ADMIN.password);
+    // Le nom n'est pas ecrase : l'exploitant l'a peut-etre choisi.
+    expect(dto.label).toBeUndefined();
   });
 });

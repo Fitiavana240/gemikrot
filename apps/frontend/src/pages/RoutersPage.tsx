@@ -15,6 +15,7 @@ import { Badge, Button, Card, FormField, Input, PageHeader, Table } from '../com
 import { Modale } from '../components/Modale';
 import { RaccordementAssisteModale } from '../components/RaccordementAssiste';
 import { AideRouteur, AIDE_RACCORDEMENT } from '../components/AideRouteur';
+import { ServeurTunnel } from '../components/ServeurTunnel';
 
 /**
  * Combien de temps ce script vaut-il encore.
@@ -243,6 +244,9 @@ export function RoutersPage() {
           </ul>
         </Card>
       )}
+
+      {/* Muet quand tout va bien. Un panneau permanent devient du decor. */}
+      <ServeurTunnel />
 
       {canWrite && (
         <div className="flex flex-wrap items-center gap-2">

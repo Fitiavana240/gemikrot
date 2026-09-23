@@ -229,7 +229,40 @@ export class RaccordementAssisteService {
     );
 
     const label = dto.label?.trim() || sondage.identite || dto.host;
-    const routeur = await this.routers.create(
+
+    /**
+     * Ce routeur est-il deja connu ?
+     *
+     * Relancer l'assistant sur un routeur deja raccorde doit le **reparer**,
+     * pas en creer un second. C'est arrive des le premier usage : deux lignes
+     * pour le meme hAP, deux entrees dans le selecteur, et un import qui
+     * compterait tout en double.
+     *
+     * L'hote et le port font l'identite : deux lignes qui pointent la meme
+     * machine sont la meme machine. Le nom, lui, se change librement et ne
+     * prouve rien.
+     */
+    const connu = await this.prisma.scopedStrict.router.findFirst({
+      where: { host: dto.host, restPort: port },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const routeur = connu
+      ? await this.routers.update(
+          connu.id,
+          {
+            // Le mot de passe du compte dedie vient d'etre remplace sur le
+            // routeur : garder l'ancien en base rendrait la console muette.
+            username: COMPTE_API,
+            password: motDePasseApi,
+            tlsFingerprint: sondage.empreinte,
+            // Le nom n'est pas touche : l'exploitant l'a peut-etre choisi, et
+            // l'ecraser par l'identite du routeur lui ferait perdre son
+            // repere sur un parc a plusieurs sites.
+          },
+          undefined,
+        )
+      : await this.routers.create(
       {
         label,
         // **L'adresse locale, pas celle du tunnel.** Un tunnel qui vient
@@ -246,7 +279,11 @@ export class RaccordementAssisteService {
       },
       undefined,
     );
-    etapes.push(`Routeur enregistré dans la console, certificat épinglé.`);
+    etapes.push(
+      connu
+        ? `Routeur déjà connu de la console : sa fiche a été reprise, pas dupliquée.`
+        : `Routeur enregistré dans la console, certificat épinglé.`,
+    );
 
     await this.prisma.router.update({
       where: { id: routeur.id },

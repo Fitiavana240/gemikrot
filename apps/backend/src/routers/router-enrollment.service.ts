@@ -57,6 +57,28 @@ export interface EnrollmentInvitation {
   adressePerimee: AdressePerimee | null;
 }
 
+/**
+ * L'etat du serveur de tunnel, vu de la console.
+ *
+ * Le pair se pose sur le routeur, et le routeur se met a appeler. Si personne
+ * n'ecoute en face, **rien ne le dit** : WireGuard n'a pas d'erreur, les
+ * octets sortants montent, les entrants restent a zero. La consigne partait
+ * dans un avertissement de journal que personne ne lit.
+ */
+export interface EtatServeurTunnel {
+  endpoint: string;
+  /** Une adresse privee ne se joint que depuis le meme reseau. */
+  endpointPrive: boolean;
+  /** La console applique-t-elle elle-meme les pairs sur le serveur ? */
+  pilote: boolean;
+  /** Le nom de l'interface cote serveur, pour les commandes a passer. */
+  interfaceName: string;
+  /** Ce qui empeche un routeur distant de joindre ce serveur, en clair. */
+  manques: string[];
+  /** Les pairs a poser a la main, faute de pilotage. */
+  pairs: { label: string; commande: string }[];
+}
+
 @Injectable()
 export class RouterEnrollmentService {
   private readonly logger = new Logger(RouterEnrollmentService.name);
@@ -166,6 +188,66 @@ export class RouterEnrollmentService {
 
     await this.prisma.scopedStrict.routerEnrollment.delete({ where: { id } });
     this.logger.log(`Invitation annulée : ${invitation.label}`);
+  }
+
+  /**
+   * Ce qui manque pour qu'un routeur distant atteigne ce serveur.
+   *
+   * Trois choses peuvent manquer, et elles se cumulent en silence :
+   *
+   * 1. **Personne n'ecoute.** `WIREGUARD_MANAGED` a faux, la console ne pose
+   *    aucun pair sur le serveur. Le routeur appelle dans le vide.
+   * 2. **L'adresse est privee.** Un routeur situe ailleurs ne joindra jamais
+   *    un `192.168.x.y`, quoi qu'on configure par ailleurs.
+   * 3. **La cle du serveur manque**, et le routeur n'a personne a qui parler.
+   *
+   * Les commandes des pairs sont rendues telles quelles : quand la console ne
+   * pilote pas le serveur, c'est la seule facon d'y arriver.
+   */
+  async etatDuServeur(): Promise<EtatServeurTunnel> {
+    const { endpointHost, endpointPort, interfaceName } = this.wireguard.settings;
+    const pilote = this.wireguard.settings.managed;
+    const prive = this.wireguard.endpointPrive;
+
+    const manques: string[] = [];
+    for (const absent of this.wireguard.missingConfiguration()) {
+      manques.push(`${absent} n'est pas renseigne dans le fichier .env du serveur.`);
+    }
+    if (!pilote) {
+      manques.push(
+        "La console ne pose pas les pairs sur le serveur (WIREGUARD_MANAGED n'est pas a " +
+          '« true »). Chaque routeur raccorde doit etre ajoute a la main, avec la commande ' +
+          'donnee ci-dessous.',
+      );
+    }
+    if (prive) {
+      manques.push(
+        `L'adresse annoncee aux routeurs, ${endpointHost}, est une adresse privee : ` +
+          "elle ne se joint que depuis ce reseau. Un routeur situe ailleurs ne l'atteindra " +
+          'jamais. Pour du distant, le serveur doit avoir une adresse publique ou une ' +
+          'redirection de port.',
+      );
+    }
+
+    // Seuls les routeurs qui ont une cle : les autres ne sont pas dans le
+    // tunnel, et proposer une commande pour eux n'aurait pas de sens.
+    const routeurs = await this.prisma.scopedStrict.router.findMany({
+      where: { tunnelPublicKey: { not: null }, tunnelAddress: { not: null } },
+      select: { label: true, tunnelPublicKey: true, tunnelAddress: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return {
+      endpoint: `${endpointHost}:${endpointPort}`,
+      endpointPrive: prive,
+      pilote,
+      interfaceName,
+      manques,
+      pairs: routeurs.map((r) => ({
+        label: r.label,
+        commande: `wg set ${interfaceName} peer ${r.tunnelPublicKey} allowed-ips ${r.tunnelAddress}/32`,
+      })),
+    };
   }
 
   /** Les invitations encore ouvertes, pour que l'exploitant s'y retrouve. */
