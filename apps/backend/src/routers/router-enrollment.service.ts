@@ -11,6 +11,11 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { RouterCredentialsService } from './router-credentials.service.js';
 import { WireguardService } from './wireguard.service.js';
+import {
+  adressePerimee,
+  hoteDeLUrl,
+  type AdressePerimee,
+} from '../common/adresses-locales.js';
 
 /** Durée de vie du jeton. Assez pour aller au routeur, trop court pour traîner. */
 const TOKEN_TTL_MS = 30 * 60 * 1000;
@@ -35,6 +40,20 @@ export interface EnrollmentInvitation {
    */
   endpoint: string;
   endpointPrive: boolean;
+  /**
+   * L'adresse annoncee au routeur n'est plus celle de cette machine.
+   *
+   * Constate sur cette installation : le script annoncait `192.168.88.135`,
+   * la console repondait sur `.23`. Le routeur a appele dans le vide — et
+   * **l'echec est muet** : `/tool/fetch` reste sur << status: connecting >>
+   * jusqu'a expiration, sans rien dire de plus. Pire, il bloque le terminal
+   * et avale les lignes collees a sa suite, qui reapparaissent tronquees en
+   * erreur de syntaxe sans rapport apparent.
+   *
+   * `null` quand tout va bien, ou quand l'adresse est un nom de domaine :
+   * celui-la ne perime pas.
+   */
+  adressePerimee: AdressePerimee | null;
 }
 
 @Injectable()
@@ -97,7 +116,31 @@ export class RouterEnrollmentService {
       script: this.buildScript({ token, apiPassword, tunnelAddress }),
       endpoint: `${this.wireguard.settings.endpointHost}:${this.wireguard.settings.endpointPort}`,
       endpointPrive: this.wireguard.endpointPrive,
+      adressePerimee: this.adresseDeRappelPerimee(),
     };
+  }
+
+  /**
+   * L'adresse que le script fera appeler existe-t-elle encore ici ?
+   *
+   * Le seul moment où la question se pose utilement est **avant** de coller le
+   * script : une fois collé, le routeur appelle dans le vide et rien ne le
+   * dit. `/tool/fetch` reste sur « status: connecting », bloque le terminal,
+   * avale les lignes suivantes — et l'exploitant voit une erreur de syntaxe
+   * qui n'a aucun rapport avec la cause.
+   *
+   * Les deux réglages sont vérifiés, car ils pourrissent ensemble : le rappel
+   * HTTP (`PUBLIC_BASE_URL`) et le point d'entrée du tunnel
+   * (`WIREGUARD_ENDPOINT_HOST`) portent en général la même adresse. On signale
+   * le premier qui a bougé.
+   */
+  private adresseDeRappelPerimee(): AdressePerimee | null {
+    const rappel = this.config.get<string>('PUBLIC_BASE_URL');
+    const hote = rappel ? hoteDeLUrl(rappel) : '';
+    return (
+      (hote ? adressePerimee(hote) : null) ??
+      adressePerimee(this.wireguard.settings.endpointHost)
+    );
   }
 
   /**
@@ -298,47 +341,71 @@ export class RouterEnrollmentService {
     const callbackUrl = `${this.config.get<string>('PUBLIC_BASE_URL') ?? `https://${endpointHost}`}/router-enrollments/callback/${params.token}`;
 
     return `# ============================================================
-# GeMikrot — raccordement de ce routeur au serveur
-# À coller dans : Winbox > New Terminal
-# Valable 30 minutes. Passé ce délai, regénérer depuis la console.
+# GeMikrot - raccordement de ce routeur au serveur
+# A coller dans : Winbox > New Terminal
+# Valable 30 minutes. Passe ce delai, regenerer depuis la console.
+#
+# Sans accent, et ce n'est pas une negligence : le terminal Winbox rend les
+# caracteres accentues en mojibake selon la police installee. Un commentaire
+# illisible fait douter du reste du script, au moment precis ou l'on demande
+# a quelqu'un de coller des commandes sur son materiel en production.
+#
+# Rejouable : chaque etape efface d'abord ce qu'un essai precedent aurait
+# laisse. Sans cela, une seconde execution rend un mur de
+# << failure: already have... >> ou rien ne distingue l'echec attendu de
+# l'echec veritable.
 # ============================================================
 
-# 1. Le tunnel. La clé privée est créée ici et ne quitte jamais ce routeur.
+# 1. Le tunnel. La cle privee est creee ici et ne quitte jamais ce routeur.
+/interface/wireguard/remove [find name=${WG_INTERFACE}]
 /interface/wireguard/add name=${WG_INTERFACE} listen-port=13231 comment="GeMikrot"
+/ip/address/remove [find interface=${WG_INTERFACE}]
 /ip/address/add address=${params.tunnelAddress}/32 interface=${WG_INTERFACE} comment="GeMikrot"
-# Une adresse en /32 ne crée aucune route : sans celle-ci, ce routeur saurait
-# recevoir les appels du serveur mais pas lui répondre.
+# Une adresse en /32 ne cree aucune route : sans celle-ci, ce routeur saurait
+# recevoir les appels du serveur mais pas lui repondre.
+/ip/route/remove [find comment="GeMikrot"]
 /ip/route/add dst-address=${subnet} gateway=${WG_INTERFACE} comment="GeMikrot"
 
 # 2. Le serveur, comme pair. C'est ce routeur qui appelle, jamais l'inverse :
-#    aucun port à ouvrir, aucune adresse fixe nécessaire côté routeur.
+#    aucun port a ouvrir, aucune adresse fixe necessaire cote routeur.
+/interface/wireguard/peers/remove [find comment="GeMikrot"]
 /interface/wireguard/peers/add interface=${WG_INTERFACE} \\
     public-key="${publicKey}" \\
     endpoint-address=${endpointHost} endpoint-port=${endpointPort} \\
     allowed-address=${subnet} \\
     persistent-keepalive=25 comment="GeMikrot"
 
-# 3. Un compte dédié à l'application, aux droits limités. Jamais « admin ».
+# 3. Un compte dedie a l'application, aux droits limites. Jamais << admin >>.
+#    Le compte part avant son groupe : RouterOS refuse de retirer un groupe
+#    dont un utilisateur depend encore.
+/user/remove [find name=${API_USERNAME}]
+/user/group/remove [find name=gemikrot]
 /user/group/add name=gemikrot policy=read,write,api,rest-api,test \\
-    comment="GeMikrot — lecture/écriture HotSpot et User Manager"
+    comment="GeMikrot - lecture/ecriture HotSpot et User Manager"
 /user/add name=${API_USERNAME} group=gemikrot password="${params.apiPassword}" \\
-    comment="GeMikrot — compte applicatif"
-
-# 4. On prévient le serveur, en lui donnant la clé publique de ce routeur.
-#    Tout est calculé dans la commande elle-même : collées une par une dans le
-#    terminal, des lignes « :local » ne se voient pas l'une l'autre, et la valeur
-#    arriverait vide sans que rien ne le signale.
-/tool/fetch url="${callbackUrl}" http-method=post http-header-field="Content-Type:application/json" http-data=("{\\"publicKey\\":\\"" . [/interface/wireguard/get [find name=${WG_INTERFACE}] public-key] . "\\",\\"identity\\":\\"" . [/system/identity/get name] . "\\"}") output=none
-
-:put "Raccordement envoye. L'acces a l'API reste inchange : il ne sera"
-:put "restreint au tunnel qu'une fois celui-ci verifie, depuis la console."
+    comment="GeMikrot - compte applicatif"
 
 # Ce script ne touche PAS au service www-ssl, volontairement. Restreindre
-# l'API avant d'avoir éprouvé le tunnel a déjà coupé un routeur en essai :
-# « set www-ssl address=... » REMPLACE la liste, et la forme censée y ajouter
-# une entrée l'a effacée à la place. Le resserrage est une étape séparée, que
-# la console propose une fois le tunnel constaté — et qui, à ce moment-là,
-# peut être annulée par le tunnel lui-même.
+# l'API avant d'avoir eprouve le tunnel a deja coupe un routeur en essai :
+# << set www-ssl address=... >> REMPLACE la liste, et la forme censee y ajouter
+# une entree l'a effacee a la place. Le resserrage est une etape separee, que
+# la console propose une fois le tunnel constate - et qui, a ce moment-la,
+# peut etre annulee par le tunnel lui-meme.
+
+:put "Tunnel et compte poses. Envoi de la cle publique au serveur..."
+
+# 4. On previent le serveur, en lui donnant la cle publique de ce routeur.
+#
+#    **En dernier, et rien apres.** /tool/fetch bloque le terminal le temps de
+#    sa tentative. Si l'adresse ci-dessous n'est plus la bonne, il reste sur
+#    << status: connecting >> et **avale les lignes collees a sa suite**, qui
+#    reapparaissent tronquees en erreur de syntaxe. On cherche alors un defaut
+#    de script la ou il n'y a qu'une adresse perimee.
+#
+#    Tout est calcule dans la commande elle-meme : collees une par une dans le
+#    terminal, des lignes << :local >> ne se voient pas l'une l'autre, et la
+#    valeur arriverait vide sans que rien ne le signale.
+/tool/fetch url="${callbackUrl}" http-method=post http-header-field="Content-Type:application/json" http-data=("{\\"publicKey\\":\\"" . [/interface/wireguard/get [find name=${WG_INTERFACE}] public-key] . "\\",\\"identity\\":\\"" . [/system/identity/get name] . "\\"}") output=none
 `;
   }
 }

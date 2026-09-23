@@ -202,6 +202,14 @@ export function EquipePage() {
       <Card title="Les comptes">
         {comptes.isPending ? (
           <TableSkeleton columns={5} />
+        ) : comptes.isError ? (
+          // Sans cette branche, une lecture en échec affichait « Aucun
+          // compte. » — indiscernable d'une équipe vide. On croirait avoir
+          // perdu ses comptes, ou pire, on recréerait ceux qui existent déjà.
+          <ErrorNote onRetry={() => void comptes.refetch()}>
+            La liste des comptes n&apos;a pas pu être lue. Ceux qui existent sont intacts : c&apos;est
+            l&apos;affichage qui a échoué, pas vos comptes.
+          </ErrorNote>
         ) : (
           <Table head={['Adresse', 'Rôle', 'Dernière connexion', 'Créé le', '']} colonnes={false}>
             {(comptes.data ?? []).length === 0 ? (

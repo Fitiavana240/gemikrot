@@ -101,6 +101,13 @@ export interface EnrollmentInvitation {
    * réseau local, et l'échec d'un routeur distant serait muet.
    */
   endpointPrive: boolean;
+  /**
+   * L'adresse annoncee au routeur n'est plus celle de la machine qui repond.
+   *
+   * `null` quand tout va bien, ou quand c'est un nom de domaine : celui-la ne
+   * perime pas.
+   */
+  adressePerimee: { configuree: string; actuelle: string | null } | null;
 }
 
 export interface PendingEnrollment {

@@ -2,7 +2,13 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { networkInterfaces } from 'node:os';
+import { adressesLocales, memeReseau24 } from '../common/adresses-locales.js';
+
+// Re-exporte : `memeReseau24` a longtemps vécu ici, et ses appelants — dont
+// l'epreuve de cet ecran — l'y cherchent encore. Le corps, lui, est partage
+// avec l'enrolement, qui souffre exactement du meme mal : une adresse ecrite
+// en dur dans un fichier qui vit ailleurs.
+export { memeReseau24 };
 import { PrismaService } from '../prisma/prisma.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
@@ -911,32 +917,6 @@ function nettoyer(
     }
   }
   return gardes;
-}
-
-/** Les adresses IPv4 de la machine, cartes internes exclues. */
-function adressesLocales(): string[] {
-  const trouvees: string[] = [];
-  for (const liste of Object.values(networkInterfaces())) {
-    for (const carte of liste ?? []) {
-      if (carte.family === 'IPv4' && !carte.internal) trouvees.push(carte.address);
-    }
-  }
-  return trouvees;
-}
-
-/**
- * Deux adresses sur le même /24 ?
- *
- * Le masque réel n'est pas lu : celui de la console ne dit rien de celui du
- * routeur, et un HotSpot de quartier tient dans un /24. Une supposition, mais
- * une supposition qui ne décide de rien — elle ne fait que **proposer** une
- * adresse, que l'exploitant confirme ou remplace.
- */
-export function memeReseau24(a: string, b: string): boolean {
-  const ta = a.split('.');
-  const tb = b.split('.');
-  if (ta.length !== 4 || tb.length !== 4) return false;
-  return ta[0] === tb[0] && ta[1] === tb[1] && ta[2] === tb[2];
 }
 
 /**

@@ -189,6 +189,8 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | RTR-19 | **Écran PPPoE** : comptes (création, modification, suspension, suppression), profils, sessions, serveurs, bassins d'adresses. La modification n'écrit que les champs touchés, le nom est figé car il identifie le compte, et un mot de passe vide veut dire « ne pas y toucher » | ⭐⭐ | 🟡 | ✅ |
 | RTR-20 | **Génération directe depuis un profil** (« Generate Voucher » de WinBox), côté User Manager comme HotSpot. Profil vérifié avant toute création, échecs partiels nommés plutôt que comptés, 200 par lot au maximum. L'écran dit que ces tickets ne sont pas suivis comme des ventes | ⭐⭐⭐ | 🟡 | ✅ |
 | RTR-21 | **Paiements notés par le routeur** (`/user-manager/payment`). Vide sur ce parc, qui encaisse par Mobile Money : les noms de champs viennent des colonnes de WinBox et **non d'un relevé**, et l'écran le dit | ⭐ | 🟢 | 🟡 |
+| RTR-22 | **La console détecte que son adresse a changé** avant qu'on publie la page captive ou qu'on colle le script d'enrôlement | ⭐⭐⭐ | 🟢 | ✅ livré — deux fois ce bail DHCP a coûté une journée. Les deux écrans partagent désormais la même détection. **Un nom de domaine n'est jamais périmé** : seule une IPv4 écrite en dur se vérifie, et c'est la forme qui pourrit. Le remède durable reste une réservation DHCP, que l'application ne peut pas poser |
+| RTR-23 | **Script d'enrôlement rejouable, sans accent, `fetch` en dernier** | ⭐⭐ | 🟢 | ✅ livré — une seconde exécution rendait sept « already have » indistinguables d'un vrai échec ; `/tool/fetch` au milieu bloquait le terminal et **avalait les lignes suivantes**, qui revenaient tronquées en erreur de syntaxe |
 | RTR-15 | **Menus IP en lecture** : files simples (le débit réellement alloué, client par client), journal du routeur, interfaces avec leurs coupures de lien, services d'administration, DDNS, ARP, serveurs DHCP, **pare-feu filtrage et NAT dans leur ordre d'évaluation**, DNS et entrées statiques, table de routage. **Lecture seule, par décision** : la console montre, WinBox modifie | ⭐⭐ | 🟡 | ✅ |
 | RTR-16 | **Stockage et préparation de User Manager** : mémoire interne, clés USB et leur état de montage, paquets installés, occupation par support, et où vit la base User Manager. Rend un diagnostic ordonné par gravité, avec la commande exacte quand il en existe une — dont la réponse à « pourquoi l'onglet User Manager n'apparaît-il pas dans WinBox » | ⭐⭐⭐ | 🟡 | ✅ |
 | RTR-17 | **Réparations depuis la console**, sans WinBox : allumer le service, activer les profils, programmer l'activation du paquet, annuler une désactivation programmée. **Liste blanche nommée, pas un passe-plat de commandes** — une route exécutant une commande RouterOS arbitraire donnerait à tout ADMIN une exécution de code à distance sur chaque routeur du parc. Le serveur relit l'état après avoir écrit et ne déclare le succès que si le routeur a réellement changé. Redémarrage, déplacement de la base et effacement de fichiers restent affichés comme commandes à coller, jamais comme boutons. **Les trois formes d'écriture éprouvées sur le hAP réel** : constat levé, bouton cliqué, routeur réellement changé, audit écrit, 646 comptes intacts à chaque mesure | ⭐⭐⭐ | 🟡 | ✅ |
@@ -2175,6 +2177,51 @@ ACTIF, « Essai gratuit », un routeur, échéance à J+5, **fin de tolérance
 courriels avec la bonne raison de non-envoi — le SMTP n'est pas activé, rien
 n'est parti. L'exploitant jetable a été effacé, les compteurs sont revenus à
 l'identique.
+
+### 2026-09-23 — L'adresse de la console, écrite dans des fichiers qui vivent ailleurs
+
+Le script d'enrôlement a été collé sur le hAP réel. Il n'a pas marché, et la
+sortie du terminal ne disait rien d'utile : un mur de
+« failure: already have... », un `/tool/fetch` figé sur
+« status: connecting », puis une erreur de syntaxe sur une ligne tronquée.
+Trois symptômes, une seule cause.
+
+**`PUBLIC_BASE_URL` et `WIREGUARD_ENDPOINT_HOST` annonçaient `192.168.88.135`
+quand la console répondait sur `192.168.88.23`.** Le routeur a donc appelé dans
+le vide. C'est **la deuxième fois** que ce bail DHCP coûte une journée : la
+page captive envoyait déjà les clients sur `.250` quand la console était sur
+`.135`. Deux endroits du produit inscrivent l'adresse de la console dans un
+fichier qui vit **ailleurs** — sur le routeur, dans un terminal Winbox — et ni
+l'un ni l'autre ne peut réagir quand elle glisse.
+
+*Et l'échec est muet des deux côtés.* Le client voit « connexion refusée », le
+routeur reste sur « connecting » ; rien ne nomme l'adresse. La détection est
+maintenant partagée entre les deux écrans, et elle ne crie pas au loup sur un
+nom de domaine — seule une adresse IPv4 écrite en dur se vérifie, et c'est
+précisément la forme qui pourrit.
+
+**Le `fetch` bloquait le terminal et avalait la suite.** Il était au milieu du
+script ; les lignes collées après lui sont parties dans son attente et sont
+revenues tronquées en erreur de syntaxe. On cherche alors un défaut de script
+là où il n'y a qu'une adresse périmée. Il est désormais **la dernière ligne**,
+et rien ne le suit.
+
+**Le script n'était pas rejouable.** Une seconde exécution rendait sept
+« already have » où rien ne distinguait l'échec attendu du véritable. Chaque
+étape efface maintenant ce qu'un essai précédent aurait laissé — le compte
+avant son groupe, RouterOS refusant de retirer un groupe dont un utilisateur
+dépend. **Et les accents sont partis** : le terminal Winbox les rend en
+mojibake, et un commentaire illisible fait douter du reste au moment précis où
+l'on demande à quelqu'un de coller des commandes sur son matériel.
+
+*Un troisième point, qui n'est pas un défaut du code* : l'enrôlement avait été
+préparé pendant une prise en main de l'exploitant d'essai. Le routeur de
+production serait donc entré dans le mauvais exploitant. Le bandeau « Vous
+agissez au nom de... » existe pour cela, et il a bien été affiché.
+
+*Et un défaut dans le neuf* : l'écran Équipe affichait « Aucun compte. » quand
+la lecture échouait — indiscernable d'une équipe vide. On croirait avoir perdu
+ses comptes, ou pire, on recréerait ceux qui existent.
 
 ---
 

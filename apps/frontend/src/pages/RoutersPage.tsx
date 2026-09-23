@@ -291,6 +291,38 @@ export function RoutersPage() {
               script.
             </div>
           )}
+          {/* L'adresse a bougé depuis qu'elle a été configurée. Coller le
+              script quand même fait appeler le routeur dans le vide — et
+              l'échec est muet : « status: connecting » jusqu'à expiration, le
+              terminal bloqué, les lignes suivantes avalées, et une erreur de
+              syntaxe sans rapport pour seul symptôme. C'est arrivé ici, un
+              bail DHCP ayant glissé de .135 à .23. */}
+          {invitation.adressePerimee && (
+            <div className="mb-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+              <strong>Ne collez pas ce script : son adresse n&apos;est plus la bonne.</strong> Il
+              fait appeler le routeur sur{' '}
+              <code className="rounded bg-red-100 px-1">
+                {invitation.adressePerimee.configuree}
+              </code>
+              , que cette machine ne porte plus
+              {invitation.adressePerimee.actuelle && (
+                <>
+                  {' '}
+                  — elle répond maintenant sur{' '}
+                  <code className="rounded bg-red-100 px-1">
+                    {invitation.adressePerimee.actuelle}
+                  </code>
+                </>
+              )}
+              .
+              <p className="mt-2">
+                Corrigez <code>PUBLIC_BASE_URL</code> et <code>WIREGUARD_ENDPOINT_HOST</code> dans
+                le fichier <code>.env</code> du serveur, redémarrez-le, puis préparez un nouveau
+                script. Le remède durable est une <strong>réservation DHCP</strong> pour cette
+                machine sur le routeur : sans elle, l&apos;adresse glissera de nouveau.
+              </p>
+            </div>
+          )}
           <pre className="max-h-80 overflow-auto rounded bg-slate-900 p-3 text-xs text-slate-100">
             {invitation.script}
           </pre>
