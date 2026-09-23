@@ -22,6 +22,7 @@ import { UserManagerPage } from './pages/UserManagerPage';
 import { HotspotPage } from './pages/HotspotPage';
 import { TicketPrintPage, TicketTemplatesPage } from './pages/TicketTemplatesPage';
 import { SignupPage } from './pages/SignupPage';
+import { ConfirmationPage } from './pages/ConfirmationPage';
 import { PublicPaymentPage } from './pages/public/PublicPaymentPage';
 import { PlansPage } from './pages/PlansPage';
 import { CustomersPage } from './pages/CustomersPage';
@@ -38,6 +39,9 @@ export function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+          {/* Hors du bloc authentifie comme /login : elle a sa propre mise en
+              page, plein ecran, sans menu ni barre — on n'y fait qu'une chose. */}
+          <Route path="/confirmation" element={<ConfirmationPage />} />
           {/* Page client : hors du bloc authentifié, comme /login. */}
           <Route path="/p/:slug" element={<PublicPaymentPage />} />
           <Route

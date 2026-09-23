@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 import { signupApi, type SignupInput } from '../api/tenants';
 import type { PaymentMethod } from '../api/types';
 import { ApiError } from '../api/client';
 import { CURRENCIES, PROVIDERS } from '../lib/options';
 import { AuthNotice, AuthShell } from '../components/AuthShell';
-import { BrandMark } from '../components/Brand';
 import { Button, FormField, Input, Select } from '../components/ui';
 
 /** Doit rester aligné sur MIN_PASSWORD_LENGTH côté serveur (auth.service.ts). */
@@ -31,12 +31,13 @@ const EMPTY_ACCOUNT: Account = { provider: 'MVOLA', phoneNumber: '', accountName
 
 export function SignupPage() {
   const [step, setStep] = useState(0);
+  const { ouvrirSession } = useAuth();
+  const navigate = useNavigate();
   const [form, setForm] = useState<SignupInput>(EMPTY_FORM);
   const [domains, setDomains] = useState('');
   const [accounts, setAccounts] = useState<Account[]>([EMPTY_ACCOUNT]);
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   function patchAccount(index: number, patch: Partial<Account>) {
@@ -92,7 +93,12 @@ export function SignupPage() {
         domains: domains.split(',').map((d) => d.trim()).filter(Boolean),
         mobileMoneyAccounts: accounts.filter((a) => a.phoneNumber.trim() && a.accountName.trim()),
       });
-      setDone(result.message);
+      // L'inscription connecte et enchaine sur la confirmation : le code
+      // arrive dans la minute, et c'est le seul moment ou la boite est encore
+      // ouverte a cote. Le montrer plus tard, dans un bandeau au milieu de la
+      // console, c'est le montrer a quelqu'un qui a deja referme sa boite.
+      ouvrirSession(result.accessToken, result.user);
+      navigate('/confirmation', { replace: true });
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -104,41 +110,11 @@ export function SignupPage() {
     }
   }
 
-  if (done) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-5 py-10">
-        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <BrandMark className="mx-auto h-12 w-12" />
-          {/* << Inscription enregistree >> etait exact quand il fallait
-              attendre une validation. Le compte s'ouvre maintenant seul :
-              annoncer l'enregistrement laisserait croire qu'on attend encore. */}
-          <h1 className="mt-5 text-xl font-semibold tracking-tight text-slate-900">
-            Votre essai a commencé
-          </h1>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">{done}</p>
-          <div className="mt-6 rounded-lg bg-slate-50 px-4 py-3 text-left text-sm">
-            <p className="font-medium text-slate-700">Vos identifiants</p>
-            <p className="mt-1 break-all font-mono text-xs text-slate-600">{form.email.trim()}</p>
-            <p className="mt-1.5 text-slate-500">À utiliser dès maintenant.</p>
-          </div>
-          {/* Un bouton, et non un lien discret : il n'attend plus rien, il
-              n'a plus qu'a entrer. */}
-          <Link
-            to="/login"
-            className="mt-6 inline-block rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-700"
-          >
-            Se connecter
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <AuthShell
       wide
       title="Créer un compte exploitant"
-      subtitle="Trois étapes, puis validation par la plateforme."
+      subtitle="Trois étapes, puis un code de confirmation par courriel."
     >
       <ol className="mb-8 grid grid-cols-3 gap-2">
         {STEPS.map((item, index) => {

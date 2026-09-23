@@ -95,19 +95,33 @@ describe("l'inscription", () => {
     expect(res.essaiJusquAu).toBeTruthy();
   });
 
-  it('prévient les comptes de la plateforme', async () => {
-    // Le compte s'ouvre seul, mais savoir qui arrive reste le travail du
-    // SUPER_ADMIN — et il n'ouvre pas l'écran des exploitants chaque matin.
+  it('ne prévient pas encore la plateforme', async () => {
+    /**
+     * L'avis attend que l'adresse soit confirmée, et c'est tout l'objet du
+     * code : annoncer un exploitant qu'on ne sait pas joindre n'annonce rien
+     * d'utile — on ne peut ni lui écrire, ni lui envoyer son reçu, ni le
+     * prévenir de son échéance. Une inscription abandonnée en chemin
+     * encombrerait la boîte du SUPER_ADMIN sans qu'il puisse rien en faire.
+     */
     const { service: s, envoyer } = service({ superAdmins: ['plateforme@exemple.mg'] });
 
     await s.signup(dto);
 
-    // Deux messages : l'avis a la plateforme, et le code a l'inscrit.
     const types = envoyer.mock.calls.map((c) => c[0].type);
-    expect(types).toContain('inscription-exploitant');
     expect(types).toContain('confirmation-adresse');
-    const avis = envoyer.mock.calls.find((c) => c[0].type === 'inscription-exploitant')![0];
-    expect(avis.destinataire).toBe('plateforme@exemple.mg');
+    expect(types).not.toContain('inscription-exploitant');
+  });
+
+  it('ouvre la session, pour que la confirmation soit authentifiée', async () => {
+    // Redemander a l'instant un mot de passe qu'on vient de choisir serait
+    // absurde, et le code ne doit valoir que pour un compte deja prouve.
+    const { service: s } = service();
+
+    const res = await s.signup(dto);
+
+    expect(res.accessToken).toBeTruthy();
+    expect(res.user.emailVerifie).toBe(false);
+    expect(res.user.email).toBe('neuf@exemple.mg');
   });
 
   it('inscrit quand même si le courriel échoue', async () => {
@@ -152,5 +166,92 @@ describe('le code de confirmation', () => {
     const tx = (s as never as { prisma: { $transaction: { mock: { calls: unknown[][] } } } }).prisma;
     expect(tx.$transaction).toHaveBeenCalled();
     expect(creerTenant).toHaveBeenCalled();
+  });
+});
+
+/**
+ * La confirmation, et ce qu'elle declenche.
+ *
+ * C'est elle qui previent la plateforme : le SUPER_ADMIN apprend une arrivee
+ * **joignable**, la seule sorte qui l'interesse.
+ */
+function compte(options: { role?: string; code?: string; envoyeIlYA?: number; verifie?: boolean } = {}) {
+  const envoyer = vi.fn(
+    async (_m: { destinataire: string; type: string; sujet: string; texte: string }) => undefined,
+  );
+  // Typé par son argument : sans cela `mock.calls[0][0]` ne compile pas, et
+  // c'est justement ce qu'on veut inspecter.
+  const update = vi.fn(async (_args: { data: Record<string, unknown> }) => ({}));
+  const prisma: any = {
+    adminUser: {
+      findUnique: vi.fn(async () => ({
+        id: 'a1',
+        email: 'neuf@exemple.mg',
+        role: options.role ?? 'ADMIN',
+        tenantId: 't1',
+        tenant: { id: 't1', name: 'Wifi Toliara', wifiName: 'WIFI-TOLIARA', slug: 'wifi-toliara' },
+        emailVerifiedAt: options.verifie ? new Date() : null,
+        emailCode: options.code ?? '123456',
+        emailCodeSentAt: new Date(Date.now() - (options.envoyeIlYA ?? 0)),
+      })),
+      findMany: vi.fn(async () => [{ email: 'plateforme@exemple.mg' }]),
+      update,
+    },
+  };
+  const s = new AuthService(
+    prisma,
+    { signAsync: vi.fn(async () => 'jeton') } as never,
+    { log: vi.fn(async () => undefined) } as never,
+    { verifier: vi.fn(), echec: vi.fn() } as never,
+    { envoyerDeLaPlateforme: envoyer } as never,
+  );
+  return { service: s, envoyer, update };
+}
+
+describe('la confirmation', () => {
+  it('previent la plateforme une fois l\u2019adresse prouvee', async () => {
+    const { service: s, envoyer } = compte();
+
+    await s.confirmerCourriel('a1', '123456');
+
+    const avis = envoyer.mock.calls.find((c) => c[0].type === 'inscription-exploitant');
+    expect(avis).toBeTruthy();
+    expect(avis![0].destinataire).toBe('plateforme@exemple.mg');
+    expect(avis![0].texte).toMatch(/Wifi Toliara/);
+  });
+
+  it('efface le code des qu\u2019il a servi', async () => {
+    // Un code encore valable apres usage n'est plus une preuve, c'est un
+    // second mot de passe qui traine.
+    const { service: s, update } = compte();
+
+    await s.confirmerCourriel('a1', '123456');
+
+    const data = update.mock.calls[0][0].data;
+    expect(data.emailVerifiedAt).toBeInstanceOf(Date);
+    expect(data.emailCode).toBeNull();
+  });
+
+  it('refuse un code qui ne correspond pas', async () => {
+    const { service: s, update } = compte();
+
+    await expect(s.confirmerCourriel('a1', '000000')).rejects.toThrow(/ne correspond pas/);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('refuse un code de plus d\u2019une heure, en disant quoi faire', async () => {
+    const { service: s } = compte({ envoyeIlYA: 2 * 60 * 60 * 1000 });
+
+    await expect(s.confirmerCourriel('a1', '123456')).rejects.toThrow(/expiré/);
+  });
+
+  it('ne previent personne pour un compte d\u2019equipe', async () => {
+    // Un vendeur qui confirme son adresse ne declenche pas un avis
+    // d'inscription pour un exploitant qui existe depuis des mois.
+    const { service: s, envoyer } = compte({ role: 'OPERATOR' });
+
+    await s.confirmerCourriel('a1', '123456');
+
+    expect(envoyer.mock.calls.map((c) => c[0].type)).not.toContain('inscription-exploitant');
   });
 });

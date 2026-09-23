@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { PaymentMethod } from './types';
+import type { AuthUser, PaymentMethod } from './types';
 
 export type TenantStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED';
 
@@ -100,10 +100,15 @@ export const tenantsApi = {
 
 export const signupApi = {
   signup: (input: SignupInput) =>
-    api.post<{ tenantId: string; status: TenantStatus; message: string; essaiJusquAu: string }>(
-      '/auth/signup',
-      input,
-    ),
+    api.post<{
+      tenantId: string;
+      status: TenantStatus;
+      message: string;
+      essaiJusquAu: string;
+      /** L'inscription connecte : la page de confirmation est authentifiee. */
+      accessToken: string;
+      user: AuthUser;
+    }>('/auth/signup', input),
 };
 
 /**

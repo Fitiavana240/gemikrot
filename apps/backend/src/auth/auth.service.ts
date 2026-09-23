@@ -81,6 +81,9 @@ export class AuthService {
    * compte a dormi une journee entiere. Le compte est desormais ouvert tout
    * seul, mais savoir qui arrive reste le travail du SUPER_ADMIN.
    *
+   * **Appele a la confirmation de l'adresse**, jamais a l'inscription : une
+   * arrivee qu'on ne sait pas joindre n'est pas une arrivee.
+   *
    * **Depuis le serveur de la plateforme.** La premiere version empruntait le
    * SMTP du nouvel exploitant — qui n'en a evidemment aucun a la seconde ou
    * il s'inscrit : aucun avis n'est jamais parti. La plateforme a desormais
@@ -366,16 +369,33 @@ export class AuthService {
       payloadDiff: { organizationName: dto.organizationName, currency: dto.currency },
     });
 
-    // Les comptes de la plateforme sont prevenus : une inscription qui
-    // n'atteint personne est un client qu'on ne rappellera jamais.
-    await this.prevenirLaPlateforme(created.tenant);
+    // **L'avis a la plateforme ne part pas ici.** Il attend que l'adresse
+    // soit confirmee : annoncer un exploitant qu'on ne sait pas joindre
+    // n'annonce rien d'utile, et une inscription abandonnee en chemin
+    // encombrerait la boite du SUPER_ADMIN sans qu'il puisse rien en faire.
     await this.envoyerLeCode(dto.email, code);
 
+    /**
+     * L'inscription connecte, et enchaine sur la confirmation.
+     *
+     * Renvoyer un jeton evite de redemander a l'instant un mot de passe qu'on
+     * vient de choisir, et surtout cela rend la page de confirmation
+     * authentifiee : le code ne vaut alors que pour un compte deja prouve,
+     * et non pour une adresse que n'importe qui pourrait citer.
+     */
     return {
       tenantId: created.tenant.id,
       status: created.tenant.status,
-      message: `Compte créé. Votre essai gratuit de ${ESSAI_JOURS} jours commence maintenant : connectez-vous et raccordez votre routeur.`,
+      message: `Compte créé. Votre essai gratuit de ${ESSAI_JOURS} jours commence maintenant.`,
       essaiJusquAu: finDEssai.toISOString(),
+      accessToken: await this.signToken(created.admin),
+      user: {
+        id: created.admin.id,
+        email: created.admin.email,
+        role: created.admin.role,
+        tenantId: created.admin.tenantId,
+        emailVerifie: false,
+      },
     };
   }
 
@@ -423,7 +443,10 @@ export class AuthService {
    * n'est plus une preuve, c'est un second mot de passe qui traine.
    */
   async confirmerCourriel(adminUserId: string, code: string): Promise<{ confirme: boolean }> {
-    const compte = await this.prisma.adminUser.findUnique({ where: { id: adminUserId } });
+    const compte = await this.prisma.adminUser.findUnique({
+      where: { id: adminUserId },
+      include: { tenant: true },
+    });
     if (!compte) throw new UnauthorizedException('Compte introuvable');
     if (compte.emailVerifiedAt) return { confirme: true };
 
@@ -450,6 +473,22 @@ export class AuthService {
       targetType: 'AdminUser',
       targetId: adminUserId,
     });
+
+    /**
+     * **C'est ici que la plateforme apprend l'inscription**, et pas avant.
+     *
+     * Annoncer un exploitant dont l'adresse n'a jamais repondu n'annonce rien
+     * d'utile : on ne peut ni lui ecrire, ni lui envoyer son recu, ni le
+     * prevenir de son echeance. Le SUPER_ADMIN est donc averti d'une arrivee
+     * *joignable*, ce qui est la seule sorte qui l'interesse.
+     *
+     * Le role est verifie : un vendeur qui confirme son adresse d'equipe ne
+     * declenche pas un avis d'inscription pour un exploitant qui existe
+     * depuis des mois.
+     */
+    if (compte.role === AdminRole.ADMIN && compte.tenant) {
+      await this.prevenirLaPlateforme(compte.tenant);
+    }
     return { confirme: true };
   }
 

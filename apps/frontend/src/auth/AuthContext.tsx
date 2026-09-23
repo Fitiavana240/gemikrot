@@ -13,6 +13,14 @@ interface AuthContextValue {
   /** VIEWER n'a jamais le droit d'écrire (Section 28). */
   canWrite: boolean;
   /**
+   * Ouvre une session a partir d'un jeton deja obtenu.
+   *
+   * L'inscription en rend un : redemander a l'instant un mot de passe qu'on
+   * vient de choisir serait absurde, et la page de confirmation a besoin
+   * d'etre authentifiee pour que le code ne vaille que pour ce compte-la.
+   */
+  ouvrirSession: (accessToken: string, utilisateur: AuthUser) => void;
+  /**
    * L'adresse vient d'être confirmée.
    *
    * L'état local suit tout de suite : attendre la prochaine connexion
@@ -49,6 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const res = await loginRequest(email, password);
         setToken(res.accessToken);
         setUser(res.user);
+      },
+      ouvrirSession: (accessToken, utilisateur) => {
+        setToken(accessToken);
+        setUser(utilisateur);
       },
       confirmerAdresse: () => setUser((u) => (u ? { ...u, emailVerifie: true } : u)),
       logout: () => {
