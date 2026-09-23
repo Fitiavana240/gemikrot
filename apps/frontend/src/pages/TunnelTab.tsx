@@ -4,6 +4,7 @@ import { formatDuree, formatOctets } from '../api/mikrotik-tabs';
 import { useRouterSelection } from '../routers/RouterContext';
 import { PanneDuRouteur } from '../components/ListeDuRouteur';
 import { Badge, Card, Table } from '../components/ui';
+import { AideRouteur, AIDE_TUNNEL } from '../components/AideRouteur';
 
 /**
  * Au-delà de trois minutes, le pair ne répond plus.
@@ -172,6 +173,22 @@ export function TunnelTab() {
           </div>
         </Card>
       )}
+
+      {/* Les lectures qui repondent a la seule question qu'on se pose ici :
+          << est-ce que le tunnel marche ? >>. WireGuard n'a pas d'etat
+          << connecte >>, et la poignee de main est ce qu'on ne pense jamais a
+          regarder. */}
+      <AideRouteur
+        titre="Vérifier le tunnel depuis le routeur"
+        lignes={AIDE_TUNNEL}
+        note={
+          <>
+            <strong>Si le tunnel ne monte pas, vos clients ne sont pas coupés.</strong> Le HotSpot
+            et User Manager continuent de tourner seuls sur le routeur : c&apos;est la console qui
+            perd la main, pas le Wi-Fi.
+          </>
+        }
+      />
     </div>
   );
 }

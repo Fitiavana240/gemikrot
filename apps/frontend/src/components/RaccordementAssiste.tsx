@@ -4,6 +4,29 @@ import { enrollmentsApi, type RaccordementAssiste as Resultat, type SondageRoute
 import { ApiError } from '../api/client';
 import { Modale } from './Modale';
 import { Button, FormField, Input } from './ui';
+import { AideRouteur, AIDE_RACCORDEMENT } from './AideRouteur';
+
+/**
+ * Ce qui ne se lit pas sur le routeur, et qu'on chercherait pourtant.
+ *
+ * Le mot de passe en premier : RouterOS ne le rend jamais en clair, pas meme
+ * a `admin`, et ne pas le dire envoie chercher une commande qui n'existe pas.
+ */
+const NOTE_RACCORDEMENT = (
+  <>
+    <p>
+      <strong>Le mot de passe ne se retrouve pas.</strong> Aucun routeur ne l&apos;affiche, même
+      à son administrateur. Si vous l&apos;avez perdu, redéfinissez-le dans Winbox
+      (System &gt; Users), puis revenez ici.
+    </p>
+    <p className="mt-1.5">
+      <strong>Le service est éteint ?</strong> Activez-le dans IP &gt; Services en
+      double-cliquant sur <code>www-ssl</code>, ou par{' '}
+      <code>/ip service enable www-ssl</code> — c&apos;est la seule commande de cette page qui
+      écrit sur votre routeur.
+    </p>
+  </>
+);
 
 /**
  * Raccorder un routeur sans coller une seule ligne dans Winbox.
@@ -238,6 +261,10 @@ export function RaccordementAssisteModale({
           {erreur}
         </div>
       )}
+
+      {/* L'aide en bas du formulaire, repliee : celui qui sait deja n'a pas a
+          la lire, celui qui cherche n'a pas a quitter l'ecran. */}
+      <AideRouteur lignes={AIDE_RACCORDEMENT} note={NOTE_RACCORDEMENT} />
 
       {sondage && (
         <div className="mt-3 space-y-3">

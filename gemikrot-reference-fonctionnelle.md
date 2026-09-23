@@ -191,6 +191,7 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | RTR-21 | **Paiements notés par le routeur** (`/user-manager/payment`). Vide sur ce parc, qui encaisse par Mobile Money : les noms de champs viennent des colonnes de WinBox et **non d'un relevé**, et l'écran le dit | ⭐ | 🟢 | 🟡 |
 | RTR-22 | **La console détecte que son adresse a changé** avant qu'on publie la page captive ou qu'on colle le script d'enrôlement | ⭐⭐⭐ | 🟢 | ✅ livré — deux fois ce bail DHCP a coûté une journée. Les deux écrans partagent désormais la même détection. **Un nom de domaine n'est jamais périmé** : seule une IPv4 écrite en dur se vérifie, et c'est la forme qui pourrit. Le remède durable reste une réservation DHCP, que l'application ne peut pas poser |
 | RTR-24 | **Raccordement assisté** : la console pose le tunnel et le compte dédié elle-même, sans script à coller | ⭐⭐⭐ | 🟢 | ✅ livré — possible pour une raison précise : **au premier raccordement, l'exploitant est sur le même réseau que son routeur**, il n'a pas encore besoin du tunnel pour l'atteindre. **Le mot de passe administrateur ne survit pas à l'appel** : ni en base, ni au journal, ni dans la réponse. Ce qui reste est `gemikrot-api`, aux droits limités, dont le mot de passe est fabriqué par le serveur. Le script reste offert — il est transparent, et c'est le seul recours quand le routeur n'est pas sur le même réseau |
+| RTR-26 | **« Où trouver ça ? »** : sous chaque formulaire de raccordement et de tunnel, ce qu'il faut, le menu Winbox et la commande à copier | ⭐⭐ | 🟢 | ✅ livré — l'exploitant sait son mot de passe et rien d'autre : le reste, il le devine. **Toutes les commandes lisent**, aucune n'écrit, et c'est dit — qui hésite à taper une commande sur le routeur qui nourrit ses clients a raison d'hésiter. Replié par défaut : l'aide qui s'impose à qui sait déjà devient du bruit |
 | RTR-25 | **Sondage avant écriture** : nom, modèle, version et certificat relevés sans rien poser | ⭐⭐ | 🟢 | ✅ livré — RouterOS 6 n'a ni WireGuard ni API REST. Le découvrir après avoir créé un compte laisserait une configuration à moitié écrite sur le matériel de quelqu'un. « Ne répond pas » et « refuse le mot de passe » sont deux messages distincts : les remèdes n'ont rien à voir |
 | RTR-23 | **Script d'enrôlement rejouable, sans accent, `fetch` en dernier** | ⭐⭐ | 🟢 | ✅ livré — une seconde exécution rendait sept « already have » indistinguables d'un vrai échec ; `/tool/fetch` au milieu bloquait le terminal et **avalait les lignes suivantes**, qui revenaient tronquées en erreur de syntaxe |
 | RTR-15 | **Menus IP en lecture** : files simples (le débit réellement alloué, client par client), journal du routeur, interfaces avec leurs coupures de lien, services d'administration, DDNS, ARP, serveurs DHCP, **pare-feu filtrage et NAT dans leur ordre d'évaluation**, DNS et entrées statiques, table de routage. **Lecture seule, par décision** : la console montre, WinBox modifie | ⭐⭐ | 🟡 | ✅ |
@@ -2265,6 +2266,30 @@ qui serait une seconde architecture entière — ni WireGuard ni API REST avant
 la 7 — et que rien n'appelle sur ce parc ; et l'API binaire 8728 sans TLS, qui
 ferait circuler les identifiants du routeur en clair là où REST sur 443 avec
 certificat épinglé fonctionne déjà.
+
+### 2026-09-23 — « Où est-ce que je trouve ça ? »
+
+Les formulaires demandent une adresse, un port, une version, un nom de domaine.
+L'exploitant sait son mot de passe et rien d'autre : le reste, il le devine.
+Le champ reste vide, ou pire il se remplit d'une valeur plausible et fausse —
+c'est ainsi qu'on passe une heure sur un port qui n'était pas le bon.
+
+Chaque écran de raccordement et l'onglet Tunnel portent désormais, en bas, ce
+qu'il faut chercher, **le menu Winbox et la commande**. Les deux chemins, parce
+que les gens ne travaillent pas de la même façon : le menu pour qui clique, la
+commande pour qui tape. Elle se copie d'un bouton — la retaper dans un terminal
+est la meilleure façon d'y glisser une faute.
+
+**Toutes ces commandes lisent, aucune n'écrit, et c'est écrit.** Quelqu'un qui
+hésite à taper une commande sur le routeur qui nourrit ses clients a
+parfaitement raison d'hésiter ; la seule qui modifie quoi que ce soit
+(`/ip/service enable www-ssl`) est signalée comme telle, à part.
+
+*Un défaut évité de justesse* : `print stats` n'existe pas pour les pairs
+WireGuard. La commande aurait échoué sous les yeux de quelqu'un venu chercher
+de l'aide, et une aide qui se trompe est pire que pas d'aide — elle fait
+douter de tout le reste de l'écran. Les deux lectures ont fusionné sur
+`print detail`, qui porte la poignée de main **et** les compteurs.
 
 ---
 

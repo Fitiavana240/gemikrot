@@ -14,6 +14,7 @@ import { ApiError } from '../api/client';
 import { Badge, Button, Card, FormField, Input, PageHeader, Table } from '../components/ui';
 import { Modale } from '../components/Modale';
 import { RaccordementAssisteModale } from '../components/RaccordementAssiste';
+import { AideRouteur, AIDE_RACCORDEMENT } from '../components/AideRouteur';
 
 export function RoutersPage() {
   const { canWrite } = useAuth();
@@ -238,6 +239,20 @@ export function RoutersPage() {
             </FormField>
             <button type="submit" className="hidden" aria-hidden />
           </form>
+
+          {/* Le script se colle dans Winbox : autant y donner de quoi
+              verifier que le routeur est pret a le recevoir. */}
+          <AideRouteur
+            titre="Vérifier que le routeur est prêt"
+            lignes={AIDE_RACCORDEMENT}
+            note={
+              <>
+                Le script cree l&apos;interface WireGuard, une route, un pair et un compte dedie.
+                Il est <strong>rejouable</strong> : s&apos;il a deja tourne, il efface d&apos;abord
+                ce qu&apos;il avait pose.
+              </>
+            }
+          />
         </Modale>
       )}
 
