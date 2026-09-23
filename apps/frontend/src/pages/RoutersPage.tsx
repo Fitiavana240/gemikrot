@@ -16,6 +16,67 @@ import { Modale } from '../components/Modale';
 import { RaccordementAssisteModale } from '../components/RaccordementAssiste';
 import { AideRouteur, AIDE_RACCORDEMENT } from '../components/AideRouteur';
 
+/**
+ * Combien de temps ce script vaut-il encore.
+ *
+ * Une heure fixe — « valable jusqu'à 19:43 » — demande de regarder sa montre,
+ * et personne ne la regarde. Passé le délai, le collage répond **Status 404**
+ * sur le routeur, sans un mot d'explication, alors que le tunnel et le compte
+ * ont bien été posés. C'est arrivé ici, et on a cherché la faute dans
+ * l'adresse, qui était juste.
+ *
+ * Préparer un nouveau script annule le précédent : c'est dit, parce que garder
+ * deux scripts ouverts et coller le mauvais produit exactement le même 404.
+ */
+function CompteARebours({ expiresAt }: { expiresAt: string }) {
+  const [restant, setRestant] = useState(() =>
+    Math.max(0, new Date(expiresAt).getTime() - Date.now()),
+  );
+
+  useEffect(() => {
+    const t = setInterval(
+      () => setRestant(Math.max(0, new Date(expiresAt).getTime() - Date.now())),
+      1000,
+    );
+    return () => clearInterval(t);
+  }, [expiresAt]);
+
+  const minutes = Math.floor(restant / 60_000);
+  const secondes = Math.floor((restant % 60_000) / 1000);
+  const perime = restant === 0;
+  const presse = restant < 5 * 60_000;
+
+  return (
+    <div
+      className={`mb-3 rounded-lg border px-3 py-2 text-sm ${
+        perime
+          ? 'border-red-300 bg-red-50 text-red-900'
+          : presse
+            ? 'border-amber-300 bg-amber-50 text-amber-900'
+            : 'border-slate-200 bg-slate-50 text-slate-700'
+      }`}
+    >
+      {perime ? (
+        <>
+          <strong>Ce script a expiré.</strong> Le coller maintenant répondra
+          <code className="mx-1 rounded bg-red-100 px-1">Status 410</code> sur le routeur.
+          Préparez-en un nouveau : le tunnel et le compte déjà posés seront simplement repris,
+          rien ne sera fait en double.
+        </>
+      ) : (
+        <>
+          Valable encore{' '}
+          <strong>
+            {minutes} min {String(secondes).padStart(2, '0')} s
+          </strong>
+          . Passé ce délai, le collage répondra <code>Status 410</code> sur le routeur sans autre
+          explication. <strong>Préparer un nouveau script annule celui-ci.</strong>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function RoutersPage() {
   const { canWrite } = useAuth();
   const queryClient = useQueryClient();
@@ -300,9 +361,14 @@ export function RoutersPage() {
       {invitation && (
         <Card title={`Script pour « ${invitation.label} »`}>
           <p className="mb-2 text-sm text-slate-600">
-            Adresse attribuée dans le tunnel : <code>{invitation.tunnelAddress}</code>. Valable
-            jusqu'à {new Date(invitation.expiresAt).toLocaleTimeString('fr-FR')}.
+            Adresse attribuée dans le tunnel : <code>{invitation.tunnelAddress}</code>.
           </p>
+          {/* Le compte à rebours plutôt qu'une heure fixe : « valable jusqu'à
+              19:43 » demande de regarder sa montre, et on ne la regarde pas.
+              C'est la panne la plus courante du parcours — un script collé
+              après coup répond « Status 404 » sur le routeur, sans un mot
+              d'explication, alors que tout s'est bien passé. */}
+          <CompteARebours expiresAt={invitation.expiresAt} />
           <p className="mb-3 text-sm text-amber-700">
             Ce script contient un mot de passe. Il n'est affiché qu'une fois : si vous quittez
             cette page, il faudra en préparer un autre.

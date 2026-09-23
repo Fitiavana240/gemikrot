@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, GoneException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { RouterCredentialsService } from './router-credentials.service.js';
@@ -156,9 +156,12 @@ describe('RouterEnrollmentService', () => {
       expect(router.host).toBe(invitation.tunnelAddress);
       expect(router.tunnelPublicKey).toBe(routerKey('b'));
 
-      // Rejouer le script ne doit pas créer un second routeur.
+      // Rejouer le script ne doit pas créer un second routeur. **410 et non
+      // 404** : le jeton a existé, il a servi. `/tool/fetch` n'affiche que le
+      // code, et « 404 Not Found » envoyait chercher une faute de frappe dans
+      // une adresse qui était juste.
       await expect(service.consume(token, { publicKey: routerKey('b') })).rejects.toBeInstanceOf(
-        NotFoundException,
+        GoneException,
       );
     });
 
@@ -170,14 +173,20 @@ describe('RouterEnrollmentService', () => {
         data: { expiresAt: new Date(Date.now() - 1000) },
       });
 
-      await expect(service.consume(token, { publicKey: routerKey('c') })).rejects.toBeInstanceOf(
-        NotFoundException,
+      // Périmé, donc **410 Gone**, avec de quoi agir : le tunnel et le compte
+      // sont posés sur le routeur, il ne manque que l'avis au serveur.
+      await expect(service.consume(token, { publicKey: routerKey('c') })).rejects.toThrow(
+        GoneException,
+      );
+      await expect(service.consume(token, { publicKey: routerKey('c') })).rejects.toThrow(
+        /Préparez-en un nouveau/,
       );
     });
 
     it('refuse un jeton inventé, sans rien dire de plus', async () => {
-      // Même réponse qu'un jeton expiré ou déjà servi : rien ne doit se
-      // distinguer en tâtonnant.
+      // Inconnu : 404, et rien de plus. Distinguer « périmé » de « inconnu »
+      // ne donne rien à qui tâtonne — savoir qu'un jeton a expiré suppose de
+      // l'avoir eu — mais épargne un faux diagnostic à qui l'avait.
       await expect(
         service.consume('jeton-invente', { publicKey: routerKey('d') }),
       ).rejects.toBeInstanceOf(NotFoundException);

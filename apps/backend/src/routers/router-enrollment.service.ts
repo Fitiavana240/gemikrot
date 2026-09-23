@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  GoneException,
   Injectable,
   Logger,
   NotFoundException,
@@ -195,10 +196,33 @@ export class RouterEnrollmentService {
       where: { tokenHash: hashToken(token) },
     });
 
-    // Un jeton inconnu, déjà servi ou périmé donnent la même réponse : rien
-    // ne doit permettre de distinguer les trois en tâtonnant.
-    if (!enrollment || enrollment.consumedAt || enrollment.expiresAt.getTime() <= Date.now()) {
-      throw new NotFoundException("Jeton d'enrôlement inconnu ou expiré");
+    if (!enrollment) {
+      // Inconnu : 404. Deviner reste hors d'atteinte — 256 bits d'aléa — et
+      // c'est aussi ce que voit un script dont l'invitation a été effacée
+      // parce qu'elle avait expiré.
+      throw new NotFoundException("Jeton d'enrôlement inconnu");
+    }
+
+    /**
+     * Connu mais périmé ou déjà servi : **410 Gone**, et non 404.
+     *
+     * Les trois cas rendaient le même refus, pour ne pas les distinguer en
+     * tâtonnant. La précaution ne protégeait rien : qui sait qu'un jeton a
+     * expiré le détenait déjà. Et elle coûtait cher — `/tool/fetch` n'affiche
+     * que le code, l'exploitant lisait « 404 Not Found » sur un routeur où
+     * tout s'était pourtant bien passé, et cherchait une faute de frappe dans
+     * une adresse qui était juste. Relevé sur ce parc.
+     */
+    if (enrollment.consumedAt) {
+      throw new GoneException(
+        "Ce script a déjà servi. Le routeur est raccordé : rien de plus à faire.",
+      );
+    }
+    if (enrollment.expiresAt.getTime() <= Date.now()) {
+      throw new GoneException(
+        "Ce script a expiré. Préparez-en un nouveau depuis la console et recollez-le : " +
+          "le tunnel et le compte déjà posés seront simplement repris.",
+      );
     }
 
     if (!/^[A-Za-z0-9+/]{42}[A-Za-z0-9+/=]{2}$/.test(body.publicKey)) {
@@ -409,6 +433,12 @@ export class RouterEnrollmentService {
 #    << status: connecting >> et **avale les lignes collees a sa suite**, qui
 #    reapparaissent tronquees en erreur de syntaxe. On cherche alors un defaut
 #    de script la ou il n'y a qu'une adresse perimee.
+#
+#    **Si vous lisez << Status 404 >> ou << Status 410 >> ci-dessous**, le
+#    script est perime : il ne vaut que 30 minutes, et preparer un nouveau
+#    script annule le precedent. Le tunnel et le compte sont bien poses sur ce
+#    routeur, il ne manque que l'avis au serveur : regenerez un script depuis
+#    la console et recollez-le, rien ne sera fait en double.
 #
 #    Tout est calcule dans la commande elle-meme : collees une par une dans le
 #    terminal, des lignes << :local >> ne se voient pas l'une l'autre, et la
