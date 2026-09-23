@@ -1,4 +1,5 @@
 import {
+  Logger,
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -15,6 +16,11 @@ import type { LoginDto } from './dto/login.dto.js';
 import type { SignupDto } from './dto/signup.dto.js';
 import type { ChangePasswordDto } from './dto/change-password.dto.js';
 import { reserveTenantSlug } from '../tenants/tenant-slug.util.js';
+import { ESSAI_JOURS, JOUR_MS, offreParCode } from '../tenants/offres-plateforme.js';
+import { CourrielService } from '../courriel/courriel.service.js';
+
+/** L'offre d'essai du catalogue, resolue une fois. */
+const ESSAI = offreParCode('ESSAI')!;
 
 export interface LoginResult {
   accessToken: string;
@@ -26,12 +32,80 @@ export const MIN_PASSWORD_LENGTH = 6;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly audit: AuditService,
     private readonly throttle: LoginThrottleService,
+    /**
+     * Facultatif, et il faut qu'il le soit.
+     *
+     * Le rendre obligatoire ferait d'un serveur SMTP une condition pour
+     * s'inscrire : un exploitant qui ne peut pas creer son compte parce que
+     * la plateforme n'a pas configure son courriel serait un client perdu
+     * pour une raison qui ne le regarde pas.
+     */
+    private readonly courriel?: CourrielService,
   ) {}
+
+  /**
+   * Previent la plateforme qu'un exploitant vient de s'inscrire.
+   *
+   * Sans cela, une inscription n'atteint personne : elle attend qu'on pense a
+   * ouvrir l'ecran des exploitants. C'est arrive sur cette installation — un
+   * compte a dormi une journee entiere. Le compte est desormais ouvert tout
+   * seul, mais savoir qui arrive reste le travail du SUPER_ADMIN.
+   *
+   * `tenantId` est celui du nouvel exploitant : c'est son SMTP qui portera le
+   * message, faute d'en avoir un a l'echelle de la plateforme. S'il n'en a
+   * pas encore — et il n'en a jamais a la seconde ou il s'inscrit — rien ne
+   * part, la tentative est tracee, et la cloche du SUPER_ADMIN prend le
+   * relais. Elle, au moins, ne depend d'aucun reglage.
+   */
+  private async prevenirLaPlateforme(tenant: {
+    id: string;
+    name: string;
+    wifiName: string;
+    slug: string;
+  }): Promise<void> {
+    if (!this.courriel) return;
+    try {
+      const comptes = await this.prisma.adminUser.findMany({
+        where: { role: AdminRole.SUPER_ADMIN },
+        select: { email: true },
+      });
+      for (const compte of comptes) {
+        await this.courriel.envoyer({
+          tenantId: tenant.id,
+          destinataire: compte.email,
+          sujet: `Nouvel exploitant : ${tenant.name}`,
+          texte:
+            `Un exploitant vient de s'inscrire et son essai gratuit de ${ESSAI_JOURS} jours a commence.
+
+` +
+            `Exploitant : ${tenant.name}
+` +
+            `Reseau Wi-Fi : ${tenant.wifiName}
+` +
+            `Adresse publique : /p/${tenant.slug}
+
+` +
+            `Il peut se connecter des maintenant. A l'echeance, la vente se ferme ; ses clients, eux, gardent leur acces.
+
+` +
+            `— GeMikrot`,
+          type: 'inscription-exploitant',
+        });
+      }
+    } catch (e) {
+      // Trace et oublie : prevenir est un accessoire, inscrire ne l'est pas.
+      this.logger.warn(
+        `Avertissement de la plateforme impossible : ${e instanceof Error ? e.message : e}`,
+      );
+    }
+  }
 
   async login(dto: LoginDto, ipAddress?: string): Promise<LoginResult> {
     // Avant toute lecture : inutile de consulter la base pour un appelant
@@ -189,6 +263,10 @@ export class AuthService {
       throw new ConflictException('Un compte existe déjà avec cet email');
     }
 
+    // Pose avant la transaction : la meme date pour l'echeance et la fin de
+    // tolerance, sans risque qu'un ecart de millisecondes les separe.
+    const finDEssai = new Date(Date.now() + ESSAI_JOURS * JOUR_MS);
+
     const slug = await reserveTenantSlug(
       dto.organizationName,
       async (candidate) => (await this.prisma.tenant.count({ where: { slug: candidate } })) > 0,
@@ -203,6 +281,27 @@ export class AuthService {
           domains: dto.domains ?? [],
           logoUrl: dto.logoUrl,
           currency: dto.currency,
+          /**
+           * L'essai **est** la porte d'entree, et il s'ouvre ici.
+           *
+           * Le compte restait PENDING jusqu'a une activation manuelle. Un
+           * inscrit du samedi soir attendait le lundi, sans avoir rien pu
+           * essayer — et si personne ne regardait l'ecran des exploitants,
+           * il attendait indefiniment. C'est arrive : une inscription a
+           * dormi une journee entiere sans que quiconque le sache.
+           *
+           * Ce qui garde la porte, ce n'est plus une validation, c'est
+           * l'essai lui-meme : cinq jours, un routeur, et son propre
+           * exploitant vide — il ne voit rien de personne. La suspension
+           * reste au SUPER_ADMIN si quelqu'un en abuse.
+           */
+          status: TenantStatus.ACTIVE,
+          platformPlanName: ESSAI.nom,
+          maxRouters: ESSAI.maxRouteurs,
+          platformEndsAt: finDEssai,
+          // Pas de tolerance sur un essai : cinq jours plus quatorze feraient
+          // dix-neuf jours gratuits.
+          platformGraceEndsAt: finDEssai,
           mobileMoneyAccounts: dto.mobileMoneyAccounts?.length
             ? {
                 create: dto.mobileMoneyAccounts.map((account) => ({
@@ -236,10 +335,15 @@ export class AuthService {
       payloadDiff: { organizationName: dto.organizationName, currency: dto.currency },
     });
 
+    // Les comptes de la plateforme sont prevenus : une inscription qui
+    // n'atteint personne est un client qu'on ne rappellera jamais.
+    await this.prevenirLaPlateforme(created.tenant);
+
     return {
       tenantId: created.tenant.id,
       status: created.tenant.status,
-      message: "Compte créé. Il sera utilisable après activation par l'administrateur.",
+      message: `Compte créé. Votre essai gratuit de ${ESSAI_JOURS} jours commence maintenant : connectez-vous et raccordez votre routeur.`,
+      essaiJusquAu: finDEssai.toISOString(),
     };
   }
 

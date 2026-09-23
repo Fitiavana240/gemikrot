@@ -100,7 +100,10 @@ export const tenantsApi = {
 
 export const signupApi = {
   signup: (input: SignupInput) =>
-    api.post<{ tenantId: string; status: TenantStatus; message: string }>('/auth/signup', input),
+    api.post<{ tenantId: string; status: TenantStatus; message: string; essaiJusquAu: string }>(
+      '/auth/signup',
+      input,
+    ),
 };
 
 /**

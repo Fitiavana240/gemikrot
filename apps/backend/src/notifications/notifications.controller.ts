@@ -17,7 +17,9 @@ export class NotificationsController {
 
   @Get()
   lister(@CurrentUser() user: AuthenticatedUser) {
-    return this.notifications.lister(user.id);
+    // Le role est transmis : sans lui, le SUPER_ADMIN retombe sur la branche
+    // << pas d'exploitant >>, qui ne rendait rien.
+    return this.notifications.lister(user.id, user.role);
   }
 
   /** « J'ai vu. » Écarté pour cet administrateur, pas pour les autres. */

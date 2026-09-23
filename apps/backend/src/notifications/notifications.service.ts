@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PaymentStatus } from '@prisma/client';
+import { AdminRole, PaymentStatus, TenantStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { etatDe } from '../tenants/abonnement-plateforme.service.js';
+import { offreParCode } from '../tenants/offres-plateforme.js';
+
+/** L'offre d'essai du catalogue, resolue une fois. */
+const ESSAI = offreParCode('ESSAI')!;
 
 /**
  * Ce qui demande une décision, rassemblé en un endroit.
@@ -49,11 +53,21 @@ export class NotificationsService {
     private readonly config: ConfigService,
   ) {}
 
-  async lister(adminUserId: string): Promise<Notification[]> {
+  async lister(adminUserId: string, role?: AdminRole): Promise<Notification[]> {
     const tenantId = this.tenantContext.get()?.tenantId;
-    // Le SUPER_ADMIN qui ne cible personne n'a pas d'exploitant à surveiller :
-    // lui rendre une liste vide vaut mieux que de faire échouer sa barre.
-    if (!tenantId) return [];
+    if (!tenantId) {
+      /**
+       * Le SUPER_ADMIN n'a pas d'exploitant, il a la plateforme.
+       *
+       * On lui rendait une liste vide. Sa cloche ne sonnait donc **jamais** —
+       * et une inscription est restée une journée entière sans que personne
+       * ne le sache, faute d'avoir pensé à ouvrir l'écran des exploitants.
+       * Une cloche qui ne sonne jamais n'est pas une cloche silencieuse,
+       * c'est une cloche cassée : on cesse de la regarder.
+       */
+      if (role === AdminRole.SUPER_ADMIN) return this.listerPourLaPlateforme(adminUserId);
+      return [];
+    }
 
     const dansSeptJours = new Date(Date.now() + 7 * 86_400_000);
     const sansNumero = { phone: { startsWith: 'import:' } };
@@ -195,6 +209,104 @@ export class NotificationsService {
         detail:
           "Les travaux de fond sont désactivés : chaque échéance demande un geste. L'onglet « Vérifier sur le routeur » des Tickets fait le travail à la main.",
         lien: '/vouchers',
+      });
+    }
+
+    const dejaVues = new Set(lues.map((l) => l.cle));
+    return liste.map((n) => ({ ...n, lue: dejaVues.has(n.cle) }));
+  }
+
+  /**
+   * Ce qui demande une décision **à la plateforme**, et non à un exploitant.
+   *
+   * Trois choses, dans l'ordre où elles coûtent. Une inscription non vue est
+   * un client qui s'est présenté et qu'on a laissé sur le pas de la porte.
+   * Un essai qui se termine est le seul moment où l'on peut encore le
+   * convertir. Un abonnement échu est de l'argent qui ne rentre pas.
+   *
+   * **Aucune lecture du routeur**, ici comme ailleurs : une cloche se
+   * consulte souvent, et interroger vingt routeurs la rendrait insupportable.
+   */
+  private async listerPourLaPlateforme(adminUserId: string): Promise<Notification[]> {
+    const dansTroisJours = new Date(Date.now() + 3 * 86_400_000);
+    const maintenant = new Date();
+
+    const [enAttente, essaisQuiFinissent, expires, sansRouteur, lues] = await Promise.all([
+      // Les comptes d'avant l'ouverture automatique : ils attendent encore.
+      this.prisma.tenant.findMany({
+        where: { status: TenantStatus.PENDING },
+        orderBy: { createdAt: 'asc' },
+        select: { name: true, createdAt: true },
+      }),
+      this.prisma.tenant.count({
+        where: {
+          status: TenantStatus.ACTIVE,
+          platformPlanName: ESSAI.nom,
+          platformEndsAt: { gte: maintenant, lte: dansTroisJours },
+        },
+      }),
+      this.prisma.tenant.count({
+        where: {
+          status: TenantStatus.ACTIVE,
+          platformGraceEndsAt: { lt: maintenant },
+        },
+      }),
+      this.prisma.tenant.count({
+        where: { status: TenantStatus.ACTIVE, routers: { none: {} } },
+      }),
+      this.prisma.notificationLue.findMany({
+        where: { adminUserId },
+        select: { cle: true },
+      }),
+    ]);
+
+    const liste: Omit<Notification, 'lue'>[] = [];
+
+    if (enAttente.length > 0) {
+      const jours = Math.floor(
+        (Date.now() - enAttente[0].createdAt.getTime()) / 86_400_000,
+      );
+      liste.push({
+        cle: `exploitants-en-attente:${enAttente.length}`,
+        gravite: jours >= 1 ? 'urgent' : 'attention',
+        titre: `${enAttente.length} exploitant(s) en attente d'activation`,
+        detail:
+          jours >= 1
+            ? `${enAttente[0].name} attend depuis ${jours} jour(s) et ne peut pas se connecter.`
+            : `${enAttente[0].name} vient de s'inscrire et ne peut pas encore se connecter.`,
+        lien: '/tenants',
+      });
+    }
+
+    if (essaisQuiFinissent > 0) {
+      liste.push({
+        cle: `essais-qui-finissent:${essaisQuiFinissent}`,
+        gravite: 'attention',
+        titre: `${essaisQuiFinissent} essai(s) gratuit(s) se terminent sous 3 jours`,
+        detail:
+          "C'est le seul moment où l'on peut encore proposer une offre. Après, la vente se ferme de leur côté.",
+        lien: '/tenants',
+      });
+    }
+
+    if (expires > 0) {
+      liste.push({
+        cle: `abonnements-expires:${expires}`,
+        gravite: 'urgent',
+        titre: `${expires} abonnement(s) expiré(s), tolérance comprise`,
+        detail:
+          'Ces exploitants ne peuvent plus vendre. Leurs clients, eux, gardent leur accès : le routeur applique seul les validités.',
+        lien: '/supervision',
+      });
+    }
+
+    if (sansRouteur > 0) {
+      liste.push({
+        cle: `exploitants-sans-routeur:${sansRouteur}`,
+        gravite: 'info',
+        titre: `${sansRouteur} exploitant(s) actif(s) sans aucun routeur`,
+        detail: "Leur mise en route n'est pas terminée : ils n'ont encore rien pu vendre.",
+        lien: '/supervision',
       });
     }
 

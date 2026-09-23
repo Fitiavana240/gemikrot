@@ -156,3 +156,105 @@ describe('sans exploitant ciblé', () => {
     expect(await s.lister('admin-1')).toEqual([]);
   });
 });
+
+/**
+ * La cloche de la plateforme.
+ *
+ * Elle rendait **toujours** une liste vide : le SUPER_ADMIN n'a pas
+ * d'exploitant, et la branche << pas d'exploitant >> s'arretait la. Une
+ * inscription est ainsi restee une journee entiere sans atteindre personne.
+ * Une cloche qui ne sonne jamais n'est pas silencieuse, elle est cassee.
+ */
+function plateforme(
+  etat: {
+    enAttente?: { name: string; createdAt: Date }[];
+    essaisQuiFinissent?: number;
+    expires?: number;
+    sansRouteur?: number;
+    lues?: string[];
+  } = {},
+) {
+  const prisma: any = {
+    tenant: {
+      findMany: vi.fn(async () => etat.enAttente ?? []),
+      count: vi
+        .fn()
+        .mockResolvedValueOnce(etat.essaisQuiFinissent ?? 0)
+        .mockResolvedValueOnce(etat.expires ?? 0)
+        .mockResolvedValueOnce(etat.sansRouteur ?? 0),
+    },
+    notificationLue: {
+      findMany: vi.fn(async () => (etat.lues ?? []).map((cle) => ({ cle }))),
+      upsert: vi.fn(async () => ({})),
+    },
+  };
+  return new NotificationsService(
+    prisma,
+    // Aucun exploitant cible : c'est le cas ordinaire du SUPER_ADMIN.
+    { get: () => undefined } as never,
+    { get: () => 'true' } as never,
+  );
+}
+
+describe('la cloche de la plateforme', () => {
+  it('ne rend toujours rien a un compte sans exploitant qui n’est pas SUPER_ADMIN', async () => {
+    // Un ADMIN sans exploitant ne devrait pas exister ; s'il existe, il n'a
+    // rien a surveiller et surtout rien a savoir de la plateforme.
+    const liste = await plateforme({
+      enAttente: [{ name: 'Test Wifi', createdAt: new Date() }],
+    }).lister('admin-1');
+
+    expect(liste).toEqual([]);
+  });
+
+  it('signale une inscription qui attend depuis la veille', async () => {
+    // Le cas exact de cette installation : un compte inscrit hier, toujours
+    // en attente, et personne ne le savait.
+    const liste = await plateforme({
+      enAttente: [{ name: 'Test Wifi', createdAt: new Date(Date.now() - 1.5 * JOUR) }],
+    }).lister('admin-1', 'SUPER_ADMIN');
+
+    const n = liste.find((x) => x.cle.startsWith('exploitants-en-attente'));
+    expect(n?.gravite).toBe('urgent');
+    expect(n?.detail).toMatch(/Test Wifi/);
+    expect(n?.detail).toMatch(/1 jour/);
+    expect(n?.lien).toBe('/tenants');
+  });
+
+  it('reste une attention le jour meme de l’inscription', async () => {
+    const liste = await plateforme({
+      enAttente: [{ name: 'Neuf', createdAt: new Date() }],
+    }).lister('admin-1', 'SUPER_ADMIN');
+
+    expect(liste[0].gravite).toBe('attention');
+  });
+
+  it('annonce les essais qui se terminent, seul moment pour convertir', async () => {
+    const liste = await plateforme({ essaisQuiFinissent: 2 }).lister('admin-1', 'SUPER_ADMIN');
+
+    const n = liste.find((x) => x.cle.startsWith('essais-qui-finissent'));
+    expect(n?.titre).toMatch(/2 essai/);
+  });
+
+  it('dit ce qui n’arrive pas quand un abonnement expire', async () => {
+    // Sans cette phrase, on croit avoir coupe le Wi-Fi de quelqu'un.
+    const liste = await plateforme({ expires: 1 }).lister('admin-1', 'SUPER_ADMIN');
+
+    const n = liste.find((x) => x.cle.startsWith('abonnements-expires'));
+    expect(n?.gravite).toBe('urgent');
+    expect(n?.detail).toMatch(/gardent leur acces|gardent leur accès/);
+  });
+
+  it('se tait quand la plateforme n’a rien a decider', async () => {
+    expect(await plateforme().lister('admin-1', 'SUPER_ADMIN')).toEqual([]);
+  });
+
+  it('retient ce qui a ete ecarte', async () => {
+    const liste = await plateforme({
+      expires: 1,
+      lues: ['abonnements-expires:1'],
+    }).lister('admin-1', 'SUPER_ADMIN');
+
+    expect(liste[0].lue).toBe(true);
+  });
+});

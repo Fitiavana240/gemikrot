@@ -322,6 +322,8 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | SAS-6 | **Catalogue tarifaire** : 7 000 Ar/routeur/mois, 60 000 Ar/routeur/an, essai gratuit de 5 jours | ⭐⭐⭐ | 🟢 | ✅ livré — le prix n'existait nulle part : `platformPlanName` était du texte libre et l'échéance se posait à la main. **Le prix est par routeur** : cinq sites coûtent cinq fois plus à servir, facturer par exploitant ferait payer le petit pour le gros. Une période en cours n'est jamais perdue — la nouvelle repart de sa fin |
 | SAS-7 | **Essai gratuit de 5 jours**, ouvert une fois et une seule | ⭐⭐⭐ | 🟢 | ✅ livré — il part **à l'activation, pas à l'inscription** : la connexion est refusée tant que le compte n'est pas actif, et un compte inscrit le lundi, activé le jeudi, aurait brûlé trois de ses cinq jours sans voir la console. **Aucune tolérance** : 5 + 14 feraient 19 jours gratuits. Un routeur, et la réactivation d'un compte suspendu n'en rouvre pas un second |
 | SAS-8 | **Page de blocage** de l'exploitant dont l'abonnement a expiré | ⭐⭐⭐ | 🟢 | ✅ livré — le bandeau ne suffisait pas : on le lit une fois, il devient du décor, et la vente fermée se découvrait **au comptoir, devant un client qui attend**. Le mur ne ferme jamais la lecture, et le superviseur y voit la cause sans y voir la facture de son employeur |
+| SAS-9 | **L'inscription ouvre le compte et l'essai du même geste** | ⭐⭐⭐ | 🟢 | ✅ livré — le compte restait PENDING jusqu'à une activation manuelle. Constaté sur cette installation : **une inscription a dormi une journée entière**, son essai n'ayant jamais démarré. Ce qui garde la porte n'est plus une validation, c'est l'essai lui-même — cinq jours, un routeur, un exploitant vide où l'on ne voit rien de personne. La suspension reste au SUPER_ADMIN |
+| SAS-10 | **Cloche de la plateforme** : inscriptions, essais qui finissent, abonnements échus, exploitants sans routeur | ⭐⭐⭐ | 🟢 | ✅ livré — elle rendait **toujours** une liste vide : le SUPER_ADMIN n'a pas d'exploitant, et la branche « pas d'exploitant » s'arrêtait là. Une cloche qui ne sonne jamais n'est pas silencieuse, elle est cassée : on cesse de la regarder |
 | SAS-3 | **Accompagnement à la mise en route** : étapes visibles (routeur connecté, offres créées, puce enregistrée, première vente) | ⭐⭐ | 🟡 | ✅ livré — chaque étape est **constatée**, jamais déclarée, et la carte disparaît d'elle-même une fois les quatre franchies |
 | SAS-4 | **Supervision de la plateforme** : exploitants actifs, routeurs joignables, volumétrie | ⭐⭐ | 🟡 | ✅ livré — trois alertes en clair (routeurs muets, abonnement échu, exploitant actif sans routeur) au-dessus du tableau. **Aucune lecture du routeur** : interroger vingt routeurs ferait attendre la page sur le plus lent |
 | SAS-5 | **Prise en main d'un compte** (impersonation) pour l'assistance, tracée | ⭐ | 🟡 | ✅ livré — bandeau permanent pendant la prise en main, et chaque ligne du journal porte la marque : le cloisonnement ignore qui agit, le journal non |
@@ -2141,6 +2143,38 @@ les deux applications compilent, et le backend monte toutes ses routes — seule
 la connexion à la base échoue. La réservation se libère par
 `net stop winnat && net start winnat`, qui demande des droits d'administrateur
 dont cette session ne dispose pas.
+
+### 2026-09-23 — L'inscription qui a dormi une journée entière
+
+Un exploitant s'est inscrit le 22. Le 23, il était toujours en attente, sans
+essai et sans pouvoir se connecter — et l'exploitant de la plateforme ne le
+savait pas. Deux défauts se tenaient la main.
+
+**La cloche du SUPER_ADMIN rendait toujours une liste vide.** Il n'a pas
+d'exploitant, et la branche « pas d'exploitant » s'arrêtait sur `return []`.
+Sa cloche n'avait donc **jamais** sonné depuis qu'elle existe. Une cloche qui
+ne sonne jamais n'est pas une cloche silencieuse, c'est une cloche cassée : on
+cesse de la regarder, et le jour où elle aurait quelque chose à dire, personne
+ne la lit. Elle porte maintenant ce qui relève de la plateforme, dans l'ordre
+où cela coûte — une inscription non vue est un client laissé sur le pas de la
+porte ; un essai qui se termine est le seul moment où l'on peut encore le
+convertir.
+
+**Et l'essai partait à l'activation.** C'était défendable tant qu'une
+validation gardait la porte : un compte inscrit le lundi et activé le jeudi
+aurait brûlé trois de ses cinq jours sans voir la console. Mais l'épisode
+ci-dessus montre le vrai coût : **le délai n'est pas borné**. L'inscription
+ouvre désormais le compte elle-même. Ce qui garde la porte n'est plus une
+validation, c'est l'essai — cinq jours, un routeur, et son propre exploitant
+vide où il ne voit rien de personne. La suspension reste au SUPER_ADMIN si
+quelqu'un en abuse.
+
+*Éprouvé en vrai*, par une inscription jetable contre la base réelle : compte
+ACTIF, « Essai gratuit », un routeur, échéance à J+5, **fin de tolérance
+égale à l'échéance**, et les deux comptes de plateforme inscrits au journal des
+courriels avec la bonne raison de non-envoi — le SMTP n'est pas activé, rien
+n'est parti. L'exploitant jetable a été effacé, les compteurs sont revenus à
+l'identique.
 
 ---
 

@@ -109,22 +109,25 @@ export function SignupPage() {
       <div className="flex min-h-screen items-center justify-center bg-slate-50 px-5 py-10">
         <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
           <BrandMark className="mx-auto h-12 w-12" />
+          {/* << Inscription enregistree >> etait exact quand il fallait
+              attendre une validation. Le compte s'ouvre maintenant seul :
+              annoncer l'enregistrement laisserait croire qu'on attend encore. */}
           <h1 className="mt-5 text-xl font-semibold tracking-tight text-slate-900">
-            Inscription enregistrée
+            Votre essai a commencé
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-slate-600">{done}</p>
           <div className="mt-6 rounded-lg bg-slate-50 px-4 py-3 text-left text-sm">
             <p className="font-medium text-slate-700">Vos identifiants</p>
             <p className="mt-1 break-all font-mono text-xs text-slate-600">{form.email.trim()}</p>
-            <p className="mt-1.5 text-slate-500">
-              À utiliser dès que la plateforme aura validé votre inscription.
-            </p>
+            <p className="mt-1.5 text-slate-500">À utiliser dès maintenant.</p>
           </div>
+          {/* Un bouton, et non un lien discret : il n'attend plus rien, il
+              n'a plus qu'a entrer. */}
           <Link
             to="/login"
-            className="mt-6 inline-block text-sm font-medium text-sky-700 hover:underline"
+            className="mt-6 inline-block rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-700"
           >
-            Retour à la connexion
+            Se connecter
           </Link>
         </div>
       </div>
