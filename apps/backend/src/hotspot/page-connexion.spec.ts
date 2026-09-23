@@ -56,6 +56,8 @@ function service(options: {
   publications?: any[];
   puces?: number;
   reglages?: Record<string, unknown> | null;
+  /** Ce que la console croit etre ses adresses. Pose, jamais lu. */
+  adressesLocales?: string[];
 }) {
   const mikrotik = {
     getHotspotServers: vi.fn(async () => options.serveurs ?? []),
@@ -100,6 +102,10 @@ function service(options: {
     { forRouter: async () => mikrotik, forDefaultRouter: async () => mikrotik } as never,
     { log: vi.fn(async () => undefined) } as never,
   );
+  // L'adresse de la console est **posee**, jamais lue sur la machine : la
+  // lire ferait dependre la suite du bail DHCP du poste qui l'execute, et
+  // le jour ou ce bail change les epreuves decrivent une panne inexistante.
+  s.adressesDeLaMachine = () => options.adressesLocales ?? ['192.168.88.135'];
   return { service: s, mikrotik, prisma };
 }
 

@@ -78,6 +78,10 @@ export const tenantsApi = {
     id: string,
     dto: { platformPlanName?: string | null; maxRouters?: number | null; platformEndsAt?: string | null },
   ) => api.patch<AbonnementPlateforme>(`/tenants/${id}/abonnement`, dto),
+  /** Le catalogue, lisible de tout compte connecte : la page de blocage s'en sert. */
+  offres: () => api.get<CataloguePlateforme>('/tenants/offres'),
+  souscrire: (id: string, code: string) =>
+    api.post<AbonnementPlateforme>(`/tenants/${id}/abonnement/souscrire`, { code }),
   miseEnRoute: () => api.get<MiseEnRoute>('/tenants/me/mise-en-route'),
   mine: () => api.get<Tenant>('/tenants/me'),
   update: (input: UpdateTenantInput) => api.patch<Tenant>('/tenants/me', input),
@@ -109,6 +113,8 @@ export const signupApi = {
  */
 export interface AbonnementPlateforme {
   offre: string | null;
+  /** Le code du catalogue, quand le nom enregistre s'y rattache. */
+  offreCode: 'ESSAI' | 'MENSUEL' | 'ANNUEL' | null;
   maxRouteurs: number | null;
   routeursUtilises: number;
   echeance: string | null;
@@ -116,4 +122,37 @@ export interface AbonnementPlateforme {
   etat: 'sans-abonnement' | 'a-jour' | 'en-tolerance' | 'expire';
   joursRestants: number | null;
   ecritureBloquee: boolean;
+  /** Ce qu'un renouvellement coute, parc actuel compris. `null` = offre non reconnue. */
+  montantDu: number | null;
+  prixParRouteur: number | null;
+  periode: string | null;
+  devise: string;
+}
+
+/** Une offre du catalogue de la plateforme. */
+export interface OffrePlateforme {
+  code: 'ESSAI' | 'MENSUEL' | 'ANNUEL';
+  nom: string;
+  prixParRouteur: number;
+  periodeJours: number;
+  periode: string;
+  toleranceJours: number;
+  maxRouteurs: number | null;
+  argument: string;
+}
+
+/**
+ * A qui l'exploitant s'adresse pour payer. Tout `null` : aucun moyen de
+ * contact n'est configure, et la page de blocage le dit franchement plutot
+ * que d'afficher un numero mort.
+ */
+export interface ContactPlateforme {
+  telephone: string | null;
+  whatsapp: string | null;
+  courriel: string | null;
+}
+
+export interface CataloguePlateforme {
+  offres: OffrePlateforme[];
+  contact: ContactPlateforme;
 }

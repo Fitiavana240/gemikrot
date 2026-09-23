@@ -195,6 +195,18 @@ export class PageConnexionService {
     private readonly audit: AuditService,
   ) {}
 
+  /**
+   * Les adresses IPv4 de cette machine, cartes internes exclues.
+   *
+   * Propriete et non appel direct, pour un seul motif : sans ce point de
+   * reprise, la verification de sante depend du bail DHCP du poste qui
+   * execute la suite. Le test passait a `192.168.88.135` et echouait le
+   * lendemain a `192.168.88.23` — en decrivant mot pour mot la panne qu'il
+   * est cense detecter, ce qui est la pire facon d'echouer : on croit avoir
+   * casse le code alors que c'est la machine qui a change d'adresse.
+   */
+  adressesDeLaMachine: () => string[] = adressesLocales;
+
   private async modele(): Promise<string> {
     for (const chemin of CHEMINS_MODELE) {
       try {
@@ -587,7 +599,7 @@ export class PageConnexionService {
 
     const port = portConsole && /^\d+$/.test(portConsole) ? `:${portConsole}` : '';
     const adresses: AdresseCandidate[] = [
-      ...adressesLocales()
+      ...this.adressesDeLaMachine()
         .filter((ip) => reseauxPortail.some((portail) => memeReseau24(ip, portail)))
         .map((ip) => ({ url: `http://${ip}${port}`, source: 'reseau-local' as const })),
       // Le domaine de l'exploitant marche aussi, s'il pointe vers la console

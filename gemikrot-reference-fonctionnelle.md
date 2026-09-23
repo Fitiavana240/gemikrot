@@ -1,7 +1,7 @@
 # GEMIKROT — Document de référence fonctionnel du SaaS
 # Gestion de réseaux Wi-Fi MikroTik · Tickets, abonnements et paiement mobile — Madagascar
 
-**Date de rédaction :** 2026-09-19 · **Dernière relecture de la colonne « Implémenté » :** 2026-09-22 · **Statut :** v0.3 — socle multi-exploitants, tickets sur User Manager, page de paiement publique en validation manuelle, console multi-routeurs, tolérance aux pannes, statistiques et abonnement plateforme livrés. Reconnaissance automatique des SMS **non commencée** — c'est elle qui sépare le produit d'un carnet électronique. PPPoE non couvert. Voir §16 Journal.
+**Date de rédaction :** 2026-09-19 · **Dernière relecture de la colonne « Implémenté » :** 2026-09-23 · **Statut :** v0.3 — socle multi-exploitants, tickets sur User Manager, page de paiement publique en validation manuelle, console multi-routeurs, tolérance aux pannes, statistiques et abonnement plateforme livrés. Reconnaissance automatique des SMS **non commencée** — c'est elle qui sépare le produit d'un carnet électronique. PPPoE non couvert. Voir §16 Journal.
 **Objet :** remplacer Winbox et le carnet de tickets par une console web multi-exploitants qui pilote **plusieurs routeurs MikroTik à distance**, vend des accès Wi-Fi (tickets et abonnements), encaisse par Mobile Money et coupe réellement les accès expirés.
 
 > **Impact :** ⭐ Utile · ⭐⭐ Important · ⭐⭐⭐ Critique
@@ -152,6 +152,9 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 |-----|-------------|--------|------------|------------|
 | SOC-1 | **Multi-exploitants** : tenant = exploitant Wi-Fi. Isolation appliquée au niveau de l'accès aux données par extension Prisma, pas laissée à la discipline de chaque requête. `scopedStrict` refuse de travailler hors exploitant au lieu de dégrader en client non cloisonné | ⭐⭐⭐ | 🔴 | ✅ |
 | SOC-2 | **Rôles RBAC** : SUPER_ADMIN (plateforme), ADMIN (exploitant), OPERATOR (vend), VIEWER (consulte). Garde globale + `@Roles()` par route ; un ADMIN crée ses OPERATOR/VIEWER | ⭐⭐⭐ | 🟢 | ✅ |
+| SOC-13 | **Écran Équipe** : l'exploitant donne la console à un superviseur sans lui prêter son mot de passe | ⭐⭐⭐ | 🟢 | ✅ livré — l'API existait depuis le début, **aucun écran ne s'en servait**. Sans elle, le vendeur travaillait sous le compte du patron et le journal enregistrait tout à son nom à lui : le jour où l'on cherche qui a annulé un ticket, le journal ne répond rien |
+| SOC-14 | **Les rôles dits en français** : Plateforme, Administrateur, Superviseur, Lecture seule | ⭐ | 🟢 | ✅ livré — la console affichait `OPERATOR` à des gens qui vendent des tickets à Toliara. Un rôle qu'on ne comprend pas est un rôle qu'on n'attribue pas |
+| SOC-15 | **Pages masquées ET gardées selon le rôle** | ⭐⭐ | 🟢 | ✅ livré — un superviseur voyait HotSpot, User Manager, PPPoE, Offres et Routeurs au menu et recevait un refus sur chacun. **Le menu et la garde lisent la même déclaration** : deux listes divergeraient dès la première entrée ajoutée, et du mauvais côté. La barrière reste au serveur ; l'écran explique, il ne protège pas |
 | SOC-3 | **Inscription libre puis activation** par le super-admin. Connexion refusée avec un message distinct selon que le compte est en attente ou suspendu | ⭐⭐ | 🟢 | ✅ |
 | SOC-4 | **Marque de l'exploitant** : nom du Wi-Fi, logo, domaines, devise (ISO 4217), identifiant public (slug) pour l'adresse de la page client | ⭐⭐ | 🟢 | ✅ |
 | SOC-5 | **Puces Mobile Money** : numéro + nom du titulaire par opérateur, affichés au client. Bascule actif/inactif depuis la console — désactiver plutôt que supprimer, une puce retirée du commerce gardant ses paiements passés | ⭐⭐⭐ | 🟢 | ✅ |
@@ -315,7 +318,10 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | Ref | Description | Impact | Complexité | Implémenté |
 |-----|-------------|--------|------------|------------|
 | SAS-1 | **Liste des exploitants**, activation, suspension | ⭐⭐⭐ | 🟢 | ✅ |
-| SAS-2 | **Abonnement plateforme** : offre, nombre de routeurs autorisé, échéance, blocage à l'expiration | ⭐⭐⭐ | 🟡 | ✅ livré — tolérance de 15 jours, puis **seule la vente s'arrête** : la consultation reste ouverte, et les clients finaux gardent leur accès (le routeur applique seul les validités). On ferme la console, pas le Wi-Fi |
+| SAS-2 | **Abonnement plateforme** : offre, nombre de routeurs autorisé, échéance, blocage à l'expiration | ⭐⭐⭐ | 🟡 | ✅ livré — tolérance de 14 jours, puis **seule la vente s'arrête** : la consultation reste ouverte, et les clients finaux gardent leur accès (le routeur applique seul les validités). On ferme la console, pas le Wi-Fi |
+| SAS-6 | **Catalogue tarifaire** : 7 000 Ar/routeur/mois, 60 000 Ar/routeur/an, essai gratuit de 5 jours | ⭐⭐⭐ | 🟢 | ✅ livré — le prix n'existait nulle part : `platformPlanName` était du texte libre et l'échéance se posait à la main. **Le prix est par routeur** : cinq sites coûtent cinq fois plus à servir, facturer par exploitant ferait payer le petit pour le gros. Une période en cours n'est jamais perdue — la nouvelle repart de sa fin |
+| SAS-7 | **Essai gratuit de 5 jours**, ouvert une fois et une seule | ⭐⭐⭐ | 🟢 | ✅ livré — il part **à l'activation, pas à l'inscription** : la connexion est refusée tant que le compte n'est pas actif, et un compte inscrit le lundi, activé le jeudi, aurait brûlé trois de ses cinq jours sans voir la console. **Aucune tolérance** : 5 + 14 feraient 19 jours gratuits. Un routeur, et la réactivation d'un compte suspendu n'en rouvre pas un second |
+| SAS-8 | **Page de blocage** de l'exploitant dont l'abonnement a expiré | ⭐⭐⭐ | 🟢 | ✅ livré — le bandeau ne suffisait pas : on le lit une fois, il devient du décor, et la vente fermée se découvrait **au comptoir, devant un client qui attend**. Le mur ne ferme jamais la lecture, et le superviseur y voit la cause sans y voir la facture de son employeur |
 | SAS-3 | **Accompagnement à la mise en route** : étapes visibles (routeur connecté, offres créées, puce enregistrée, première vente) | ⭐⭐ | 🟡 | ✅ livré — chaque étape est **constatée**, jamais déclarée, et la carte disparaît d'elle-même une fois les quatre franchies |
 | SAS-4 | **Supervision de la plateforme** : exploitants actifs, routeurs joignables, volumétrie | ⭐⭐ | 🟡 | ✅ livré — trois alertes en clair (routeurs muets, abonnement échu, exploitant actif sans routeur) au-dessus du tableau. **Aucune lecture du routeur** : interroger vingt routeurs ferait attendre la page sur le plus lent |
 | SAS-5 | **Prise en main d'un compte** (impersonation) pour l'assistance, tracée | ⭐ | 🟡 | ✅ livré — bandeau permanent pendant la prise en main, et chaque ligne du journal porte la marque : le cloisonnement ignore qui agit, le journal non |
@@ -2066,6 +2072,75 @@ n'en portent aucune.
 **Rien n'a été écrit sur le routeur de tout ce lot.** Les trois gestes qui le
 feraient — publier la page, ouvrir le Walled Garden, réserver l'adresse de la
 console — restent à l'exploitant, et la console les propose à un clic.
+
+### 2026-09-23 — Le prix, l'essai, et le mur qui les annonce
+
+La plateforme ne facturait rien. `platformPlanName` était du texte libre,
+l'échéance se posait à la main : reconduire un mois demandait d'ajouter trente
+jours de tête à une date, donc de se tromper un jour.
+
+**Le prix est par routeur**, 7 000 Ar au mois ou 60 000 Ar à l'année. Un
+exploitant à cinq sites coûte cinq fois plus cher à servir — autant de
+tunnels, de lectures périodiques, de réconciliations ; facturer par exploitant
+ferait payer le petit pour le gros. L'annuel économise 24 000 Ar par routeur,
+et une épreuve vérifie qu'il reste sous douze mensualités : le jour où une
+retouche de prix les égaliserait, personne ne le prendrait et personne ne s'en
+apercevrait.
+
+**L'essai part à l'activation, pas à l'inscription.** La connexion est refusée
+tant que le compte n'est pas actif : inscrit le lundi, activé le jeudi, il
+aurait brûlé trois de ses cinq jours sans avoir vu la console une seule fois.
+Et il ne porte **aucune tolérance** — cinq jours plus quatorze feraient
+dix-neuf jours gratuits ; la tolérance couvre un virement qui traîne, un essai
+ne doit rien. Il ne se rouvre pas non plus, sans quoi il suffirait de se faire
+suspendre puis réactiver pour en obtenir un second.
+
+**Le bandeau ne suffisait pas.** On le lit une fois, il devient du décor, et la
+vente fermée se découvre en cliquant sur « Générer », au comptoir, devant un
+client qui attend. Le mur le dit à l'ouverture, avec le montant et l'adresse où
+payer. Il ne ferme jamais la lecture — ce serait prendre des données en otage
+pour une facture — et **le superviseur y voit la cause sans y voir la note de
+son employeur** : il doit comprendre pourquoi la vente ne marche plus, il n'a
+pas à connaître le montant.
+
+### 2026-09-23 — Le superviseur voyait cinq écrans qui le refusaient
+
+Un OPERATOR trouvait HotSpot, User Manager, PPPoE, Offres et Routeurs dans son
+menu. Le serveur les réserve aux administrateurs depuis toujours : il recevait
+un refus sur chacun. On croit avoir mal fait, on recommence, on appelle.
+
+**Le menu et la garde de route lisent la même déclaration.** Deux listes
+divergeraient dès la première entrée ajoutée, et du mauvais côté : un écran
+atteignable qu'on croyait fermé. Masquer l'entrée ne protège d'ailleurs rien
+— l'adresse se tape, se partage, dort dans l'historique. La barrière reste au
+serveur ; l'écran explique, il ne garde pas.
+
+*Et l'écran Équipe manquait tout entier.* L'API `admin-users` existait depuis
+le début, rien ne s'en servait : l'exploitant prêtait son mot de passe à son
+vendeur, et le journal enregistrait tout sous son nom à lui. Le jour où l'on
+cherche qui a annulé un ticket, un tel journal ne répond rien.
+
+### 2026-09-23 — Une épreuve qui dépendait du bail DHCP du poste
+
+`page-connexion.spec.ts` lisait les vraies cartes réseau de la machine. Il
+passait hier, la console répondant sur `192.168.88.135` ; il échouait ce matin,
+le bail ayant glissé sur `192.168.88.23`.
+
+C'est la pire façon d'échouer : l'épreuve **décrivait mot pour mot la panne
+qu'elle est censée détecter** — une page publiée qui envoie les clients vers
+une adresse périmée. On cherche le défaut dans le code alors que c'est la
+machine qui a changé d'adresse. Les adresses locales passent maintenant par un
+point de reprise, et l'épreuve les **pose** au lieu de les lire.
+
+### 2026-09-23 — Ce qui n'a pas pu être vérifié, et pourquoi
+
+Windows a réservé la plage TCP 55379-55478, où tombe le **55432** de
+PostgreSQL. Le conteneur ne démarre plus (`bind: accès interdit`), donc ni la
+console, ni les six épreuves qui visent une vraie base. Les 347 autres passent,
+les deux applications compilent, et le backend monte toutes ses routes — seule
+la connexion à la base échoue. La réservation se libère par
+`net stop winnat && net start winnat`, qui demande des droits d'administrateur
+dont cette session ne dispose pas.
 
 ---
 

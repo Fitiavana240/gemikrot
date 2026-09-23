@@ -19,6 +19,20 @@ export interface NavGroup {
 const ADMIN: AdminRole[] = ['ADMIN', 'SUPER_ADMIN'];
 
 /**
+ * Ce que le superviseur ne voit pas, et pourquoi.
+ *
+ * Un OPERATOR voyait HotSpot, User Manager, PPPoE, Offres et Routeurs dans le
+ * menu, et recevait un refus sur chacun : le serveur les reserve depuis
+ * toujours aux administrateurs. Offrir un bouton qui repondra 403 est pire
+ * que ne rien offrir — on croit avoir mal fait, on recommence, on appelle.
+ *
+ * Le decoupage suit celui du serveur, et non l'inverse : **vendre et suivre**
+ * d'un cote, **configurer le materiel** de l'autre. C'est aussi la promesse
+ * faite a l'exploitant qui delegue son comptoir : son vendeur ne peut rien
+ * casser sur le routeur.
+ */
+
+/**
  * La navigation, groupée par **ce qu'on vient faire** plutôt que par entité
  * technique.
  *
@@ -60,7 +74,12 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Réseau',
     items: [
       { to: '/sessions', label: 'Connectés', hint: 'Qui est en ligne en ce moment' },
-      { to: '/routers', label: 'Routeurs', hint: 'Joignabilité, raccordement, import' },
+      {
+        to: '/routers',
+        label: 'Routeurs',
+        roles: ADMIN,
+        hint: 'Joignabilité, raccordement, import',
+      },
       {
         to: '/diagnostic',
         label: 'Diagnostic',
@@ -76,16 +95,19 @@ export const NAV_GROUPS: NavGroup[] = [
       {
         to: '/hotspot',
         label: 'HotSpot',
+        roles: ADMIN,
         hint: 'Serveurs, comptes, hôtes, walled garden, cookies',
       },
       {
         to: '/user-manager',
         label: 'User Manager',
+        roles: ADMIN,
         hint: 'Comptes, profils, limitations, sessions, RADIUS',
       },
       {
         to: '/pppoe',
         label: 'PPPoE',
+        roles: ADMIN,
         hint: "L'abonné raccordé à demeure : comptes, profils, serveurs, bassins",
       },
     ],
@@ -94,13 +116,27 @@ export const NAV_GROUPS: NavGroup[] = [
     id: 'reglages',
     label: 'Réglages',
     items: [
-      { to: '/plans', label: 'Offres', hint: 'Durées, prix, débits' },
+      { to: '/plans', label: 'Offres', roles: ADMIN, hint: 'Durées, prix, débits' },
       // Le modele de ticket a rejoint Parametres : on n'y touche qu'une fois,
       // c'est un reglage, et il se cherche la ou on range les reglages.
       {
         to: '/settings',
         label: 'Paramètres',
         hint: 'Marque, paiement, tickets, portail, apparence',
+      },
+      {
+        to: '/equipe',
+        label: 'Équipe',
+        roles: ADMIN,
+        hint: 'Donner la console à un superviseur, sans lui prêter votre mot de passe',
+      },
+      {
+        // Reserve a l'ADMIN seul : le SUPER_ADMIN n'appartient a aucun
+        // exploitant, et n'a donc pas d'abonnement a lui.
+        to: '/abonnement',
+        label: 'Mon abonnement',
+        roles: ['ADMIN'],
+        hint: "Échéance, tarifs, ce qui se ferme si rien n'est payé",
       },
       { to: '/audit', label: 'Journal', roles: ADMIN, hint: 'Qui a fait quoi, et quand' },
       {
@@ -130,4 +166,23 @@ export function groupeDe(chemin: string): string | undefined {
   return NAV_GROUPS.find((groupe) =>
     groupe.items.some((item) => (item.end ? chemin === item.to : chemin.startsWith(item.to))),
   )?.id;
+}
+
+/**
+ * Les roles admis sur une adresse, d'apres la navigation elle-meme.
+ *
+ * **Une seule liste**, et c'est tout l'interet : la garde de route et le menu
+ * lisent la meme declaration. Deux listes divergeraient des la premiere
+ * entree ajoutee, et la divergence se verrait du mauvais cote — un ecran
+ * atteignable qu'on croyait ferme.
+ *
+ * `undefined` = ouvert a tout compte connecte.
+ */
+export function rolesRequis(chemin: string): AdminRole[] | undefined {
+  // Le chemin le plus long d'abord : `/settings/portail` doit trouver
+  // `/settings`, et non `/` qui commence pourtant toute adresse.
+  const candidats = NAV_GROUPS.flatMap((g) => g.items)
+    .filter((item) => (item.end ? chemin === item.to : chemin.startsWith(item.to)))
+    .sort((a, b) => b.to.length - a.to.length);
+  return candidats[0]?.roles;
 }

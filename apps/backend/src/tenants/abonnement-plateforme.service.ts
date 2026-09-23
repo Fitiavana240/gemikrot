@@ -1,7 +1,21 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import {
+  ESSAI_JOURS,
+  JOUR_MS,
+  OFFRES,
+  TOLERANCE_JOURS,
+  montantDu,
+  offreParCode,
+  offreParNom,
+  prochaineEcheance,
+  contactPlateforme,
+  type CodeOffre,
+  type ContactPlateforme,
+  type OffrePlateforme,
+} from './offres-plateforme.js';
 
 /**
  * Ce que l'exploitant doit à la plateforme, et ce qui arrive s'il ne paie pas.
@@ -25,6 +39,8 @@ export type ÉtatAbonnement = 'sans-abonnement' | 'a-jour' | 'en-tolerance' | 'e
 
 export interface AbonnementPlateforme {
   offre: string | null;
+  /** Le code du catalogue, quand le nom enregistré s'y rattache. */
+  offreCode: CodeOffre | null;
   maxRouteurs: number | null;
   routeursUtilises: number;
   echeance: string | null;
@@ -34,13 +50,18 @@ export interface AbonnementPlateforme {
   joursRestants: number | null;
   /** Vrai quand l'écriture est refusée. La lecture, elle, ne l'est jamais. */
   ecritureBloquee: boolean;
+  /**
+   * Ce qu'un renouvellement coûterait, parc actuel compris. `null` quand
+   * l'offre enregistrée ne se rattache à rien de connu — mieux vaut pas de
+   * montant qu'un montant inventé.
+   */
+  montantDu: number | null;
+  /** Prix unitaire de l'offre en cours, par routeur et par période. */
+  prixParRouteur: number | null;
+  /** « mois », « an », « 5 jours » : la période telle qu'elle se dit. */
+  periode: string | null;
+  devise: string;
 }
-
-/** Deux semaines : le temps d'un virement qui traîne, pas d'un mois gratuit. */
-const TOLERANCE_JOURS = 14;
-
-/** Millisecondes d'une journée, pour un compte de jours lisible. */
-const JOUR_MS = 86_400_000;
 
 export function etatDe(
   echeance: Date | null,
@@ -73,6 +94,11 @@ export class AbonnementPlateformeService {
     private readonly audit: AuditService,
   ) {}
 
+  /** Le catalogue et l'adresse ou payer, tels que la page de blocage les montre. */
+  offres(): { offres: OffrePlateforme[]; contact: ContactPlateforme } {
+    return { offres: OFFRES, contact: contactPlateforme() };
+  }
+
   /** L'abonnement de l'exploitant sur lequel porte la requête courante. */
   etatDeLExploitantCourant(): Promise<AbonnementPlateforme> {
     return this.etat(this.tenantContext.requireTenantId());
@@ -88,6 +114,7 @@ export class AbonnementPlateformeService {
           maxRouters: true,
           platformEndsAt: true,
           platformGraceEndsAt: true,
+          currency: true,
         },
       }),
       this.prisma.router.count({ where: { tenantId } }),
@@ -98,8 +125,14 @@ export class AbonnementPlateformeService {
       tenant?.platformGraceEndsAt ?? null,
     );
 
+    // Le nom enregistré a longtemps été du texte libre : il ne se rattache pas
+    // toujours au catalogue, et on ne devine pas. Sans offre identifiée, pas
+    // de montant — un chiffre inventé serait pire que pas de chiffre.
+    const offre = offreParNom(tenant?.platformPlanName);
+
     return {
       offre: tenant?.platformPlanName ?? null,
+      offreCode: offre?.code ?? null,
       maxRouteurs: tenant?.maxRouters ?? null,
       routeursUtilises: routeurs,
       echeance: tenant?.platformEndsAt?.toISOString() ?? null,
@@ -107,6 +140,10 @@ export class AbonnementPlateformeService {
       etat,
       joursRestants,
       ecritureBloquee: etat === 'expire',
+      montantDu: offre ? montantDu(offre, routeurs) : null,
+      prixParRouteur: offre?.prixParRouteur ?? null,
+      periode: offre?.periode ?? null,
+      devise: tenant?.currency ?? 'MGA',
     };
   }
 
@@ -144,6 +181,109 @@ export class AbonnementPlateformeService {
     );
   }
 
+  /**
+   * Ouvre l'essai gratuit, une fois et une seule.
+   *
+   * **Il part à l'activation, pas à l'inscription.** Un compte inscrit le
+   * lundi et activé le jeudi aurait brûlé trois jours des cinq sans avoir pu
+   * se connecter une seule fois — la connexion est refusée tant que
+   * l'exploitant n'est pas ACTIF.
+   *
+   * Rend `false` si une échéance existe déjà : réactiver un compte suspendu
+   * ne rouvre pas un essai, sinon il suffirait de se faire suspendre pour en
+   * obtenir un second.
+   */
+  async demarrerEssai(tenantId: string, adminUserId?: string): Promise<boolean> {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { platformEndsAt: true },
+    });
+    if (!tenant || tenant.platformEndsAt) return false;
+
+    const essai = offreParCode('ESSAI');
+    if (!essai) return false;
+    const fin = new Date(Date.now() + ESSAI_JOURS * JOUR_MS);
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        platformPlanName: essai.nom,
+        maxRouters: essai.maxRouteurs,
+        platformEndsAt: fin,
+        // Pas de tolérance sur un essai : cinq jours plus quatorze feraient
+        // dix-neuf jours gratuits. La tolérance couvre un virement qui
+        // traîne, et un essai ne doit rien.
+        platformGraceEndsAt: fin,
+      },
+    });
+
+    await this.audit.log({
+      adminUserId,
+      tenantId,
+      action: 'START_PLATFORM_TRIAL',
+      targetType: 'Tenant',
+      targetId: tenantId,
+      payloadDiff: { offre: essai.nom, jours: ESSAI_JOURS, echeance: fin.toISOString() },
+    });
+    return true;
+  }
+
+  /**
+   * Souscrit ou renouvelle une offre du catalogue, période calculée.
+   *
+   * Le SUPER_ADMIN posait l'échéance à la main : un renouvellement demandait
+   * d'ajouter trente jours de tête, donc de se tromper un jour. Ici il choisit
+   * l'offre, et la date se déduit.
+   */
+  async souscrire(
+    tenantId: string,
+    code: string,
+    adminUserId: string,
+  ): Promise<AbonnementPlateforme> {
+    const offre = offreParCode(code);
+    if (!offre) {
+      throw new BadRequestException(
+        `Offre inconnue : ${code}. Choisissez parmi ${OFFRES.map((o) => o.code).join(', ')}.`,
+      );
+    }
+    if (offre.code === 'ESSAI') {
+      throw new BadRequestException(
+        "L'essai gratuit s'ouvre seul à l'activation du compte, et ne se renouvelle pas.",
+      );
+    }
+
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { platformEndsAt: true, maxRouters: true },
+    });
+    const echeance = prochaineEcheance(tenant?.platformEndsAt ?? null, offre);
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        platformPlanName: offre.nom,
+        // Le plafond de l'essai ne doit pas survivre à une vraie souscription,
+        // sinon l'exploitant qui paie reste coincé à un routeur.
+        maxRouters: offre.maxRouteurs,
+        platformEndsAt: echeance,
+        platformGraceEndsAt: new Date(echeance.getTime() + offre.toleranceJours * JOUR_MS),
+        // `status` n'est volontairement pas touché : payer ne lève pas une
+        // suspension, qui est une décision distincte.
+      },
+    });
+
+    await this.audit.log({
+      adminUserId,
+      tenantId,
+      action: 'SUBSCRIBE_PLATFORM',
+      targetType: 'Tenant',
+      targetId: tenantId,
+      payloadDiff: { offre: offre.nom, code: offre.code, echeance: echeance.toISOString() },
+    });
+
+    return this.etat(tenantId);
+  }
+
   /** Réservé au SUPER_ADMIN : pose l'offre, le plafond et l'échéance. */
   async definir(
     tenantId: string,
@@ -155,6 +295,8 @@ export class AbonnementPlateformeService {
     adminUserId: string,
   ) {
     const echeance = dto.platformEndsAt ? new Date(dto.platformEndsAt) : null;
+    // La tolérance suit l'offre quand on la reconnaît : un essai n'en a pas.
+    const tolerance = offreParNom(dto.platformPlanName)?.toleranceJours ?? TOLERANCE_JOURS;
 
     const tenant = await this.prisma.tenant.update({
       where: { id: tenantId },
@@ -166,7 +308,7 @@ export class AbonnementPlateformeService {
         // ouvrirait la porte à une tolérance antérieure à l'échéance, qui ne
         // veut rien dire.
         platformGraceEndsAt: echeance
-          ? new Date(echeance.getTime() + TOLERANCE_JOURS * JOUR_MS)
+          ? new Date(echeance.getTime() + tolerance * JOUR_MS)
           : null,
         // `status` n'est volontairement pas touché : une échéance posée sur
         // un compte suspendu ne le réveille pas. La suspension est une

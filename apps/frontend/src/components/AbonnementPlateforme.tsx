@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { tenantsApi } from '../api/tenants';
 import { useAuth } from '../auth/AuthContext';
 
@@ -61,6 +62,13 @@ export function AbonnementPlateforme() {
         validités et continue de les servir. La consultation de vos données reste ouverte —
         seules les ventes nouvelles s&apos;arrêtent.
       </span>
+      {/* Une issue, et non seulement un constat : le bandeau annoncait une
+          echeance sans dire ou la regler. */}
+      {user?.role === 'ADMIN' && (
+        <Link to="/abonnement" className="mt-1 block text-sm font-medium underline">
+          Voir les tarifs et régler
+        </Link>
+      )}
       {d.offre && (
         <span className="mt-1 block text-xs">
           Offre {d.offre}

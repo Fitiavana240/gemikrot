@@ -31,6 +31,29 @@ export class TenantsController {
     return this.abonnement.etatDeLExploitantCourant();
   }
 
+  /**
+   * Le catalogue des offres de la plateforme.
+   *
+   * Lisible de tout compte connecte : c'est ce qu'affiche la page de blocage,
+   * et celui qui la lit est justement celui dont l'abonnement a expire.
+   * Declare avant `:id`, sinon Nest lirait << offres >> comme un identifiant.
+   */
+  @Get('offres')
+  offres() {
+    return this.abonnement.offres();
+  }
+
+  /** Reserve au SUPER_ADMIN : souscrit ou renouvelle, echeance calculee. */
+  @Roles(AdminRole.SUPER_ADMIN)
+  @Post(':id/abonnement/souscrire')
+  souscrire(
+    @Param('id') id: string,
+    @Body() body: { code: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.abonnement.souscrire(id, body.code, user.id);
+  }
+
   /** Reserve au SUPER_ADMIN : pose l'offre, le plafond et l'echeance. */
   @Roles(AdminRole.SUPER_ADMIN)
   @Patch(':id/abonnement')
@@ -109,10 +132,22 @@ export class TenantsController {
     return this.superviser.apercu();
   }
 
+  /**
+   * Active le compte, et ouvre l'essai gratuit du même geste.
+   *
+   * L'essai part **ici** et non à l'inscription : tant que le compte n'est pas
+   * actif, sa connexion est refusée. Un compte inscrit le lundi et activé le
+   * jeudi aurait brûlé trois de ses cinq jours sans avoir vu la console une
+   * seule fois.
+   */
   @Roles(AdminRole.SUPER_ADMIN)
   @Post(':id/activate')
-  activate(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.tenants.setStatus(id, TenantStatus.ACTIVE, user.id);
+  async activate(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    const tenant = await this.tenants.setStatus(id, TenantStatus.ACTIVE, user.id);
+    // Ne fait rien si une échéance existe déjà : réactiver un compte suspendu
+    // ne rouvre pas un essai.
+    await this.abonnement.demarrerEssai(id, user.id);
+    return tenant;
   }
 
   @Roles(AdminRole.SUPER_ADMIN)

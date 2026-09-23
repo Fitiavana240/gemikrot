@@ -8,6 +8,8 @@ import { APP_NAME, BrandMark } from './Brand';
 import { useRouterSelection } from '../routers/RouterContext';
 import { REACHABILITY_LABEL } from '../api/routers';
 import { SideNav } from './SideNav';
+import { MurAbonnement } from './MurAbonnement';
+import { nomDuRole } from '../lib/roles';
 import { BandeauÉtat, Pied } from './Pied';
 import { Notifications } from './Notifications';
 
@@ -264,7 +266,11 @@ export function Layout() {
             {/* L'adresse et le rôle disparaissent d'abord : ce sont les
                 informations les moins utiles au travail courant. */}
             <div className="hidden min-w-0 truncate text-sm text-slate-500 sm:block">
-              {user?.email} — <span className="font-medium text-slate-700">{user?.role}</span>
+              {/* Le role en francais : << OPERATOR >> ne dit rien a qui vend
+                  des tickets, et un role qu'on ne comprend pas est un role
+                  qu'on n'attribue pas. */}
+              {user?.email} —{' '}
+              <span className="font-medium text-slate-700">{nomDuRole(user?.role)}</span>
             </div>
             <SelecteurExploitant />
             <RouterSelector />
@@ -291,7 +297,12 @@ export function Layout() {
         <BandeauPriseEnMain />
 
         <main className="min-w-0 flex-1 p-4 lg:p-6">
-          <Outlet />
+          {/* Le mur d'abonnement remplace le contenu, jamais la navigation :
+              l'exploitant doit pouvoir se deconnecter, changer son mot de
+              passe et lire ses donnees depuis le mur lui-meme. */}
+          <MurAbonnement>
+            <Outlet />
+          </MurAbonnement>
         </main>
         {/* En bas de la colonne de contenu, pas en travers de la barre
             latérale : il parle du routeur choisi, qui se choisit au-dessus. */}

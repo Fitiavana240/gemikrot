@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tenantsApi, type UpdateTenantInput } from '../api/tenants';
 import type { PaymentMethod } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
-import { ApiError } from '../api/client';
+import { ApiError, getTenantCible } from '../api/client';
 import { useParams } from 'react-router-dom';
 import { TabBar, type TabDef } from '../components/TabBar';
 import { MotDePasseCard } from '../components/MotDePasseCard';
@@ -18,6 +18,7 @@ import {
   Button,
   Card,
   EmptyRow,
+  ErrorNote,
   FormField,
   Input,
   PageHeader,
@@ -382,23 +383,59 @@ const ONGLETS: TabDef[] = [
   { to: 'compte', label: 'Mon compte' },
 ];
 
+/**
+ * Les deux onglets qui n'ont besoin d'aucun exploitant.
+ *
+ * Le SUPER_ADMIN n'appartient à aucun : les quatre autres onglets
+ * interrogeaient `tenants/me`, qui lui répond par un refus. Il voyait donc
+ * une page d'erreurs là où il venait simplement changer son mot de passe —
+ * son profil, et le seul réglage qui le concerne. Dès qu'il prend un
+ * exploitant en main, les six reviennent : il agit alors pour quelqu'un.
+ */
+const ONGLETS_SANS_EXPLOITANT: TabDef[] = [
+  { to: 'compte', label: 'Mon compte', défaut: true },
+  { to: 'apparence', label: 'Apparence' },
+];
+
 export function SettingsPage() {
   const { tab } = useParams();
+  const { user } = useAuth();
+
+  const sansExploitant = user?.role === 'SUPER_ADMIN' && !getTenantCible();
+  const onglets = sansExploitant ? ONGLETS_SANS_EXPLOITANT : ONGLETS;
+  // Sans exploitant, l'onglet par défaut est « Mon compte » : « Exploitant »
+  // n'aurait personne à montrer.
+  const courant = tab ?? (sansExploitant ? 'compte' : 'exploitant');
+  // Une adresse tapée à la main peut viser un onglet que ce compte n'a pas.
+  const connu = onglets.some((o) => o.to === courant);
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Paramètres"
-        description="Votre marque, vos moyens de paiement, ce que vos clients voient, et votre compte."
+        description={
+          sansExploitant
+            ? 'Votre compte de plateforme. Ciblez un exploitant pour régler sa marque, ses tickets et son portail.'
+            : 'Votre marque, vos moyens de paiement, ce que vos clients voient, et votre compte.'
+        }
       />
-      <TabBar base="/settings" tabs={ONGLETS} />
+      <TabBar base="/settings" tabs={onglets} />
 
-      {(!tab || tab === 'exploitant') && <ExploitantTab />}
-      {tab === 'apparence' && <ApparenceTab />}
-      {tab === 'tickets' && <TicketTemplatesTab />}
-      {tab === 'portail' && <PageConnexionTab />}
-      {tab === 'courriel' && <CourrielTab />}
-      {tab === 'compte' && <MotDePasseCard />}
+      {!connu ? (
+        <ErrorNote>
+          Ce réglage demande un exploitant. Choisissez-en un dans la barre du haut, ou revenez à
+          « Mon compte ».
+        </ErrorNote>
+      ) : (
+        <>
+          {courant === 'exploitant' && <ExploitantTab />}
+          {courant === 'apparence' && <ApparenceTab />}
+          {courant === 'tickets' && <TicketTemplatesTab />}
+          {courant === 'portail' && <PageConnexionTab />}
+          {courant === 'courriel' && <CourrielTab />}
+          {courant === 'compte' && <MotDePasseCard />}
+        </>
+      )}
     </div>
   );
 }

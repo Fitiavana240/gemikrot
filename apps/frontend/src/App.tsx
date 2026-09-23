@@ -27,6 +27,9 @@ import { PlansPage } from './pages/PlansPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { VouchersPage } from './pages/VouchersPage';
 import { PaymentsPage } from './pages/PaymentsPage';
+import { AbonnementPage } from './pages/AbonnementPage';
+import { EquipePage } from './pages/EquipePage';
+import { Protege } from './components/Protege';
 
 export function App() {
   return (
@@ -50,11 +53,11 @@ export function App() {
             <Route path="/sessions" element={<SessionsPage />} />
             <Route path="/subscriptions" element={<SubscriptionsPage />} />
             <Route path="/devices" element={<DevicesPage />} />
-            <Route path="/routers" element={<RoutersPage />} />
+            <Route path="/routers" element={<Protege><RoutersPage /></Protege>} />
             <Route path="/recettes" element={<RecettesPage />} />
-            <Route path="/diagnostic" element={<RouterToolsPage />} />
-            <Route path="/diagnostic/:tab" element={<RouterToolsPage />} />
-            <Route path="/hotspot" element={<HotspotPage />} />
+            <Route path="/diagnostic" element={<Protege><RouterToolsPage /></Protege>} />
+            <Route path="/diagnostic/:tab" element={<Protege><RouterToolsPage /></Protege>} />
+            <Route path="/hotspot" element={<Protege><HotspotPage /></Protege>} />
             {/* L'ancienne adresse de la page de connexion : elle a rejoint
                 Paramètres. Rediriger plutôt que laisser retomber sur l'onglet
                 Serveurs, qui n'aurait rien dit et laissé chercher. */}
@@ -62,27 +65,31 @@ export function App() {
               path="/hotspot/page-connexion"
               element={<Navigate to="/settings/portail" replace />}
             />
-            <Route path="/hotspot/:tab" element={<HotspotPage />} />
-            <Route path="/pppoe" element={<PppoePage />} />
-            <Route path="/pppoe/:tab" element={<PppoePage />} />
-            <Route path="/user-manager" element={<UserManagerPage />} />
-            <Route path="/user-manager/:tab" element={<UserManagerPage />} />
+            <Route path="/hotspot/:tab" element={<Protege><HotspotPage /></Protege>} />
+            <Route path="/pppoe" element={<Protege><PppoePage /></Protege>} />
+            <Route path="/pppoe/:tab" element={<Protege><PppoePage /></Protege>} />
+            <Route path="/user-manager" element={<Protege><UserManagerPage /></Protege>} />
+            <Route path="/user-manager/:tab" element={<Protege><UserManagerPage /></Protege>} />
             <Route path="/ticket-templates" element={<TicketTemplatesPage />} />
             <Route path="/ticket-print" element={<TicketPrintPage />} />
-            <Route path="/audit" element={<AuditPage />} />
+            <Route path="/audit" element={<Protege><AuditPage /></Protege>} />
             <Route path="/settings" element={<SettingsPage />} />
             {/* Les reglages sont regroupes en onglets : la marque, le modele
                 de ticket, le portail captif, le compte et l'apparence. */}
             <Route path="/settings/:tab" element={<SettingsPage />} />
-            <Route path="/tenants" element={<TenantsPage />} />
-            <Route path="/supervision" element={<SupervisionPage />} />
-            <Route path="/plans" element={<PlansPage />} />
+            <Route path="/tenants" element={<Protege><TenantsPage /></Protege>} />
+            <Route path="/supervision" element={<Protege><SupervisionPage /></Protege>} />
+            <Route path="/plans" element={<Protege><PlansPage /></Protege>} />
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/customers/:id" element={<CustomerSheetPage />} />
             <Route path="/vouchers" element={<VouchersPage />} />
             <Route path="/vouchers/:tab" element={<VouchersPage />} />
             <Route path="/batches" element={<BatchesPage />} />
             <Route path="/payments" element={<PaymentsPage />} />
+            {/* Toujours atteignable, meme abonnement expire : c'est la page
+                qui dit quoi payer, et a qui. */}
+            <Route path="/abonnement" element={<Protege><AbonnementPage /></Protege>} />
+            <Route path="/equipe" element={<Protege><EquipePage /></Protege>} />
           </Route>
         </Routes>
       </AuthProvider>

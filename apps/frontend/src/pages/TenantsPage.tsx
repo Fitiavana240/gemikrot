@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tenantsApi, type Tenant, type TenantStatus } from '../api/tenants';
+import { formatMoney } from '../api/money';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, PageHeader, Table, TableSkeleton } from '../components/ui';
 import { Confirmation } from '../components/Edition';
@@ -26,6 +27,11 @@ export function TenantsPage() {
   const [maxRouteurs, setMaxRouteurs] = useState('');
   const [echeance, setEcheance] = useState('');
   const tenants = useQuery({ queryKey: ['tenants'], queryFn: tenantsApi.list });
+  const catalogue = useQuery({
+    queryKey: ['offres-plateforme'],
+    queryFn: tenantsApi.offres,
+    staleTime: 5 * 60_000,
+  });
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['tenants'] });
   const onError = (err: unknown) =>
@@ -51,6 +57,25 @@ export function TenantsPage() {
         maxRouters: maxRouteurs.trim() === '' ? null : Number(maxRouteurs),
         platformEndsAt: echeance || null,
       }),
+    onSuccess: () => {
+      setError(null);
+      setAbonnementDe(null);
+      refresh();
+    },
+    onError,
+  });
+
+  /**
+   * Un clic par offre, echeance calculee.
+   *
+   * La saisie a la main reste dessous, pour les arrangements qui ne rentrent
+   * dans aucune case. Mais le geste courant — reconduire un mois de plus —
+   * demandait d'ajouter trente jours de tete a une date, donc de se tromper
+   * un jour. Et la periode en cours n'est jamais perdue : la nouvelle repart
+   * de sa fin.
+   */
+  const souscrire = useMutation({
+    mutationFn: ({ id, code }: { id: string; code: string }) => tenantsApi.souscrire(id, code),
     onSuccess: () => {
       setError(null);
       setAbonnementDe(null);
@@ -89,7 +114,7 @@ export function TenantsPage() {
           }
           note={
             <>
-              Passé l&apos;échéance, une <strong>tolérance de quinze jours</strong> court avant
+              Passé l&apos;échéance, une <strong>tolérance de quatorze jours</strong> court avant
               que la vente ne se ferme — une console qui se ferme le jour même d&apos;un retard
               de virement ferait perdre des ventes pour rien. Et même après, la consultation
               reste ouverte et <strong>les clients finaux gardent leur accès</strong> : le
@@ -98,6 +123,34 @@ export function TenantsPage() {
             </>
           }
         >
+          {/* Le geste courant d'abord : une offre, un clic, la date se deduit. */}
+          <div className="mb-4 space-y-2">
+            <p className="text-sm font-medium text-slate-700">Souscrire ou reconduire</p>
+            <div className="flex flex-wrap gap-2">
+              {(catalogue.data?.offres ?? [])
+                // L'essai s'ouvre seul a l'activation et ne se vend pas.
+                .filter((o) => o.code !== 'ESSAI')
+                .map((o) => (
+                  <Button
+                    key={o.code}
+                    variant="secondary"
+                    disabled={souscrire.isPending}
+                    onClick={() => souscrire.mutate({ id: abonnementDe.id, code: o.code })}
+                  >
+                    {o.nom} — {formatMoney(o.prixParRouteur, abonnementDe.currency)} / routeur /{' '}
+                    {o.periode}
+                  </Button>
+                ))}
+            </div>
+            <p className="text-xs text-slate-500">
+              Une periode encore en cours n&apos;est pas perdue : la nouvelle echeance repart de
+              sa fin. Une echeance deja depassee repart d&apos;aujourd&apos;hui.
+            </p>
+          </div>
+
+          <p className="mb-2 text-sm font-medium text-slate-700">
+            Ou poser les valeurs a la main
+          </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <FormField label="Offre">
               <Input
