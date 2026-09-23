@@ -1,10 +1,11 @@
 import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
-import { IsOptional, IsString, Length } from 'class-validator';
+import { IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 import { Public } from '../auth/public.decorator.js';
 import { AdminRole } from '@prisma/client';
 import { Roles } from '../auth/roles.decorator.js';
 import { RateLimitGuard } from '../public/rate-limit.guard.js';
 import { RouterEnrollmentService } from './router-enrollment.service.js';
+import { RaccordementAssisteService } from './raccordement-assiste.service.js';
 
 const CAN_CONFIGURE = [AdminRole.SUPER_ADMIN, AdminRole.ADMIN];
 
@@ -12,6 +13,39 @@ export class InviteRouterDto {
   @IsString()
   @Length(2, 60)
   label!: string;
+}
+
+/**
+ * Les identifiants Winbox, employes une fois puis oublies.
+ *
+ * Ce corps de requete porte le mot de passe administrateur du routeur. Il ne
+ * doit apparaitre nulle part ailleurs : ni en base, ni au journal, ni dans une
+ * reponse. Le service qui le recoit le tient dans une variable locale le temps
+ * de trois ecritures, et c'est tout.
+ */
+export class RaccordementAssisteDto {
+  @IsString()
+  @Length(3, 120)
+  host!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  port?: number;
+
+  @IsString()
+  @Length(1, 60)
+  username!: string;
+
+  @IsString()
+  @Length(1, 200)
+  password!: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(2, 60)
+  label?: string;
 }
 
 export class EnrollRouterDto {
@@ -28,7 +62,35 @@ export class EnrollRouterDto {
 
 @Controller('router-enrollments')
 export class RouterEnrollmentController {
-  constructor(private readonly enrollment: RouterEnrollmentService) {}
+  constructor(
+    private readonly enrollment: RouterEnrollmentService,
+    private readonly assiste: RaccordementAssisteService,
+  ) {}
+
+  /**
+   * Regarde le routeur sans rien y ecrire.
+   *
+   * Separe du raccordement a dessein : on montre a l'exploitant ce qu'on a
+   * trouve — nom, modele, version — et il confirme. Poser un tunnel sur un
+   * routeur qu'on n'a pas identifie laisserait une configuration a moitie
+   * ecrite que personne ne saurait retrouver.
+   */
+  @Roles(...CAN_CONFIGURE)
+  @Post('sonder')
+  sonder(@Body() body: RaccordementAssisteDto) {
+    return this.assiste.sonder(body);
+  }
+
+  /**
+   * Pose le tunnel et le compte dedie, puis enregistre le routeur.
+   *
+   * Le mot de passe administrateur passe ici et ne va pas plus loin.
+   */
+  @Roles(...CAN_CONFIGURE)
+  @Post('assiste')
+  raccorder(@Body() body: RaccordementAssisteDto) {
+    return this.assiste.raccorder(body);
+  }
 
   /**
    * Rappel du routeur après exécution du script. **Sans jeton d'application**,

@@ -190,6 +190,8 @@ Trois défauts n'ont pu être trouvés que là : une ligne du script qui **coupa
 | RTR-20 | **Génération directe depuis un profil** (« Generate Voucher » de WinBox), côté User Manager comme HotSpot. Profil vérifié avant toute création, échecs partiels nommés plutôt que comptés, 200 par lot au maximum. L'écran dit que ces tickets ne sont pas suivis comme des ventes | ⭐⭐⭐ | 🟡 | ✅ |
 | RTR-21 | **Paiements notés par le routeur** (`/user-manager/payment`). Vide sur ce parc, qui encaisse par Mobile Money : les noms de champs viennent des colonnes de WinBox et **non d'un relevé**, et l'écran le dit | ⭐ | 🟢 | 🟡 |
 | RTR-22 | **La console détecte que son adresse a changé** avant qu'on publie la page captive ou qu'on colle le script d'enrôlement | ⭐⭐⭐ | 🟢 | ✅ livré — deux fois ce bail DHCP a coûté une journée. Les deux écrans partagent désormais la même détection. **Un nom de domaine n'est jamais périmé** : seule une IPv4 écrite en dur se vérifie, et c'est la forme qui pourrit. Le remède durable reste une réservation DHCP, que l'application ne peut pas poser |
+| RTR-24 | **Raccordement assisté** : la console pose le tunnel et le compte dédié elle-même, sans script à coller | ⭐⭐⭐ | 🟢 | ✅ livré — possible pour une raison précise : **au premier raccordement, l'exploitant est sur le même réseau que son routeur**, il n'a pas encore besoin du tunnel pour l'atteindre. **Le mot de passe administrateur ne survit pas à l'appel** : ni en base, ni au journal, ni dans la réponse. Ce qui reste est `gemikrot-api`, aux droits limités, dont le mot de passe est fabriqué par le serveur. Le script reste offert — il est transparent, et c'est le seul recours quand le routeur n'est pas sur le même réseau |
+| RTR-25 | **Sondage avant écriture** : nom, modèle, version et certificat relevés sans rien poser | ⭐⭐ | 🟢 | ✅ livré — RouterOS 6 n'a ni WireGuard ni API REST. Le découvrir après avoir créé un compte laisserait une configuration à moitié écrite sur le matériel de quelqu'un. « Ne répond pas » et « refuse le mot de passe » sont deux messages distincts : les remèdes n'ont rien à voir |
 | RTR-23 | **Script d'enrôlement rejouable, sans accent, `fetch` en dernier** | ⭐⭐ | 🟢 | ✅ livré — une seconde exécution rendait sept « already have » indistinguables d'un vrai échec ; `/tool/fetch` au milieu bloquait le terminal et **avalait les lignes suivantes**, qui revenaient tronquées en erreur de syntaxe |
 | RTR-15 | **Menus IP en lecture** : files simples (le débit réellement alloué, client par client), journal du routeur, interfaces avec leurs coupures de lien, services d'administration, DDNS, ARP, serveurs DHCP, **pare-feu filtrage et NAT dans leur ordre d'évaluation**, DNS et entrées statiques, table de routage. **Lecture seule, par décision** : la console montre, WinBox modifie | ⭐⭐ | 🟡 | ✅ |
 | RTR-16 | **Stockage et préparation de User Manager** : mémoire interne, clés USB et leur état de montage, paquets installés, occupation par support, et où vit la base User Manager. Rend un diagnostic ordonné par gravité, avec la commande exacte quand il en existe une — dont la réponse à « pourquoi l'onglet User Manager n'apparaît-il pas dans WinBox » | ⭐⭐⭐ | 🟡 | ✅ |
@@ -2222,6 +2224,47 @@ agissez au nom de... » existe pour cela, et il a bien été affiché.
 *Et un défaut dans le neuf* : l'écran Équipe affichait « Aucun compte. » quand
 la lecture échouait — indiscernable d'une équipe vide. On croirait avoir perdu
 ses comptes, ou pire, on recréerait ceux qui existent.
+
+### 2026-09-23 — Raccorder sans coller de script
+
+L'exploitant a proposé un assistant depuis l'écran d'accueil : configurer le
+VPN, générer ce qu'il faut, puis ajouter le routeur. L'essentiel de la
+plomberie existait déjà — tunnel, enrôlement, script, carte de mise en route
+— mais rien ne les enchainait, et le parcours par script venait d'échouer de
+trois façons en une seule séance.
+
+**La console fait maintenant le travail elle-même**, et c'est possible pour une
+raison précise, qui n'est pas évidente : **au premier raccordement,
+l'exploitant est sur le même réseau que son routeur**. Il n'a pas encore
+besoin du tunnel pour l'atteindre — c'est justement le tunnel qu'on vient
+poser. L'œuf et la poule n'en sont pas un.
+
+**Le mot de passe administrateur ne survit pas à l'appel.** La proposition
+initiale était de le conserver pour s'en resservir ; ça n'a pas été fait, et
+le calcul n'est pas discutable : une seule intrusion sur la plateforme
+donnerait le contrôle total de **tous** les routeurs de **tous** les
+exploitants. Il vit dans une variable locale, le temps de quelques écritures
+REST, et disparaît avec elle. Ce qui reste en base est `gemikrot-api`, aux
+droits limités, dont le mot de passe est fabriqué par le serveur. Une épreuve
+vérifie qu'aucune trace — base, journal, audit, corps REST — ne le contient.
+
+**La clé privée du tunnel naît sur le routeur et n'en sort jamais**, pas même
+vers la console qui pilote l'opération. La clé publique est **relue** après
+création de l'interface, jamais fournie.
+
+**Et la console ne bascule pas sur le tunnel.** Un tunnel qu'on vient de poser
+n'a pas échangé de poignée de main ; y basculer rendrait le routeur
+injoignable dans la seconde qui suit un raccordement réussi. L'adresse locale
+qu'on vient d'éprouver reste en service, et le tunnel prend le relais quand il
+aura prouvé qu'il fonctionne. Un tunnel posé n'est pas un tunnel éprouvé, et
+l'écran le dit.
+
+*Trois points de la proposition n'ont pas été retenus*, après arbitrage :
+conserver le mot de passe administrateur (ci-dessus) ; un chemin RouterOS v6,
+qui serait une seconde architecture entière — ni WireGuard ni API REST avant
+la 7 — et que rien n'appelle sur ce parc ; et l'API binaire 8728 sans TLS, qui
+ferait circuler les identifiants du routeur en clair là où REST sur 443 avec
+certificat épinglé fonctionne déjà.
 
 ---
 

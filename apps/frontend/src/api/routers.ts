@@ -110,6 +110,43 @@ export interface EnrollmentInvitation {
   adressePerimee: { configuree: string; actuelle: string | null } | null;
 }
 
+/** Ce que la console a trouve sur le routeur, sans rien y ecrire. */
+export interface SondageRouteur {
+  joignable: boolean;
+  version: string | null;
+  versionSuffisante: boolean;
+  identite: string | null;
+  modele: string | null;
+  empreinte: string | null;
+  message: string;
+  adressePerimee: { configuree: string; actuelle: string | null } | null;
+}
+
+export interface RaccordementAssiste {
+  routerId: string;
+  label: string;
+  identite: string;
+  version: string;
+  tunnelAddress: string;
+  /** Les gestes poses sur le routeur, dans l'ordre. */
+  etapes: string[];
+}
+
+/**
+ * Les identifiants Winbox, employes une fois puis oublies.
+ *
+ * Le mot de passe part au serveur, qui s'en sert le temps de trois ecritures
+ * et ne l'enregistre nulle part. Ce qui reste, c'est un compte dedie aux
+ * droits limites dont le mot de passe est fabrique par le serveur.
+ */
+export interface RaccordementAssisteInput {
+  host: string;
+  port?: number;
+  username: string;
+  password: string;
+  label?: string;
+}
+
 export interface PendingEnrollment {
   id: string;
   label: string;
@@ -121,6 +158,10 @@ export interface PendingEnrollment {
 export const enrollmentsApi = {
   pending: () => api.get<PendingEnrollment[]>('/router-enrollments'),
   invite: (label: string) => api.post<EnrollmentInvitation>('/router-enrollments', { label }),
+  sonder: (input: RaccordementAssisteInput) =>
+    api.post<SondageRouteur>('/router-enrollments/sonder', input),
+  raccorder: (input: RaccordementAssisteInput) =>
+    api.post<RaccordementAssiste>('/router-enrollments/assiste', input),
   /** Retire une invitation qu'on ne compte plus servir, et libère son adresse. */
   cancel: (id: string) => api.delete<void>(`/router-enrollments/${id}`),
 };

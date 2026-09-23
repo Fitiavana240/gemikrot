@@ -13,6 +13,7 @@ import { TicketGenerationService } from './ticket-generation.service.js';
 import { RouterToolsController } from './router-tools.controller.js';
 import { RouterEnrollmentController } from './router-enrollment.controller.js';
 import { RouterEnrollmentService } from './router-enrollment.service.js';
+import { RaccordementAssisteService } from './raccordement-assiste.service.js';
 import { WireguardService } from './wireguard.service.js';
 import { RouterHealthService } from './router-health.service.js';
 import { RouterOperationQueue } from './router-operation.service.js';
@@ -42,6 +43,7 @@ import { RouterMonitoringController } from './router-monitoring.controller.js';
     RouterAccessService,
     WireguardService,
     RouterEnrollmentService,
+    RaccordementAssisteService,
     RouterCredentialsService,
     RouterRepairService,
     TicketGenerationService,

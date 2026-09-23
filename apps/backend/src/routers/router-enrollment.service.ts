@@ -268,7 +268,15 @@ export class RouterEnrollmentService {
    * rendrait deux routeurs injoignables. Seules des adresses sont lues, aucune
    * donnée d'exploitant.
    */
-  private async allocateAddress(): Promise<string> {
+  /**
+   * Publique, parce qu'un second parcours l'emploie.
+   *
+   * Le raccordement assiste alloue dans le meme sous-reseau. Deux allocateurs
+   * pour une seule plage finiraient par donner la meme adresse a deux
+   * routeurs — et un tunnel ou deux pairs partagent une adresse ne tombe pas,
+   * il livre les paquets au hasard, ce qui est bien pire.
+   */
+  async allocateAddress(): Promise<string> {
     const { subnet, serverAddress } = this.wireguard.settings;
     const [base, maskRaw] = subnet.split('/');
     const mask = Number(maskRaw);

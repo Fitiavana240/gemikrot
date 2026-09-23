@@ -13,6 +13,7 @@ import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
 import { Badge, Button, Card, FormField, Input, PageHeader, Table } from '../components/ui';
 import { Modale } from '../components/Modale';
+import { RaccordementAssisteModale } from '../components/RaccordementAssiste';
 
 export function RoutersPage() {
   const { canWrite } = useAuth();
@@ -23,6 +24,8 @@ export function RoutersPage() {
   const [newRouterLabel, setNewRouterLabel] = useState('');
   /** Le formulaire de raccordement, ouvert ou non. */
   const [raccorder, setRaccorder] = useState(false);
+  /** L'assistant automatique, ouvert ou non. */
+  const [assiste, setAssiste] = useState(false);
   const [invitation, setInvitation] = useState<EnrollmentInvitation | null>(null);
 
   const routers = useQuery({ queryKey: ['routers'], queryFn: routersApi.list });
@@ -180,9 +183,23 @@ export function RoutersPage() {
       )}
 
       {canWrite && (
-        <div>
-          <Button onClick={() => setRaccorder(true)}>Raccorder un routeur</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* L'automatique en premier et en plein : c'est le chemin qui
+              marche pour quelqu'un qui n'est pas informaticien. Le script
+              reste offert — il est transparent, et c'est le seul recours
+              quand le routeur n'est pas sur le meme reseau que la console. */}
+          <Button onClick={() => setAssiste(true)}>Raccorder automatiquement</Button>
+          <Button variant="secondary" onClick={() => setRaccorder(true)}>
+            Préparer un script à coller
+          </Button>
         </div>
+      )}
+
+      {assiste && (
+        <RaccordementAssisteModale
+          onFermer={() => setAssiste(false)}
+          onFini={() => setAssiste(false)}
+        />
       )}
 
       {raccorder && (
