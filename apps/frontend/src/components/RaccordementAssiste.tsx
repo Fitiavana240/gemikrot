@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { tenantsApi } from '../api/tenants';
 import { enrollmentsApi, type RaccordementAssiste as Resultat, type SondageRouteur } from '../api/routers';
 import { ApiError } from '../api/client';
 import { Modale } from './Modale';
@@ -84,6 +85,13 @@ export function RaccordementAssisteModale({
   const [sondage, setSondage] = useState<SondageRouteur | null>(null);
   const [resultat, setResultat] = useState<Resultat | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
+
+  // L'exploitant courant : celui du jeton, ou celui qu'un SUPER_ADMIN pilote.
+  const exploitant = useQuery({
+    queryKey: ['tenant-me'],
+    queryFn: tenantsApi.mine,
+    retry: false,
+  });
 
   const entree = () => ({
     host: form.host.trim(),
@@ -195,6 +203,22 @@ export function RaccordementAssisteModale({
         </Button>
       }
     >
+      {/*
+        À qui ce routeur va appartenir, dit avant de le raccorder.
+        **Ce n'est pas une décoration.** Un SUPER_ADMIN en prise en main
+        raccorde au nom de l'exploitant ciblé : le hAP de production de ce
+        parc s'est ainsi retrouvé chez l'exploitant d'essai, et rien à
+        l'écran ne l'avait annoncé. Le bandeau de prise en main existe, mais
+        il est en haut de page — on ne le regarde plus quand on remplit un
+        formulaire.
+      */}
+      {exploitant.data && (
+        <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          Ce routeur sera rattaché à{' '}
+          <strong>{exploitant.data.wifiName || exploitant.data.name}</strong>.
+        </p>
+      )}
+
       <form onSubmit={soumettre} className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="sm:col-span-2">
