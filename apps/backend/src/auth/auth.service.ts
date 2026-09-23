@@ -9,6 +9,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { AdminRole, TenantStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { randomInt } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { LoginThrottleService } from './login-throttle.service.js';
@@ -24,7 +25,29 @@ const ESSAI = offreParCode('ESSAI')!;
 
 export interface LoginResult {
   accessToken: string;
-  user: { id: string; email: string; role: AdminRole; tenantId: string | null };
+  user: {
+    id: string;
+    email: string;
+    role: AdminRole;
+    tenantId: string | null;
+    /** Faux tant que le code recu par courriel n'a pas ete saisi. */
+    emailVerifie: boolean;
+  };
+}
+
+/**
+ * Six chiffres, valables une heure.
+ *
+ * Six et non huit : il se lit au telephone et se retape sans erreur. L'entropie
+ * est faible — un million de possibilites — mais le code ne vaut que pour une
+ * adresse deja authentifiee, pendant une heure, et la limitation de debit
+ * couvre le reste. Ce n'est pas un mot de passe, c'est la preuve qu'on relève
+ * bien cette boite.
+ */
+const VALIDITE_CODE_MS = 60 * 60 * 1000;
+
+function codeDeConfirmation(): string {
+  return String(randomInt(0, 1_000_000)).padStart(6, '0');
 }
 
 /** Politique appliquée là où elle a du sens : à la définition du mot de passe. */
@@ -58,11 +81,11 @@ export class AuthService {
    * compte a dormi une journee entiere. Le compte est desormais ouvert tout
    * seul, mais savoir qui arrive reste le travail du SUPER_ADMIN.
    *
-   * `tenantId` est celui du nouvel exploitant : c'est son SMTP qui portera le
-   * message, faute d'en avoir un a l'echelle de la plateforme. S'il n'en a
-   * pas encore — et il n'en a jamais a la seconde ou il s'inscrit — rien ne
-   * part, la tentative est tracee, et la cloche du SUPER_ADMIN prend le
-   * relais. Elle, au moins, ne depend d'aucun reglage.
+   * **Depuis le serveur de la plateforme.** La premiere version empruntait le
+   * SMTP du nouvel exploitant — qui n'en a evidemment aucun a la seconde ou
+   * il s'inscrit : aucun avis n'est jamais parti. La plateforme a desormais
+   * le sien, et la cloche du SUPER_ADMIN reste le filet, elle qui ne depend
+   * d'aucun reglage.
    */
   private async prevenirLaPlateforme(tenant: {
     id: string;
@@ -76,26 +99,26 @@ export class AuthService {
         where: { role: AdminRole.SUPER_ADMIN },
         select: { email: true },
       });
+      const texte = [
+        `Un exploitant vient de s'inscrire, et son essai gratuit de ${ESSAI_JOURS} jours a commencé.`,
+        '',
+        `Exploitant : ${tenant.name}`,
+        `Réseau Wi-Fi : ${tenant.wifiName}`,
+        `Adresse publique : /p/${tenant.slug}`,
+        '',
+        "Il peut se connecter dès maintenant. À l'échéance, la vente se ferme ;",
+        'ses clients, eux, gardent leur accès.',
+        '',
+        '— GeMikrot',
+      ].join('\n');
+
       for (const compte of comptes) {
-        await this.courriel.envoyer({
-          tenantId: tenant.id,
+        // Depuis le serveur de la plateforme : le nouvel exploitant n'a pas
+        // encore de SMTP, et l'ancien code empruntait justement le sien.
+        await this.courriel.envoyerDeLaPlateforme({
           destinataire: compte.email,
           sujet: `Nouvel exploitant : ${tenant.name}`,
-          texte:
-            `Un exploitant vient de s'inscrire et son essai gratuit de ${ESSAI_JOURS} jours a commence.
-
-` +
-            `Exploitant : ${tenant.name}
-` +
-            `Reseau Wi-Fi : ${tenant.wifiName}
-` +
-            `Adresse publique : /p/${tenant.slug}
-
-` +
-            `Il peut se connecter des maintenant. A l'echeance, la vente se ferme ; ses clients, eux, gardent leur acces.
-
-` +
-            `— GeMikrot`,
+          texte,
           type: 'inscription-exploitant',
         });
       }
@@ -177,6 +200,7 @@ export class AuthService {
         email: admin.email,
         role: admin.role,
         tenantId: admin.tenantId,
+        emailVerifie: admin.emailVerifiedAt !== null,
       },
     };
   }
@@ -266,6 +290,7 @@ export class AuthService {
     // Pose avant la transaction : la meme date pour l'echeance et la fin de
     // tolerance, sans risque qu'un ecart de millisecondes les separe.
     const finDEssai = new Date(Date.now() + ESSAI_JOURS * JOUR_MS);
+    const code = codeDeConfirmation();
 
     const slug = await reserveTenantSlug(
       dto.organizationName,
@@ -320,6 +345,12 @@ export class AuthService {
           email: dto.email,
           passwordHash: await bcrypt.hash(dto.password, 10),
           role: AdminRole.ADMIN,
+          // L'adresse n'est pas confirmee, et cela ne ferme rien : le compte
+          // travaille normalement. Bloquer la connexion sur un courriel qui
+          // n'arrive pas — SMTP muet, boite pleine, message en indesirables —
+          // transformerait un accessoire en panne totale.
+          emailCode: code,
+          emailCodeSentAt: new Date(),
         },
       });
 
@@ -338,6 +369,7 @@ export class AuthService {
     // Les comptes de la plateforme sont prevenus : une inscription qui
     // n'atteint personne est un client qu'on ne rappellera jamais.
     await this.prevenirLaPlateforme(created.tenant);
+    await this.envoyerLeCode(dto.email, code);
 
     return {
       tenantId: created.tenant.id,
@@ -345,6 +377,107 @@ export class AuthService {
       message: `Compte créé. Votre essai gratuit de ${ESSAI_JOURS} jours commence maintenant : connectez-vous et raccordez votre routeur.`,
       essaiJusquAu: finDEssai.toISOString(),
     };
+  }
+
+  /**
+   * Envoie le code, depuis le serveur de la plateforme.
+   *
+   * Jamais celui de l'exploitant : a l'inscription il n'en a pas, et pour un
+   * compte d'equipe ce serait lui demander de valider une adresse avec un
+   * serveur qu'il vient peut-etre de mal regler.
+   */
+  private async envoyerLeCode(destinataire: string, code: string): Promise<void> {
+    if (!this.courriel) return;
+    try {
+      await this.envoyerLeCodeOuEchouer(destinataire, code);
+    } catch (e) {
+      // Trace et oublie, comme l'avis a la plateforme. Un code qui ne part
+      // pas ne doit pas emporter l'inscription : le compte existe, l'essai
+      // court, et l'adresse se confirmera avec un nouveau code. L'inverse
+      // ferait d'un SMTP mal regle une panne totale du produit.
+      this.logger.warn(
+        `Code de confirmation non parti a ${destinataire} : ${e instanceof Error ? e.message : e}`,
+      );
+    }
+  }
+
+  private async envoyerLeCodeOuEchouer(destinataire: string, code: string): Promise<void> {
+    await this.courriel!.envoyerDeLaPlateforme({
+      destinataire,
+      sujet: `Votre code de confirmation : ${code}`,
+      texte:
+        `Voici le code qui confirme votre adresse :\n\n    ${code}\n\n` +
+        `Saisissez-le dans la console. Il est valable une heure.\n\n` +
+        `Sans adresse confirmee, nous ne pourrons pas vous prevenir : ` +
+        `echeance d'abonnement, paiement d'un client, panne d'un routeur.\n\n` +
+        `Si vous n'etes a l'origine d'aucune inscription, ignorez ce message.\n\n` +
+        `— GeMikrot`,
+      type: 'confirmation-adresse',
+    });
+  }
+
+  /**
+   * Confirme l'adresse d'un compte a partir du code recu.
+   *
+   * Le code part des qu'il a servi : un code qui reste valable apres usage
+   * n'est plus une preuve, c'est un second mot de passe qui traine.
+   */
+  async confirmerCourriel(adminUserId: string, code: string): Promise<{ confirme: boolean }> {
+    const compte = await this.prisma.adminUser.findUnique({ where: { id: adminUserId } });
+    if (!compte) throw new UnauthorizedException('Compte introuvable');
+    if (compte.emailVerifiedAt) return { confirme: true };
+
+    const perime =
+      !compte.emailCodeSentAt ||
+      Date.now() - compte.emailCodeSentAt.getTime() > VALIDITE_CODE_MS;
+    if (perime) {
+      throw new BadRequestException(
+        'Ce code a expiré. Demandez-en un nouveau : il est valable une heure.',
+      );
+    }
+    if (!compte.emailCode || compte.emailCode !== code.trim()) {
+      throw new BadRequestException('Ce code ne correspond pas.');
+    }
+
+    await this.prisma.adminUser.update({
+      where: { id: adminUserId },
+      data: { emailVerifiedAt: new Date(), emailCode: null, emailCodeSentAt: null },
+    });
+    await this.audit.log({
+      adminUserId,
+      tenantId: compte.tenantId ?? undefined,
+      action: 'VERIFY_EMAIL',
+      targetType: 'AdminUser',
+      targetId: adminUserId,
+    });
+    return { confirme: true };
+  }
+
+  /**
+   * Renvoie un code, au plus un par minute.
+   *
+   * La limite protege moins le service que la boite du destinataire : dix
+   * codes en dix secondes, et le dixieme part en indesirables avec les neuf
+   * autres.
+   */
+  async renvoyerLeCode(adminUserId: string): Promise<{ envoye: boolean; erreur?: string }> {
+    const compte = await this.prisma.adminUser.findUnique({ where: { id: adminUserId } });
+    if (!compte) throw new UnauthorizedException('Compte introuvable');
+    if (compte.emailVerifiedAt) return { envoye: false, erreur: 'Adresse déjà confirmée.' };
+
+    if (compte.emailCodeSentAt && Date.now() - compte.emailCodeSentAt.getTime() < 60_000) {
+      throw new BadRequestException(
+        'Un code vient de partir. Attendez une minute avant d’en demander un autre.',
+      );
+    }
+
+    const code = codeDeConfirmation();
+    await this.prisma.adminUser.update({
+      where: { id: adminUserId },
+      data: { emailCode: code, emailCodeSentAt: new Date() },
+    });
+    await this.envoyerLeCode(compte.email, code);
+    return { envoye: true };
   }
 
   private signToken(admin: { id: string; email: string; role: AdminRole; tenantId: string | null }) {

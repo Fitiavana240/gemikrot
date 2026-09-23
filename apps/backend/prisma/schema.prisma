@@ -23,6 +23,46 @@ enum TenantStatus {
 /// Exploitant de la plateforme : un réseau Wi-Fi commercial, sa marque, ses
 /// routeurs et ses clients. Le SUPER_ADMIN n'appartient à aucun tenant et
 /// voit l'ensemble.
+/**
+ * La plateforme, en une seule ligne.
+ *
+ * Le SUPER_ADMIN n'appartient a aucun exploitant : il n'avait donc nulle part
+ * ou ranger son serveur d'envoi. `prevenirLaPlateforme` empruntait le SMTP du
+ * nouvel exploitant, qui n'en a evidemment aucun a la seconde ou il s'inscrit
+ * — **aucun avis d'inscription ni code de confirmation ne pouvait partir**.
+ *
+ * Une table plutot qu'un fichier `.env` : ces reglages se modifient depuis la
+ * console, par quelqu'un qui n'ouvre pas un terminal.
+ */
+model Plateforme {
+  /// Toujours `plateforme` : il n'y en a qu'une.
+  id        String   @id @default("plateforme")
+  /// Le nom qui signe les messages, ex. `GeMikrot`.
+  nom       String   @default("GeMikrot")
+
+  smtpHost     String?  @map("smtp_host")
+  smtpPort     Int?     @map("smtp_port")
+  /// Vrai pour le port 465, faux pour 587 : ce n'est pas << chiffrer ou non >>,
+  /// c'est << chiffre des la connexion, ou apres un STARTTLS >>.
+  smtpSecure   Boolean  @default(false) @map("smtp_secure")
+  smtpUser     String?  @map("smtp_user")
+  /// Chiffre par la meme cle que les identifiants routeur.
+  smtpPasswordEncrypted String? @map("smtp_password_encrypted")
+  smtpFrom     String?  @map("smtp_from")
+  /// Interrupteur general. **Faux par defaut** : enregistrer une configuration
+  /// ne doit pas suffire a se mettre a ecrire a des gens.
+  smtpActif    Boolean  @default(false) @map("smtp_actif")
+
+  /// Ou l'exploitant s'adresse pour payer. Vide, la page de blocage le dit.
+  contactTelephone String? @map("contact_telephone")
+  contactWhatsapp  String? @map("contact_whatsapp")
+  contactCourriel  String? @map("contact_courriel")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("plateforme")
+}
+
 model Tenant {
   id        String       @id @default(uuid())
   /// Identifiant public, utilisé dans l'adresse de la page de paiement
@@ -126,8 +166,11 @@ model Tenant {
 /// information qu'on relit une fois par an.
 model Courriel {
   id        String   @id @default(uuid())
-  tenantId  String   @map("tenant_id")
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  /// Nul pour un envoi de la plateforme elle-meme : confirmation d'adresse,
+  /// avis d'inscription. Ces messages ne sont ceux d'aucun exploitant, et
+  /// les rattacher au premier venu fausserait son journal.
+  tenantId  String?  @map("tenant_id")
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
   /// A qui. Une seule adresse par ligne : un envoi groupe en fait plusieurs.
   destinataire String
   sujet     String
@@ -141,6 +184,7 @@ model Courriel {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([tenantId, createdAt])
+  @@index([createdAt])
   @@map("courriels")
 }
 
@@ -401,6 +445,18 @@ model AdminUser {
   email        String    @unique
   passwordHash String    @map("password_hash")
   role         AdminRole @default(OPERATOR)
+  /// Quand l'adresse a ete confirmee. Nul = jamais.
+  ///
+  /// **Ne ferme pas la porte.** Un compte non confirme travaille normalement :
+  /// bloquer la connexion sur un courriel qui n'arrive pas — SMTP muet, boite
+  /// pleine, message en indesirables — transformerait un accessoire en panne
+  /// totale. Ce qu'il ne peut pas faire, c'est souscrire : on ne prend pas
+  /// l'argent de quelqu'un qu'on ne sait pas joindre.
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  /// Le code a six chiffres, tel qu'envoye. Efface des qu'il a servi.
+  emailCode       String?   @map("email_code")
+  /// Pour limiter les renvois et faire expirer le code.
+  emailCodeSentAt DateTime? @map("email_code_sent_at")
   mfaEnabled   Boolean   @default(false)
   mfaSecret    String?   @map("mfa_secret")
   lastLoginAt  DateTime? @map("last_login_at")

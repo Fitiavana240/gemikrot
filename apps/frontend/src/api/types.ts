@@ -16,6 +16,13 @@ export interface AuthUser {
   role: AdminRole;
   /** `null` pour le SUPER_ADMIN, rattaché à aucun exploitant. */
   tenantId: string | null;
+  /**
+   * Faux tant que le code reçu par courriel n'a pas été saisi.
+   *
+   * Ne ferme aucune porte : le compte travaille normalement. Ce qu'on perd,
+   * c'est la possibilité de prévenir cette personne de quoi que ce soit.
+   */
+  emailVerifie: boolean;
 }
 
 export interface Plan {

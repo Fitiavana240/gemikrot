@@ -41,6 +41,17 @@ export interface ReglagesCourriel {
   motDePassePose: boolean;
 }
 
+/** Ce que la plateforme regle pour elle-meme. */
+export interface ReglagesPlateforme extends ReglagesCourriel {
+  nom: string;
+  contactTelephone: string;
+  contactWhatsapp: string;
+  contactCourriel: string;
+}
+
+/** Il n'y a qu'une plateforme : sa ligne porte toujours cette clef. */
+export const ID_PLATEFORME = 'plateforme';
+
 export interface ResultatEnvoi {
   envoye: boolean;
   erreur?: string;
@@ -212,8 +223,144 @@ export class CourrielService {
     }
   }
 
+  /**
+   * Un message de la plateforme, et non d'un exploitant.
+   *
+   * Avis d'inscription, code de confirmation : ces messages ne sont ceux
+   * d'aucun exploitant. Ils partaient auparavant du SMTP du nouvel inscrit
+   * — qui n'en a aucun a la seconde ou il s'inscrit — donc **ils ne
+   * partaient jamais**. Ils ont desormais leur propre serveur.
+   *
+   * Ne leve jamais, comme l'autre : un code de confirmation qui ne part pas
+   * ne doit pas empecher l'inscription. L'adresse se confirmera plus tard,
+   * et l'echec est au journal avec sa raison.
+   */
+  async envoyerDeLaPlateforme(input: {
+    destinataire: string;
+    sujet: string;
+    texte: string;
+    type: string;
+  }): Promise<ResultatEnvoi> {
+    const p = await this.prisma.plateforme.findUnique({ where: { id: ID_PLATEFORME } });
+
+    const manque = !p?.smtpActif
+      ? "L'envoi de courriel de la plateforme n'est pas activé"
+      : !p.smtpHost || !p.smtpFrom
+        ? 'Serveur ou expéditeur de la plateforme non renseigné'
+        : null;
+    if (manque) return this.tracer(null, input, 'ECHEC', manque);
+
+    try {
+      await this.transport({
+        host: p!.smtpHost!,
+        port: p!.smtpPort ?? 587,
+        secure: p!.smtpSecure,
+        user: p!.smtpUser,
+        motDePasseChiffre: p!.smtpPasswordEncrypted,
+      }).sendMail({
+        from: p!.smtpFrom!,
+        to: input.destinataire,
+        subject: input.sujet,
+        text: input.texte,
+      });
+      return this.tracer(null, input, 'ENVOYE', null);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Envoi refusé';
+      this.logger.warn(`Courriel de plateforme non parti à ${input.destinataire} : ${message}`);
+      return this.tracer(null, input, 'ECHEC', message);
+    }
+  }
+
+  /** Ce que la plateforme a regle, mot de passe exclu. */
+  async reglagesPlateforme(): Promise<ReglagesPlateforme> {
+    const p = await this.prisma.plateforme.findUnique({ where: { id: ID_PLATEFORME } });
+    return {
+      nom: p?.nom ?? 'GeMikrot',
+      host: p?.smtpHost ?? '',
+      port: p?.smtpPort ?? 587,
+      secure: p?.smtpSecure ?? false,
+      user: p?.smtpUser ?? '',
+      from: p?.smtpFrom ?? '',
+      actif: p?.smtpActif ?? false,
+      motDePassePose: Boolean(p?.smtpPasswordEncrypted),
+      contactTelephone: p?.contactTelephone ?? '',
+      contactWhatsapp: p?.contactWhatsapp ?? '',
+      contactCourriel: p?.contactCourriel ?? '',
+    };
+  }
+
+  /**
+   * Enregistre les reglages de la plateforme.
+   *
+   * `actif` est separe du reste et **faux par defaut** : enregistrer une
+   * configuration ne doit pas suffire a se mettre a ecrire a des gens.
+   */
+  async enregistrerPlateforme(
+    dto: Partial<ReglagesPlateforme> & { motDePasse?: string },
+    adminUserId: string,
+  ): Promise<ReglagesPlateforme> {
+    const donnees = {
+      nom: dto.nom?.trim() || 'GeMikrot',
+      smtpHost: dto.host?.trim() || null,
+      smtpPort: dto.port ?? 587,
+      smtpSecure: dto.secure ?? false,
+      smtpUser: dto.user?.trim() || null,
+      smtpFrom: dto.from?.trim() || null,
+      smtpActif: dto.actif ?? false,
+      contactTelephone: dto.contactTelephone?.trim() || null,
+      contactWhatsapp: dto.contactWhatsapp?.trim() || null,
+      contactCourriel: dto.contactCourriel?.trim() || null,
+      // Le mot de passe n'est reecrit que s'il est fourni : un formulaire
+      // renvoye sans lui ne doit pas effacer celui qui marche.
+      ...(dto.motDePasse ? { smtpPasswordEncrypted: this.chiffrer(dto.motDePasse) } : {}),
+    };
+
+    await this.prisma.plateforme.upsert({
+      where: { id: ID_PLATEFORME },
+      update: donnees,
+      create: { id: ID_PLATEFORME, ...donnees },
+    });
+
+    await this.audit.log({
+      adminUserId,
+      action: 'SET_PLATFORM_SMTP',
+      targetType: 'Plateforme',
+      targetId: ID_PLATEFORME,
+      // Jamais le mot de passe : savoir qu'il a change suffit.
+      payloadDiff: { host: donnees.smtpHost, from: donnees.smtpFrom, actif: donnees.smtpActif },
+    });
+    return this.reglagesPlateforme();
+  }
+
+  /** Le journal de la plateforme : ses propres envois, pas ceux d'un exploitant. */
+  journalPlateforme() {
+    return this.prisma.courriel.findMany({
+      where: { tenantId: null },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+  }
+
+  /** Un transport nodemailer, monte a la demande et jamais garde. */
+  private transport(c: {
+    host: string;
+    port: number;
+    secure: boolean;
+    user: string | null;
+    motDePasseChiffre: string | null;
+  }) {
+    return createTransport({
+      host: c.host,
+      port: c.port,
+      secure: c.secure,
+      auth: c.user
+        ? { user: c.user, pass: c.motDePasseChiffre ? this.dechiffrer(c.motDePasseChiffre) : '' }
+        : undefined,
+    });
+  }
+
   private async tracer(
-    tenantId: string,
+    tenantId: string | null,
     input: { destinataire: string; sujet: string; type: string },
     statut: 'ENVOYE' | 'ECHEC',
     erreur: string | null,

@@ -231,12 +231,40 @@ export class NotificationsService {
     const dansTroisJours = new Date(Date.now() + 3 * 86_400_000);
     const maintenant = new Date();
 
-    const [enAttente, essaisQuiFinissent, expires, sansRouteur, lues] = await Promise.all([
+    const ilYA48h = new Date(Date.now() - 2 * 86_400_000);
+
+    const [
+      enAttente,
+      inscriptionsRecentes,
+      adressesNonConfirmees,
+      smtpPlateforme,
+      essaisQuiFinissent,
+      expires,
+      sansRouteur,
+      lues,
+    ] = await Promise.all([
       // Les comptes d'avant l'ouverture automatique : ils attendent encore.
       this.prisma.tenant.findMany({
         where: { status: TenantStatus.PENDING },
         orderBy: { createdAt: 'asc' },
         select: { name: true, createdAt: true },
+      }),
+      // Qui vient d'arriver. Le compte s'ouvre seul desormais : sans cette
+      // ligne, une inscription ne laisse aucune trace visible, et le
+      // SUPER_ADMIN apprend l'existence de ses clients par hasard.
+      this.prisma.tenant.findMany({
+        where: { createdAt: { gte: ilYA48h } },
+        orderBy: { createdAt: 'desc' },
+        select: { name: true, createdAt: true },
+      }),
+      // Une adresse jamais confirmee est un exploitant qu'on ne peut pas
+      // prevenir : ni echeance, ni recu, ni rappel avant la fermeture.
+      this.prisma.adminUser.count({
+        where: { role: 'ADMIN', emailVerifiedAt: null },
+      }),
+      this.prisma.plateforme.findUnique({
+        where: { id: 'plateforme' },
+        select: { smtpActif: true, smtpHost: true },
       }),
       this.prisma.tenant.count({
         where: {
@@ -274,6 +302,41 @@ export class NotificationsService {
           jours >= 1
             ? `${enAttente[0].name} attend depuis ${jours} jour(s) et ne peut pas se connecter.`
             : `${enAttente[0].name} vient de s'inscrire et ne peut pas encore se connecter.`,
+        lien: '/tenants',
+      });
+    }
+
+    // **Avant tout le reste** : sans serveur d'envoi, aucun code de
+    // confirmation ni avis d'inscription ne part, et rien d'autre dans cette
+    // liste ne le dirait. C'est la panne qui rend toutes les autres muettes.
+    if (!smtpPlateforme?.smtpActif || !smtpPlateforme.smtpHost) {
+      liste.push({
+        cle: 'smtp-plateforme-eteint',
+        gravite: 'urgent',
+        titre: 'La plateforme ne peut envoyer aucun courriel',
+        detail:
+          "Ni code de confirmation, ni avis d'inscription, ni confirmation d'abonnement. Les nouveaux inscrits ne peuvent pas valider leur adresse.",
+        lien: '/settings/plateforme',
+      });
+    }
+
+    if (inscriptionsRecentes.length > 0) {
+      liste.push({
+        cle: `inscriptions-recentes:${inscriptionsRecentes.length}`,
+        gravite: 'info',
+        titre: `${inscriptionsRecentes.length} nouvel(le)s inscription(s) en 48 h`,
+        detail: `La plus récente : ${inscriptionsRecentes[0].name}. Leur essai gratuit court déjà.`,
+        lien: '/tenants',
+      });
+    }
+
+    if (adressesNonConfirmees > 0) {
+      liste.push({
+        cle: `adresses-non-confirmees:${adressesNonConfirmees}`,
+        gravite: 'attention',
+        titre: `${adressesNonConfirmees} adresse(s) jamais confirmée(s)`,
+        detail:
+          "Ces exploitants ne peuvent être prévenus de rien : ni échéance, ni reçu, ni rappel avant la fermeture de leurs ventes.",
         lien: '/tenants',
       });
     }

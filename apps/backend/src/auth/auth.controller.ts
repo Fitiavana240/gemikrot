@@ -31,6 +31,24 @@ export class AuthController {
    * session. Il ne prend pas d'identifiant d'utilisateur en paramètre non
    * plus — on ne change que le sien, celui que porte le jeton.
    */
+  /**
+   * Confirme l'adresse a partir du code recu.
+   *
+   * Pas de `@Public()` : le compte existe deja et il est connecte. On ne
+   * confirme pas l'adresse de quelqu'un d'autre, et un code a six chiffres
+   * ne suffirait pas a authentifier quoi que ce soit.
+   */
+  @Post('confirmer-courriel')
+  confirmerCourriel(@CurrentUser() user: AuthenticatedUser, @Body() body: { code: string }) {
+    return this.authService.confirmerCourriel(user.id, body.code);
+  }
+
+  /** Un nouveau code, au plus un par minute. */
+  @Post('renvoyer-code')
+  renvoyerLeCode(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.renvoyerLeCode(user.id);
+  }
+
   @Post('change-password')
   changePassword(
     @Body() dto: ChangePasswordDto,

@@ -168,6 +168,11 @@ describe('sans exploitant ciblé', () => {
 function plateforme(
   etat: {
     enAttente?: { name: string; createdAt: Date }[];
+    inscriptionsRecentes?: { name: string; createdAt: Date }[];
+    adressesNonConfirmees?: number;
+    /** Par defaut le serveur d'envoi marche : sinon chaque epreuve porterait
+     *  l'alerte SMTP, sans rapport avec ce qu'elle verifie. */
+    smtpActif?: boolean;
     essaisQuiFinissent?: number;
     expires?: number;
     sansRouteur?: number;
@@ -176,12 +181,24 @@ function plateforme(
 ) {
   const prisma: any = {
     tenant: {
-      findMany: vi.fn(async () => etat.enAttente ?? []),
+      // Deux lectures, dans cet ordre : ceux qui attendent, puis ceux qui
+      // viennent d'arriver.
+      findMany: vi
+        .fn()
+        .mockResolvedValueOnce(etat.enAttente ?? [])
+        .mockResolvedValueOnce(etat.inscriptionsRecentes ?? []),
       count: vi
         .fn()
         .mockResolvedValueOnce(etat.essaisQuiFinissent ?? 0)
         .mockResolvedValueOnce(etat.expires ?? 0)
         .mockResolvedValueOnce(etat.sansRouteur ?? 0),
+    },
+    adminUser: { count: vi.fn(async () => etat.adressesNonConfirmees ?? 0) },
+    plateforme: {
+      findUnique: vi.fn(async () => ({
+        smtpActif: etat.smtpActif ?? true,
+        smtpHost: 'smtp.exemple.mg',
+      })),
     },
     notificationLue: {
       findMany: vi.fn(async () => (etat.lues ?? []).map((cle) => ({ cle }))),
@@ -256,5 +273,51 @@ describe('la cloche de la plateforme', () => {
     }).lister('admin-1', 'SUPER_ADMIN');
 
     expect(liste[0].lue).toBe(true);
+  });
+});
+
+describe('ce que la plateforme ne peut pas envoyer', () => {
+  it('passe avant tout le reste quand le serveur d\u2019envoi est eteint', async () => {
+    // C'est la panne qui rend toutes les autres muettes : sans SMTP, ni code
+    // de confirmation, ni avis d'inscription, ni confirmation d'abonnement.
+    // Rien d'autre dans la liste ne le dirait.
+    const liste = await plateforme({ smtpActif: false, expires: 3 }).lister(
+      'admin-1',
+      'SUPER_ADMIN',
+    );
+
+    expect(liste[0].cle).toBe('smtp-plateforme-eteint');
+    expect(liste[0].gravite).toBe('urgent');
+    expect(liste[0].lien).toBe('/settings/plateforme');
+  });
+
+  it('se tait quand le serveur d\u2019envoi marche', async () => {
+    const liste = await plateforme().lister('admin-1', 'SUPER_ADMIN');
+
+    expect(liste.map((n) => n.cle)).not.toContain('smtp-plateforme-eteint');
+  });
+});
+
+describe('qui vient d\u2019arriver', () => {
+  it('signale les inscriptions des deux derniers jours', async () => {
+    // Le compte s'ouvre seul desormais : sans cette ligne, le SUPER_ADMIN
+    // apprend l'existence de ses clients par hasard.
+    const liste = await plateforme({
+      inscriptionsRecentes: [{ name: 'Wifi Toliara', createdAt: new Date() }],
+    }).lister('admin-1', 'SUPER_ADMIN');
+
+    const n = liste.find((x) => x.cle.startsWith('inscriptions-recentes'));
+    expect(n?.detail).toMatch(/Wifi Toliara/);
+    expect(n?.gravite).toBe('info');
+  });
+
+  it('signale les adresses jamais confirmees', async () => {
+    // Un exploitant qu'on ne peut prevenir de rien : ni echeance, ni recu,
+    // ni rappel avant la fermeture de ses ventes.
+    const liste = await plateforme({ adressesNonConfirmees: 2 }).lister('admin-1', 'SUPER_ADMIN');
+
+    const n = liste.find((x) => x.cle.startsWith('adresses-non-confirmees'));
+    expect(n?.titre).toMatch(/2 adresse/);
+    expect(n?.gravite).toBe('attention');
   });
 });

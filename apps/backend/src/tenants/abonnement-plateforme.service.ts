@@ -1,7 +1,8 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { CourrielService } from '../courriel/courriel.service.js';
 import {
   ESSAI_JOURS,
   JOUR_MS,
@@ -88,10 +89,17 @@ export function etatDe(
 
 @Injectable()
 export class AbonnementPlateformeService {
+  private readonly logger = new Logger(AbonnementPlateformeService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
     private readonly audit: AuditService,
+    /**
+     * Facultatif : un SMTP absent ne doit pas empecher d'enregistrer un
+     * abonnement. On encaisse d'abord, on previent ensuite.
+     */
+    private readonly courriel?: CourrielService,
   ) {}
 
   /** Le catalogue et l'adresse ou payer, tels que la page de blocage les montre. */
@@ -281,7 +289,60 @@ export class AbonnementPlateformeService {
       payloadDiff: { offre: offre.nom, code: offre.code, echeance: echeance.toISOString() },
     });
 
+    await this.confirmerParCourriel(tenantId, offre.nom, echeance);
     return this.etat(tenantId);
+  }
+
+  /**
+   * Confirme l'abonnement a ceux qui peuvent en repondre.
+   *
+   * C'est la raison d'etre de la confirmation d'adresse : sans boite joignable,
+   * l'exploitant paie et ne recoit rien — ni recu, ni echeance, ni rappel
+   * avant la fermeture. **Les adresses non confirmees sont ecartees**, pas par
+   * severite mais par honnetete : ecrire a une adresse dont on sait qu'elle
+   * n'a jamais repondu, c'est se donner l'illusion d'avoir prevenu.
+   *
+   * Depuis le serveur de la plateforme : c'est elle qui facture, pas
+   * l'exploitant, et il n'a pas forcement regle son propre SMTP.
+   */
+  private async confirmerParCourriel(
+    tenantId: string,
+    offre: string,
+    echeance: Date,
+  ): Promise<void> {
+    if (!this.courriel) return;
+    try {
+      const destinataires = await this.prisma.adminUser.findMany({
+        where: { tenantId, role: 'ADMIN', emailVerifiedAt: { not: null } },
+        select: { email: true },
+      });
+      const texte = [
+        `Votre abonnement à GeMikrot est enregistré.`,
+        '',
+        `Offre : ${offre}`,
+        `Valable jusqu'au ${echeance.toLocaleDateString('fr-FR')}`,
+        '',
+        "Passé cette date, une tolérance court avant que la vente ne se ferme.",
+        'Vos clients, eux, gardent leur accès : le routeur applique seul les',
+        'validités et continue de les servir.',
+        '',
+        '— GeMikrot',
+      ].join('\n');
+
+      for (const d of destinataires) {
+        await this.courriel.envoyerDeLaPlateforme({
+          destinataire: d.email,
+          sujet: `Abonnement enregistré — ${offre}`,
+          texte,
+          type: 'abonnement-confirme',
+        });
+      }
+    } catch (e) {
+      // Trace et oublie : confirmer est un accessoire, encaisser ne l'est pas.
+      this.logger.warn(
+        `Confirmation d'abonnement non partie : ${e instanceof Error ? e.message : e}`,
+      );
+    }
   }
 
   /** Réservé au SUPER_ADMIN : pose l'offre, le plafond et l'échéance. */

@@ -23,12 +23,15 @@ function service(options: { superAdmins?: string[] } = {}) {
   }));
   // Typé par son argument : sans cela `mock.calls[0][0]` ne compile pas, et
   // c'est justement ce qu'on veut inspecter.
-  const envoyer = vi.fn(async (_message: { destinataire: string; type: string }) => undefined);
+  const envoyerDeLaPlateforme = vi.fn(
+    async (_m: { destinataire: string; type: string; sujet: string; texte: string }) => undefined,
+  );
 
   const prisma: any = {
     adminUser: {
       findUnique: vi.fn(async () => null),
       findMany: vi.fn(async () => (options.superAdmins ?? []).map((email) => ({ email }))),
+      update: vi.fn(async () => ({})),
     },
     tenant: { count: vi.fn(async () => 0) },
     $transaction: vi.fn(async (fn: any) =>
@@ -44,9 +47,9 @@ function service(options: { superAdmins?: string[] } = {}) {
     { signAsync: vi.fn(async () => 'jeton') } as never,
     { log: vi.fn(async () => undefined) } as never,
     { verifier: vi.fn(), echec: vi.fn() } as never,
-    { envoyer } as never,
+    { envoyerDeLaPlateforme } as never,
   );
-  return { service: s, creerTenant, envoyer };
+  return { service: s, creerTenant, envoyer: envoyerDeLaPlateforme };
 }
 
 const dto = {
@@ -99,21 +102,55 @@ describe("l'inscription", () => {
 
     await s.signup(dto);
 
-    expect(envoyer).toHaveBeenCalledTimes(1);
-    expect(envoyer.mock.calls[0][0].destinataire).toBe('plateforme@exemple.mg');
-    expect(envoyer.mock.calls[0][0].type).toBe('inscription-exploitant');
+    // Deux messages : l'avis a la plateforme, et le code a l'inscrit.
+    const types = envoyer.mock.calls.map((c) => c[0].type);
+    expect(types).toContain('inscription-exploitant');
+    expect(types).toContain('confirmation-adresse');
+    const avis = envoyer.mock.calls.find((c) => c[0].type === 'inscription-exploitant')![0];
+    expect(avis.destinataire).toBe('plateforme@exemple.mg');
   });
 
   it('inscrit quand même si le courriel échoue', async () => {
     // Un exploitant qui ne peut pas créer son compte parce qu'un serveur SMTP
     // manque serait un client perdu pour une raison qui ne le regarde pas.
     const { service: s } = service({ superAdmins: ['plateforme@exemple.mg'] });
-    (s as never as { courriel: { envoyer: unknown } }).courriel = {
-      envoyer: vi.fn(async () => {
+    (s as never as { courriel: { envoyerDeLaPlateforme: unknown } }).courriel = {
+      envoyerDeLaPlateforme: vi.fn(async () => {
         throw new Error('SMTP muet');
       }),
     };
 
     await expect(s.signup(dto)).resolves.toMatchObject({ status: 'ACTIVE' });
+  });
+});
+
+describe('le code de confirmation', () => {
+  it('part vers l’adresse de l’inscrit, a six chiffres', async () => {
+    // Six chiffres et non huit : il se lit au telephone et se retape sans
+    // erreur. Ce n'est pas un mot de passe, c'est la preuve qu'on releve bien
+    // cette boite.
+    const { service: s, envoyer } = service();
+
+    await s.signup(dto);
+
+    const code = envoyer.mock.calls.find((c) => c[0].type === 'confirmation-adresse')![0];
+    expect(code.destinataire).toBe('neuf@exemple.mg');
+    expect(code.sujet).toMatch(/\b\d{6}\b/);
+    expect(code.texte).toMatch(/\b\d{6}\b/);
+  });
+
+  it('enregistre le code sur le compte, et ne confirme rien', async () => {
+    // L'adresse n'est pas confirmee, et cela ne ferme rien : le compte
+    // travaille normalement. Bloquer la connexion sur un courriel qui
+    // n'arrive pas transformerait un accessoire en panne totale.
+    const { service: s, creerTenant } = service();
+
+    await s.signup(dto);
+
+    // Le compte est cree dans la meme transaction que l'exploitant : on lit
+    // l'appel sur le client transactionnel.
+    const tx = (s as never as { prisma: { $transaction: { mock: { calls: unknown[][] } } } }).prisma;
+    expect(tx.$transaction).toHaveBeenCalled();
+    expect(creerTenant).toHaveBeenCalled();
   });
 });

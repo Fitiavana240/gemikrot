@@ -1,4 +1,11 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { randomInt } from 'node:crypto';
 import { AdminRole, AdminUser } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -6,6 +13,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { MIN_PASSWORD_LENGTH } from '../auth/auth.service.js';
 import type { CreateAdminUserDto } from './dto/create-admin-user.dto.js';
+import { CourrielService } from '../courriel/courriel.service.js';
 
 /** Vue exposée par l'API : jamais le hash du mot de passe. */
 export type AdminUserView = Omit<AdminUser, 'passwordHash' | 'mfaSecret'>;
@@ -22,10 +30,14 @@ function toView(user: AdminUser): AdminUserView {
  */
 @Injectable()
 export class AdminUsersService {
+  private readonly logger = new Logger(AdminUsersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly tenantContext: TenantContextService,
+    /** Facultatif : un SMTP absent ne doit pas empecher de creer un compte. */
+    private readonly courriel?: CourrielService,
   ) {}
 
   async findAll(): Promise<AdminUserView[]> {
@@ -53,14 +65,24 @@ export class AdminUsersService {
     const existing = await this.prisma.adminUser.findUnique({ where: { email: dto.email } });
     if (existing) throw new ConflictException('Un compte existe déjà avec cet email');
 
+    // Le code part aussi pour un compte d'equipe : c'est la seule facon de
+    // savoir que l'adresse saisie par l'exploitant est bien celle de son
+    // vendeur, et non une faute de frappe qu'on decouvrirait le jour ou l'on
+    // cherche a le prevenir.
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+
     const user = await this.prisma.adminUser.create({
       data: {
         tenantId,
         email: dto.email,
         passwordHash: await bcrypt.hash(dto.password, 10),
         role: dto.role,
+        emailCode: code,
+        emailCodeSentAt: new Date(),
       },
     });
+
+    await this.envoyerLeCode(dto.email, code);
     await this.audit.log({
       adminUserId,
       tenantId,
@@ -70,6 +92,42 @@ export class AdminUsersService {
       payloadDiff: { email: dto.email, role: dto.role },
     });
     return toView(user);
+  }
+
+  /**
+   * Le code de confirmation, depuis le serveur de la plateforme.
+   *
+   * Jamais celui de l'exploitant : lui demander de valider l'adresse de son
+   * vendeur avec un SMTP qu'il vient peut-etre de mal regler ferait echouer
+   * les deux choses a la fois, sans qu'on sache laquelle.
+   *
+   * L'echec n'emporte pas la creation : le compte existe, il peut se
+   * connecter, et son adresse se confirmera avec un nouveau code.
+   */
+  private async envoyerLeCode(destinataire: string, code: string): Promise<void> {
+    if (!this.courriel) return;
+    try {
+      await this.courriel.envoyerDeLaPlateforme({
+        destinataire,
+        sujet: `Votre code de confirmation : ${code}`,
+        texte: [
+          'Un compte vient d’être créé pour vous sur GeMikrot.',
+          '',
+          'Voici le code qui confirme votre adresse :',
+          '',
+          `    ${code}`,
+          '',
+          'Saisissez-le à votre première connexion. Il est valable une heure.',
+          '',
+          '— GeMikrot',
+        ].join('\n'),
+        type: 'confirmation-adresse',
+      });
+    } catch (e) {
+      this.logger.warn(
+        `Code de confirmation non parti a ${destinataire} : ${e instanceof Error ? e.message : e}`,
+      );
+    }
   }
 
   async remove(id: string, adminUserId?: string): Promise<void> {

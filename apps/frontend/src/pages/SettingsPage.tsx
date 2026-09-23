@@ -374,6 +374,8 @@ function ExploitantTab() {
  * pas avoir à changer d'écran. Deux chemins vers la même chose valent mieux
  * qu'un chemin que la moitié des gens ne prend jamais.
  */
+const ONGLETS_PLATEFORME: TabDef = { to: 'plateforme', label: 'Courriel de la plateforme' };
+
 const ONGLETS: TabDef[] = [
   { to: 'exploitant', label: 'Exploitant', défaut: true },
   { to: 'apparence', label: 'Apparence' },
@@ -394,6 +396,7 @@ const ONGLETS: TabDef[] = [
  */
 const ONGLETS_SANS_EXPLOITANT: TabDef[] = [
   { to: 'compte', label: 'Mon compte', défaut: true },
+  { to: 'plateforme', label: 'Courriel de la plateforme' },
   { to: 'apparence', label: 'Apparence' },
 ];
 
@@ -402,7 +405,14 @@ export function SettingsPage() {
   const { user } = useAuth();
 
   const sansExploitant = user?.role === 'SUPER_ADMIN' && !getTenantCible();
-  const onglets = sansExploitant ? ONGLETS_SANS_EXPLOITANT : ONGLETS;
+  // Le SUPER_ADMIN garde l'acces au courriel de la plateforme meme en prise
+  // en main : c'est le sien, et le perdre en ciblant un exploitant obligerait
+  // a quitter la prise en main pour un reglage sans rapport avec elle.
+  const onglets = sansExploitant
+    ? ONGLETS_SANS_EXPLOITANT
+    : user?.role === 'SUPER_ADMIN'
+      ? [...ONGLETS, ONGLETS_PLATEFORME]
+      : ONGLETS;
   // Sans exploitant, l'onglet par défaut est « Mon compte » : « Exploitant »
   // n'aurait personne à montrer.
   const courant = tab ?? (sansExploitant ? 'compte' : 'exploitant');
@@ -434,6 +444,7 @@ export function SettingsPage() {
           {courant === 'portail' && <PageConnexionTab />}
           {courant === 'courriel' && <CourrielTab />}
           {courant === 'compte' && <MotDePasseCard />}
+          {courant === 'plateforme' && <CourrielTab portee="plateforme" />}
         </>
       )}
     </div>

@@ -12,6 +12,13 @@ interface AuthContextValue {
   logout: () => void;
   /** VIEWER n'a jamais le droit d'écrire (Section 28). */
   canWrite: boolean;
+  /**
+   * L'adresse vient d'être confirmée.
+   *
+   * L'état local suit tout de suite : attendre la prochaine connexion
+   * laisserait le bandeau en place après un succès, et on recommencerait.
+   */
+  confirmerAdresse: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -43,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(res.accessToken);
         setUser(res.user);
       },
+      confirmerAdresse: () => setUser((u) => (u ? { ...u, emailVerifie: true } : u)),
       logout: () => {
         clearToken();
         localStorage.removeItem(USER_KEY);

@@ -9,6 +9,7 @@ import { useRouterSelection } from '../routers/RouterContext';
 import { REACHABILITY_LABEL } from '../api/routers';
 import { SideNav } from './SideNav';
 import { MurAbonnement } from './MurAbonnement';
+import { ConfirmationCourriel } from './ConfirmationCourriel';
 import { nomDuRole } from '../lib/roles';
 import { BandeauÉtat, Pied } from './Pied';
 import { Notifications } from './Notifications';
@@ -300,6 +301,9 @@ export function Layout() {
           {/* Le mur d'abonnement remplace le contenu, jamais la navigation :
               l'exploitant doit pouvoir se deconnecter, changer son mot de
               passe et lire ses donnees depuis le mur lui-meme. */}
+          {/* Au-dessus du contenu, pas dans une page de reglages : c'est la
+              seule facon qu'il soit lu par quelqu'un qui vient travailler. */}
+          <ConfirmationCourriel />
           <MurAbonnement>
             <Outlet />
           </MurAbonnement>

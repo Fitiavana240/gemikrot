@@ -24,7 +24,32 @@ interface Reglages {
   from: string;
   actif: boolean;
   motDePassePose: boolean;
+  /** Plateforme seulement : le nom qui signe, et ou l'on paie. */
+  nom?: string;
+  contactTelephone?: string;
+  contactWhatsapp?: string;
+  contactCourriel?: string;
 }
+
+/**
+ * Deux serveurs d'envoi, un seul ecran.
+ *
+ * L'exploitant ecrit a ses clients depuis sa propre adresse, a sa marque. La
+ * plateforme ecrit aux exploitants : codes de confirmation, avis
+ * d'inscription, confirmations d'abonnement. Ce sont deux reglages distincts
+ * et la difference compte — mais les recopier ferait deux ecrans qui
+ * divergeraient au premier changement. Le meme, parametre par sa portee.
+ */
+type Portee = 'exploitant' | 'plateforme';
+
+const CHEMINS: Record<Portee, { reglages: string; journal: string; essai: string }> = {
+  exploitant: { reglages: '/courriel', journal: '/courriel/journal', essai: '/courriel/essai' },
+  plateforme: {
+    reglages: '/courriel/plateforme',
+    journal: '/courriel/plateforme/journal',
+    essai: '/courriel/plateforme/essai',
+  },
+};
 
 interface Courriel {
   id: string;
@@ -36,8 +61,10 @@ interface Courriel {
   createdAt: string;
 }
 
-export function CourrielTab() {
+export function CourrielTab({ portee = 'exploitant' }: { portee?: Portee } = {}) {
   const { canWrite, user } = useAuth();
+  const chemins = CHEMINS[portee];
+  const plateforme = portee === 'plateforme';
   const queryClient = useQueryClient();
   const [form, setForm] = useState<Reglages | null>(null);
   const [motDePasse, setMotDePasse] = useState('');
@@ -46,13 +73,13 @@ export function CourrielTab() {
   const [compteRendu, setCompteRendu] = useState<string | null>(null);
 
   const reglages = useQuery({
-    queryKey: ['courriel'],
-    queryFn: () => api.get<Reglages>('/courriel'),
+    queryKey: ['courriel', portee],
+    queryFn: () => api.get<Reglages>(chemins.reglages),
     retry: false,
   });
   const journal = useQuery({
-    queryKey: ['courriel-journal'],
-    queryFn: () => api.get<Courriel[]>('/courriel/journal'),
+    queryKey: ['courriel-journal', portee],
+    queryFn: () => api.get<Courriel[]>(chemins.journal),
     retry: false,
   });
 
@@ -63,7 +90,7 @@ export function CourrielTab() {
 
   const enregistrer = useMutation({
     mutationFn: () =>
-      api.patch<Reglages>('/courriel', {
+      api.patch<Reglages>(chemins.reglages, {
         ...form,
         // Envoyé seulement s'il a été saisi : le champ revient toujours vide,
         // et le transmettre tel quel effacerait le mot de passe enregistré.
@@ -74,17 +101,18 @@ export function CourrielTab() {
       setForm(r);
       setMotDePasse('');
       setCompteRendu('Réglages enregistrés.');
-      queryClient.invalidateQueries({ queryKey: ['courriel'] });
+      queryClient.invalidateQueries({ queryKey: ['courriel', portee] });
     },
     onError: (e) => setErreur(e instanceof ApiError ? e.message : 'Erreur inconnue'),
   });
 
   const essai = useMutation({
-    mutationFn: () => api.post<{ envoye: boolean; erreur?: string }>('/courriel/essai', { destinataire }),
+    mutationFn: () =>
+      api.post<{ envoye: boolean; erreur?: string }>(chemins.essai, { destinataire }),
     onSuccess: (r) => {
       setErreur(r.envoye ? null : (r.erreur ?? 'Envoi refusé.'));
       setCompteRendu(r.envoye ? `Message envoyé à ${destinataire}. Vérifiez la boîte.` : null);
-      queryClient.invalidateQueries({ queryKey: ['courriel-journal'] });
+      queryClient.invalidateQueries({ queryKey: ['courriel-journal', portee] });
     },
     onError: (e) => setErreur(e instanceof ApiError ? e.message : "L'envoi a échoué."),
   });
@@ -102,6 +130,15 @@ export function CourrielTab() {
       {erreur && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {erreur}
+        </p>
+      )}
+
+      {plateforme && (
+        <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          Ce serveur est celui de la <strong>plateforme</strong>, pas celui d’un exploitant.
+          C’est lui qui porte les <strong>codes de confirmation</strong>, les avis d’inscription
+          et les confirmations d’abonnement. Tant qu’il n’est pas réglé, un nouvel inscrit ne
+          peut pas valider son adresse — et personne ne peut plus le prévenir de rien.
         </p>
       )}
 
@@ -205,6 +242,38 @@ export function CourrielTab() {
           </div>
         )}
       </Card>
+
+      {/* Ou l'exploitant s'adresse pour payer. Vide, la page de blocage le dit
+          franchement plutot que d'afficher un numero mort a quelqu'un qui
+          cherche justement a regler sa facture. */}
+      {plateforme && form !== null && (
+        <Card title="Où les exploitants vous joignent">
+          <p className="mb-3 text-sm text-slate-600">
+            Affiché sur la page de blocage d’un exploitant dont l’abonnement a expiré. Tout vide,
+            la page dit qu’aucun moyen de contact n’est configuré.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <FormField label="Téléphone">
+              <Input
+                value={form.contactTelephone ?? ''}
+                onChange={(e) => champ('contactTelephone', e.target.value)}
+              />
+            </FormField>
+            <FormField label="WhatsApp" aide="Chiffres seuls, ex. 261340000000">
+              <Input
+                value={form.contactWhatsapp ?? ''}
+                onChange={(e) => champ('contactWhatsapp', e.target.value)}
+              />
+            </FormField>
+            <FormField label="Courriel">
+              <Input
+                value={form.contactCourriel ?? ''}
+                onChange={(e) => champ('contactCourriel', e.target.value)}
+              />
+            </FormField>
+          </div>
+        </Card>
+      )}
 
       {/* Le journal compte autant que le réglage : sans lui, un envoi raté
           laisse l'exploitant croire qu'il a prévenu. */}
