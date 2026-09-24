@@ -246,17 +246,48 @@ export class RaccordementAssisteService {
 
     const client = this.client(dto.host, port, dto.username, dto.password, sondage.empreinte);
     const { endpointHost, endpointPort, publicKey, subnet } = this.wireguard.settings;
-    const tunnelAddress = await this.enrolement.allocateAddress();
+    /**
+     * L'adresse de tunnel d'un routeur deja connu est **reprise**, jamais
+     * reallouee.
+     *
+     * Relance sur un routeur qui marchait, l'assistant allouait une adresse
+     * neuve, la posait sur le routeur, et reecrivait le pair du serveur avec
+     * elle. Le pair qui fonctionnait etait donc remplace par un pair qui ne
+     * mene nulle part -- et comme la cle publique, elle, ne change plus, le
+     * nouveau bloc ecrasait l'ancien dans le fichier du tunnel. Constate le
+     * 24/09/2026 : un raccordement reussi casse par le clic suivant.
+     *
+     * Cherche par hote et port, comme la reprise de fiche plus bas : deux
+     * lignes qui pointent la meme machine sont la meme machine.
+     */
+    const dejaConnu = await this.prisma.scopedStrict.router.findFirst({
+      where: { host: dto.host, restPort: port, tunnelAddress: { not: null } },
+      select: { tunnelAddress: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const tunnelAddress =
+      dejaConnu?.tunnelAddress ?? (await this.enrolement.allocateAddress());
     // Fabriqué ici : RouterOS n'offre pas d'aléa digne de ce nom en script, et
     // le serveur doit de toute façon connaître ce mot de passe pour s'en servir.
     const motDePasseApi = randomBytes(24).toString('base64url');
     const etapes: string[] = [];
 
-    await this.poserLeTunnel(client, { tunnelAddress, endpointHost, endpointPort, publicKey, subnet });
+    const { portOuvert } = await this.poserLeTunnel(client, {
+      tunnelAddress,
+      endpointHost,
+      endpointPort,
+      publicKey,
+      subnet,
+    });
     etapes.push(
-      `Interface WireGuard « ${INTERFACE_WG} » créée, adresse ${tunnelAddress} dans le tunnel.`,
+      `Interface WireGuard « ${INTERFACE_WG} » en place, adresse ${tunnelAddress} dans le tunnel.`,
     );
-    etapes.push(`Serveur ajouté comme pair : ${endpointHost}:${endpointPort}.`);
+    etapes.push(
+      portOuvert
+        ? `Port ${PORT_ECOUTE_WG} ouvert en entrée : ce routeur accepte d'être appelé.`
+        : `⚠ Port ${PORT_ECOUTE_WG} NON ouvert : le pare-feu a refusé la règle. ` +
+          `Ce routeur ne sera pilotable que depuis son propre réseau.`,
+    );
 
     await this.poserLeCompte(client, motDePasseApi);
     etapes.push(
@@ -421,7 +452,7 @@ export class RaccordementAssisteService {
       publicKey: string;
       subnet: string;
     },
-  ): Promise<void> {
+  ): Promise<{ portOuvert: boolean }> {
     /**
      * **L'interface n'est pas refaite si elle existe deja.**
      *
@@ -494,14 +525,35 @@ export class RaccordementAssisteService {
       '/ip/firewall/filter',
       (x) => x.comment === `${MARQUE} - tunnel`,
     );
-    await client.put('/ip/firewall/filter', {
-      chain: 'input',
-      protocol: 'udp',
-      'dst-port': String(PORT_ECOUTE_WG),
-      action: 'accept',
-      comment: `${MARQUE} - tunnel`,
-      'place-before': '0',
-    });
+    /**
+     * L'echec n'emporte pas le raccordement.
+     *
+     * `place-before` n'est pas accepte partout en REST selon la version, et
+     * certains parcs ont un pare-feu gere autrement. Un refus faisait remonter
+     * un << Internal server error >> apres que tout le reste avait deja ete
+     * pose -- et l'ecran ne disait pas laquelle des dix etapes avait echoue.
+     *
+     * Le tunnel ne montera pas sans cette regle, mais le routeur reste
+     * enregistre et pilotable depuis son reseau. La console le dit plutot que
+     * de tout perdre.
+     */
+    try {
+      await client.put('/ip/firewall/filter', {
+        chain: 'input',
+        protocol: 'udp',
+        'dst-port': String(PORT_ECOUTE_WG),
+        action: 'accept',
+        comment: `${MARQUE} - tunnel`,
+        'place-before': '0',
+      });
+      return { portOuvert: true };
+    } catch (erreur) {
+      this.logger.warn(
+        `Port du tunnel non ouvert sur ${INTERFACE_WG} : ${String(erreur)}. ` +
+          'Le routeur ne pourra pas etre appele de loin.',
+      );
+      return { portOuvert: false };
+    }
   }
 
   /**
