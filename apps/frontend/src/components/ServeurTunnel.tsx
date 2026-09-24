@@ -67,10 +67,38 @@ export function ServeurTunnel() {
               l'interface et le routeur redevient injoignable sans que rien
               ne l'explique — la même panne, six mois plus tard. */}
           <p className="mt-2 text-xs text-slate-500">
-            Puis <code>wg-quick save {d.interfaceName}</code> : sans
-            sauvegarde, le pair disparaît au redémarrage de l&apos;interface et le routeur redevient
-            injoignable.
+            Puis <code>wg-quick save {d.interfaceName}</code> : sans sauvegarde, le pair disparaît
+            au redémarrage de l&apos;interface et le routeur redevient injoignable.
           </p>
+
+          {/* Sur Windows, `wg set` existe mais `wg-quick save` non : le pair
+              ajouté à la volée disparaîtrait au premier redémarrage du
+              tunnel. Le fichier de configuration est le seul endroit durable,
+              et c'est là que l'application WireGuard va le chercher. */}
+          <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+            <p className="text-sm font-medium text-slate-700">Sur Windows, plutôt ceci</p>
+            <p className="mt-1 text-xs text-slate-600">
+              <code>wg-quick save</code> n&apos;existe pas : un pair ajouté à la volée
+              disparaîtrait au premier redémarrage du tunnel. Ajoutez ces lignes à la fin de{' '}
+              <code>{d.interfaceName}.conf</code>, puis désactivez et réactivez le tunnel dans
+              l&apos;application WireGuard.
+            </p>
+            {d.pairs.map((p) => {
+              const cle = p.commande.match(/peer (\S+)/)?.[1] ?? '';
+              const adresse = p.commande.match(/allowed-ips (\S+)/)?.[1] ?? '';
+              return (
+                <code
+                  key={`conf-${p.commande}`}
+                  className="mt-2 block whitespace-pre rounded bg-slate-900 px-2 py-1 font-mono text-xs text-slate-100"
+                >
+                  {`[Peer]
+# ${p.label}
+PublicKey = ${cle}
+AllowedIPs = ${adresse}`}
+                </code>
+              );
+            })}
+          </div>
         </div>
       )}
 

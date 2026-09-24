@@ -559,6 +559,11 @@ export class RouterEnrollmentService {
 #    Les signatures prennent une quarantaine de secondes en tout. Vous n'avez
 #    rien a attendre : la suite du script continue, et le resultat s'inscrit
 #    dans le journal du routeur (Log) sous << GeMikrot >>.
+#
+#    **Ce journal est le seul temoin du bloc.** S'il tourne en arriere-plan,
+#    rien d'autre ne dit s'il a abouti : la ligne presente une minute plus
+#    tard signifie que le certificat est en place et le service actif ; son
+#    absence signifie que le bloc s'est arrete en chemin.
 
 # Ce script ne restreint PAS l'adresse de www-ssl, volontairement. Le faire
 # avant d'avoir eprouve le tunnel a deja coupe un routeur en essai :
