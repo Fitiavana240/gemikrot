@@ -69,37 +69,42 @@ async function main() {
   });
   console.log(`Exploitant prêt : ${tenant.name} (devise ${tenant.currency})`);
 
-  // Le routeur en base pilote désormais réellement la connexion : les
-  // identifiants de `.env` y sont recopiés chiffrés (Section 35), ce qui fait
-  // la passerelle vers le modèle multi-routeurs sans coupure.
-  const baseUrl = new URL(process.env.MIKROTIK_BASE_URL ?? 'https://192.168.88.1');
+  /**
+   * Le routeur d'origine — **et seulement si on le demande**.
+   *
+   * Il était créé d'office, en `192.168.88.1`, du temps où la plateforme ne
+   * servait qu'un seul parc. Sur un serveur neuf c'est une fiche que rien ne
+   * peut joindre : elle s'affiche « injoignable » dès la première
+   * connexion, sans que personne sache d'où elle sort, et il faut penser à la
+   * supprimer. Exactement le genre de fantôme qui a coûté une journée de
+   * diagnostic sur ce projet.
+   *
+   * Les routeurs se raccordent désormais depuis la console, par un script qui
+   * rapporte leur numéro de série et leur clé. En créer un d'avance n'aide
+   * personne.
+   */
   const username = process.env.MIKROTIK_USERNAME;
   const password = process.env.MIKROTIK_PASSWORD;
+  if (!username || !password) {
+    console.log('Aucun routeur créé : raccordez-le depuis la console, écran Routeurs.');
+    return;
+  }
+  const baseUrl = new URL(process.env.MIKROTIK_BASE_URL ?? 'https://192.168.88.1');
 
   const routerData = {
     tenantId: tenant.id,
     label: 'hAP ac² — Zone WIFI-TATI',
     host: baseUrl.hostname,
     restPort: baseUrl.port ? Number(baseUrl.port) : 443,
-    ...(username && password
-      ? { credentialsEncrypted: encryptCredentials(username, password) }
-      : {}),
+    credentialsEncrypted: encryptCredentials(username, password),
   };
 
   const router = await prisma.router.upsert({
     where: { id: 'default-router' },
     update: routerData,
-    create: {
-      id: 'default-router',
-      ...routerData,
-      credentialsEncrypted:
-        routerData.credentialsEncrypted ?? encryptCredentials('', ''),
-    },
+    create: { id: 'default-router', ...routerData },
   });
   console.log(`Routeur par défaut prêt : ${router.label} (${router.host}:${router.restPort})`);
-  if (!username || !password) {
-    console.log('  MIKROTIK_USERNAME/PASSWORD absents — identifiants à renseigner via l\'API.');
-  }
 }
 
 main()

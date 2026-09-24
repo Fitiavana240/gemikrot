@@ -187,6 +187,20 @@ echo "── 6/6 · La plateforme"
 cd "$RACINE"
 docker compose --env-file "$REGLAGES" -f deploiement/docker-compose.prod.yml up -d --build
 
+# Le compte d'acces.
+#
+# **Sans cette etape, l'ecran de connexion refuse les identifiants que cet
+# installateur vient d'afficher.** Le `seed` est une commande separee, et rien
+# ne la lancait : on se retrouvait devant un refus sur des identifiants
+# qu'on lisait a l'ecran. Le pire des messages, celui qui fait douter de ce
+# qu'on a sous les yeux.
+#
+# Rejouable : le seed met a jour le compte s'il existe deja, sans toucher a
+# l'exploitant ni a ses donnees.
+echo "   Creation du compte d'acces..."
+docker compose --env-file "$REGLAGES" -f deploiement/docker-compose.prod.yml \
+  run --rm --no-deps backend npx tsx prisma/seed.ts
+
 echo
 echo "════════════════════════════════════════════════════════"
 echo " Installé."
