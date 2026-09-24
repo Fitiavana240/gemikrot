@@ -414,14 +414,19 @@ export function RoutersPage() {
               montent, les entrants restent à zéro, rien ne dit pourquoi. Ce
               diagnostic a coûté une heure sur ce projet ; la console le pose
               maintenant avant, pas après. */}
-          {invitation.endpointPrive && (
+          {invitation.rappelPrive && (
             <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-              <strong>Ce script ne vaut que sur ce réseau local.</strong> Le routeur appellera{' '}
-              <code className="rounded bg-amber-100 px-1">{invitation.endpoint}</code>, qui est une
-              adresse privée : un routeur situé ailleurs ne la joindra jamais, et le tunnel
-              restera muet sans message d'erreur. Pour un routeur distant, renseignez l'adresse
-              publique du serveur dans <code>WIREGUARD_ENDPOINT_HOST</code> avant de préparer le
-              script.
+              <strong>Ce raccordement doit se faire depuis le réseau du routeur.</strong> À la
+              fin du script, le routeur rappelle cette console à{' '}
+              <code className="rounded bg-amber-100 px-1">{invitation.rappel}</code> — une adresse
+              privée, qu'il ne peut joindre que s'il est sur le même réseau. Collé depuis
+              ailleurs, le script pose bien le tunnel mais la console n'en sait rien, et l'échec
+              est muet.
+              <span className="mt-1 block">
+                <strong>Le tunnel, lui, n'a pas cette contrainte</strong> : c'est ce serveur qui
+                appellera le routeur, à un nom que MikroTik lui donne. Une fois raccordé, il se
+                pilote depuis n'importe quelle connexion.
+              </span>
             </div>
           )}
           {/* L'adresse a bougé depuis qu'elle a été configurée. Coller le

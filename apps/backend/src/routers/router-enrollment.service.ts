@@ -51,6 +51,17 @@ export interface EnrollmentInvitation {
   endpoint: string;
   endpointPrive: boolean;
   /**
+   * L'adresse a laquelle le routeur rappellera cette console, a la fin du
+   * script.
+   *
+   * C'est **elle** qui impose de raccorder depuis le reseau du routeur, et
+   * non plus le point d'appel du tunnel : depuis que le serveur appelle le
+   * routeur, le tunnel n'a plus cette contrainte. Dire le contraire enverrait
+   * chercher au mauvais endroit -- ce qui a deja coute des heures ici.
+   */
+  rappel: string;
+  rappelPrive: boolean;
+  /**
    * L'adresse annoncee au routeur n'est plus celle de cette machine.
    *
    * Constate sur cette installation : le script annoncait `192.168.88.135`,
@@ -140,6 +151,11 @@ export class RouterEnrollmentService {
       },
     });
 
+    // Sans port quand il n'y en a pas d'explicite : « 192.168.88.23:3000 » se
+    // lit, « 192.168.88.23: » fait douter de ce qui manque.
+    const rappelBrut = this.config.get<string>('PUBLIC_BASE_URL') ?? '';
+    const hoteDuRappel = rappelBrut.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+
     return {
       id: enrollment.id,
       label,
@@ -148,6 +164,8 @@ export class RouterEnrollmentService {
       script: this.buildScript({ token, apiPassword, tunnelAddress }),
       endpoint: `${this.wireguard.settings.endpointHost}:${this.wireguard.settings.endpointPort}`,
       endpointPrive: this.wireguard.endpointPrive,
+      rappel: hoteDuRappel,
+      rappelPrive: estPrivee(hoteDeLUrl(this.config.get<string>('PUBLIC_BASE_URL') ?? '')),
       adressePerimee: this.adresseDeRappelPerimee(),
     };
   }

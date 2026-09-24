@@ -101,6 +101,9 @@ export interface EnrollmentInvitation {
    * réseau local, et l'échec d'un routeur distant serait muet.
    */
   endpointPrive: boolean;
+  /** L’adresse a laquelle le routeur rappellera la console. */
+  rappel: string;
+  rappelPrive: boolean;
   /**
    * L'adresse annoncee au routeur n'est plus celle de la machine qui repond.
    *
@@ -157,6 +160,9 @@ export interface RaccordementAssisteInput {
 export interface EtatServeurTunnel {
   endpoint: string;
   endpointPrive: boolean;
+  /** L’adresse a laquelle le routeur rappellera la console. */
+  rappel: string;
+  rappelPrive: boolean;
   pilote: boolean;
   interfaceName: string;
   manques: string[];
