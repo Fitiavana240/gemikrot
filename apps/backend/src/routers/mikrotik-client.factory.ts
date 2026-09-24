@@ -156,7 +156,10 @@ export class MikrotikClientFactory {
         if (typeof value !== 'function') return value;
 
         return async (...args: unknown[]) => {
-          const blocked = health.blockedReason(router.id);
+          // `autoriserAppel` et non `blockedReason` : c'est ici qu'on appelle
+          // vraiment, donc ici qu'on prend la place de sonde quand le repos
+          // vient de finir. La forme qui ne fait que lire ne la prend pas.
+          const blocked = health.autoriserAppel(router.id);
           if (blocked) {
             // Échec immédiat : inutile de repayer le budget complet de
             // délais sur un routeur dont on sait qu'il ne répond pas.

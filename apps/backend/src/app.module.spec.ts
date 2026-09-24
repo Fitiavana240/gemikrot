@@ -19,6 +19,12 @@ import { AppModule } from './app.module.js';
  * instancie les fournisseurs, sans déclencher `onModuleInit` — donc sans
  * ouvrir de connexion ni lancer l'ordonnanceur. On éprouve le câblage, pas
  * l'environnement.
+ *
+ * **Trente secondes, et non les cinq par défaut.** Monter le graphe entier
+ * coûte une seconde à vide et davantage quand la suite tourne en parallèle ;
+ * l'épreuve tombait alors pour lenteur en annonçant une dépendance non
+ * résolue. Un garde-fou qui crie au loup sous charge finit par se contourner,
+ * et c'est le jour où le câblage est vraiment casse qu'on ne le croira pas.
  */
 describe('AppModule', () => {
   it('résout toutes ses dépendances', async () => {
@@ -26,5 +32,5 @@ describe('AppModule', () => {
 
     expect(module).toBeDefined();
     await module.close();
-  });
+  }, 30_000);
 });

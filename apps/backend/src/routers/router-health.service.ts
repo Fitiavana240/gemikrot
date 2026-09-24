@@ -24,6 +24,12 @@ export interface RouterHealth {
   lastErrorMessage: string | null;
   /** Tant que cette date n'est pas passée, les appels échouent aussitôt. */
   openUntil: Date | null;
+  /**
+   * Une sonde est en vol jusqu'à cette date : un appel, et un seul, a été
+   * laissé passer pour vérifier le retour du lien. Les autres attendent son
+   * verdict.
+   */
+  sondeJusqua: Date | null;
 }
 
 /** Levée sans toucher au réseau quand le disjoncteur est ouvert. */
@@ -37,6 +43,15 @@ export class RouterUnreachableException extends ServiceUnavailableException {
 const FAILURE_THRESHOLD = 3;
 /** Repos avant de retenter. Assez court pour qu'un retour de lien se voie vite. */
 const COOLDOWN_MS = 30_000;
+/**
+ * Au-delà, une sonde est tenue pour perdue.
+ *
+ * Elle devrait toujours rendre son verdict — `recordSuccess` ou
+ * `recordFailure` — mais un appel qui meurt autrement bloquerait le routeur
+ * pour toujours. Large : le budget complet d'un appel RouterOS est d'environ
+ * seize secondes, et libérer la place trop tôt rendrait la sonde inutile.
+ */
+const BUDGET_SONDE_MS = 25_000;
 
 /**
  * Disjoncteur par routeur.
@@ -128,6 +143,7 @@ export class RouterHealthService {
       lastErrorCode: null,
       lastErrorMessage: null,
       openUntil: null,
+      sondeJusqua: null,
     };
     this.health.set(routerId, fresh);
     return fresh;
@@ -137,20 +153,68 @@ export class RouterHealthService {
     return [...this.health.values()];
   }
 
-  /** `null` si l'appel peut partir ; sinon la raison du refus immédiat. */
+  /**
+   * Le refus, **sans rien engager**. Une question, pas une reservation.
+   *
+   * C'est la forme qu'il faut a qui veut seulement savoir ou en est un
+   * routeur : la file d'operations differees, un ecran d'etat. Prendre la
+   * place de sonde en passant la laisserait tenue par un appelant qui n'a
+   * jamais eu l'intention d'appeler, et le routeur resterait ferme jusqu'a
+   * l'expiration de cette place.
+   */
   blockedReason(routerId: string): string | null {
     const health = this.health.get(routerId);
-    if (!health?.openUntil) return null;
+    if (!health) return null;
 
-    if (health.openUntil.getTime() <= Date.now()) {
-      // Fin du repos : on laisse passer un appel pour sonder le retour du
-      // lien. S'il échoue, `recordFailure` rouvre pour un nouveau cycle.
-      health.openUntil = null;
+    if (health.sondeJusqua && health.sondeJusqua.getTime() > Date.now()) {
+      return `${health.lastErrorMessage ?? 'pas de réponse'} (sonde en cours)`;
+    }
+    if (!health.openUntil) return null;
+
+    const restant = health.openUntil.getTime() - Date.now();
+    if (restant <= 0) return null;
+    return `${health.lastErrorMessage ?? 'pas de réponse'} (nouvelle tentative dans ${Math.ceil(restant / 1000)} s)`;
+  }
+
+  /**
+   * Le refus, **et la place de sonde** quand le repos vient de finir.
+   *
+   * La promesse etait << un appel est laisse passer pour sonder le retour >>.
+   * Le code en laissait passer autant qu'il s'en presentait dans la meme
+   * seconde : `openUntil` etait efface par le premier, et tous les suivants
+   * trouvaient la voie libre. Sur ce parc, chaque fin de repos partait ainsi
+   * en quatre appels simultanes vers un routeur mort, chacun payant ses
+   * seize secondes de delais -- observe a vingt-quatre echecs en cinq
+   * minutes sur un seul appareil, pour un lien qu'on savait coupe des le
+   * troisieme.
+   *
+   * Une seule place, donc, et rendue par le verdict de la sonde : succes,
+   * le disjoncteur se referme ; echec reseau, il rouvre pour un cycle.
+   */
+  autoriserAppel(routerId: string): string | null {
+    const health = this.health.get(routerId);
+    if (!health) return null;
+
+    if (health.sondeJusqua) {
+      if (health.sondeJusqua.getTime() > Date.now()) {
+        return `${health.lastErrorMessage ?? 'pas de réponse'} (sonde en cours)`;
+      }
+      // La sonde n'a jamais rendu son verdict. Plutot que de fermer le
+      // routeur pour toujours sur un appel mort, on en autorise une autre.
+      health.sondeJusqua = new Date(Date.now() + BUDGET_SONDE_MS);
       return null;
     }
 
-    const seconds = Math.ceil((health.openUntil.getTime() - Date.now()) / 1000);
-    return `${health.lastErrorMessage ?? 'pas de réponse'} (nouvelle tentative dans ${seconds} s)`;
+    if (!health.openUntil) return null;
+
+    const restant = health.openUntil.getTime() - Date.now();
+    if (restant > 0) {
+      return `${health.lastErrorMessage ?? 'pas de réponse'} (nouvelle tentative dans ${Math.ceil(restant / 1000)} s)`;
+    }
+
+    health.openUntil = null;
+    health.sondeJusqua = new Date(Date.now() + BUDGET_SONDE_MS);
+    return null;
   }
 
   recordSuccess(routerId: string): void {
@@ -166,6 +230,7 @@ export class RouterHealthService {
     health.lastErrorCode = null;
     health.lastErrorMessage = null;
     health.openUntil = null;
+    health.sondeJusqua = null;
 
     // Le lien est revenu : ce qui n'avait pas pu partir peut repartir. Les
     // écoutes ne doivent jamais faire échouer l'appel qui vient de réussir.
@@ -182,6 +247,9 @@ export class RouterHealthService {
 
   recordFailure(routerId: string, error: unknown): void {
     const health = this.get(routerId);
+    // La sonde a rendu son verdict : la place se libere, quel que soit le
+    // verdict. La garder ferait attendre le prochain cycle pour rien.
+    health.sondeJusqua = null;
     health.lastFailureAt = new Date();
     health.lastErrorCode = error instanceof MikrotikError ? error.code : 'UNKNOWN';
     health.lastErrorMessage = (error as Error)?.message ?? String(error);
