@@ -487,6 +487,16 @@ model Router {
   /// Clé publique WireGuard du routeur. La privée est générée par le routeur
   /// et ne le quitte jamais.
   tunnelPublicKey      String?   @map("tunnel_public_key")
+  /// Numéro de série de la carte, rapporté par le routeur à son raccordement.
+  ///
+  /// **La seule chose stable qu'un routeur puisse dire de lui-même.** Son nom
+  /// se change, et sa clé publique est refaite à chaque exécution du script :
+  /// rejouer le raccordement créait donc une fiche de plus à chaque fois,
+  /// sans qu'aucune ne dise laquelle était vivante. Vu trois fois sur le
+  /// même appareil, le 24/09/2026.
+  ///
+  /// Nul sur une machine sans carte RouterBOARD — CHR, x86 — qui n'en a pas.
+  serialNumber         String?   @map("serial_number")
   enrolledAt           DateTime? @map("enrolled_at")
   status               String    @default("unknown")
   lastSeenAt           DateTime? @map("last_seen_at")
@@ -506,6 +516,9 @@ model Router {
   /// Cible des clés étrangères composites : une ligne enfant ne peut
   /// référencer que des lignes du même exploitant.
   @@unique([tenantId, id])
+  /// Un appareil, une fiche. Les numéros nuls restent distincts pour
+  /// PostgreSQL : deux machines sans carte RouterBOARD ne se gênent pas.
+  @@unique([tenantId, serialNumber])
   @@map("routers")
 }
 

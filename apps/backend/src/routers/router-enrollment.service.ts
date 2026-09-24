@@ -316,8 +316,14 @@ export class RouterEnrollmentService {
    */
   async consume(
     token: string,
-    body: { publicKey: string; identity?: string },
-  ): Promise<{ routerId: string; tunnelAddress: string; peerApplied: boolean }> {
+    body: { publicKey: string; identity?: string; serial?: string },
+  ): Promise<{
+    routerId: string;
+    tunnelAddress: string;
+    peerApplied: boolean;
+    /** Vrai quand une fiche existante a ete reprise au lieu d'en creer une. */
+    ficheReprise: boolean;
+  }> {
     // Hors cloisonnement : le rappel du routeur arrive sans session. C'est
     // le jeton qui désigne l'exploitant, et tout ce qui suit s'exécute
     // dedans.
@@ -369,21 +375,63 @@ export class RouterEnrollmentService {
         throw new ConflictException("Jeton d'enrôlement déjà utilisé");
       }
 
-      const router = await this.prisma.scopedStrict.router.create({
-        data: {
-          tenantId: enrollment.tenantId,
-          label: body.identity?.trim() || enrollment.label,
-          // L'adresse du tunnel devient l'hôte : c'est par là que le serveur
-          // joindra ce routeur. L'accès direct reste ouvert tant que
-          // l'exploitant ne l'a pas resserré, une fois le tunnel constaté.
-          host: enrollment.tunnelAddress,
-          restPort: 443,
-          credentialsEncrypted: enrollment.credentialsEncrypted,
-          tunnelAddress: enrollment.tunnelAddress,
-          tunnelPublicKey: body.publicKey,
-          enrolledAt: new Date(),
-          status: 'enrolled',
-        },
+      const serie = body.serial?.trim() || null;
+
+      /**
+       * La fiche de cet appareil, s'il en a deja une.
+       *
+       * **Le numero de serie est la seule chose stable** qu'un routeur dise
+       * de lui-meme. Son nom se change ; sa cle publique WireGuard est refaite
+       * a chaque execution du script, puisque celui-ci detruit et recree
+       * l'interface. Rejouer un raccordement creait donc une fiche de plus a
+       * chaque fois -- et rejouer est exactement ce qu'on fait quand on croit
+       * que ca n'a pas marche. Trois fiches sur le meme appareil le
+       * 24/09/2026, toutes injoignables, et rien ne disait laquelle etait
+       * vivante : les deux premieres portaient des cles mortes.
+       *
+       * Sans numero -- une machine sans carte RouterBOARD -- on cree, comme
+       * avant. Deviner sur le nom serait pire : deux routeurs sortis d'usine
+       * s'appellent tous les deux << MikroTik >>, et les confondre melangerait
+       * les clients de deux sites.
+       */
+      const existante = serie
+        ? await this.prisma.scopedStrict.router.findFirst({ where: { serialNumber: serie } })
+        : null;
+
+      const donnees = {
+        label: body.identity?.trim() || enrollment.label,
+        // L'adresse du tunnel devient l'hôte : c'est par là que le serveur
+        // joindra ce routeur. L'accès direct reste ouvert tant que
+        // l'exploitant ne l'a pas resserré, une fois le tunnel constaté.
+        host: enrollment.tunnelAddress,
+        restPort: 443,
+        credentialsEncrypted: enrollment.credentialsEncrypted,
+        tunnelAddress: enrollment.tunnelAddress,
+        tunnelPublicKey: body.publicKey,
+        serialNumber: serie,
+        enrolledAt: new Date(),
+        status: 'enrolled',
+      };
+
+      const router = existante
+        ? // La fiche garde son identifiant, et donc ses clients, ses tickets
+          // et son journal. Seul ce qui decrit le tunnel est remplace : le
+          // script vient de reecrire l'adresse et la cle sur le routeur, et
+          // le mot de passe d'API de l'invitation remplace l'ancien, devenu
+          // faux.
+          await this.prisma.scopedStrict.router.update({
+            where: { id: existante.id },
+            data: donnees,
+          })
+        : await this.prisma.scopedStrict.router.create({
+            data: { tenantId: enrollment.tenantId, ...donnees },
+          });
+
+      // L'invitation precedente de cette fiche n'a plus d'objet, et elle
+      // porte encore un mot de passe d'API devenu faux. Elle part -- sans
+      // quoi le lien ci-dessous buterait aussi sur l'unicite de `routerId`.
+      await this.prisma.scopedStrict.routerEnrollment.deleteMany({
+        where: { routerId: router.id, id: { not: enrollment.id } },
       });
 
       await this.prisma.scopedStrict.routerEnrollment.update({
@@ -397,7 +445,9 @@ export class RouterEnrollmentService {
       });
 
       this.logger.log(
-        `Routeur « ${router.label} » enrôlé sur ${enrollment.tunnelAddress}` +
+        `Routeur « ${router.label} » ${existante ? 'raccorde de nouveau' : 'enrôlé'} ` +
+          `sur ${enrollment.tunnelAddress}` +
+          (serie ? ` (serie ${serie})` : ' — sans numero de serie, fiche non rapprochable') +
           (peer.applied ? '' : ' — pair WireGuard à ajouter à la main sur le serveur'),
       );
 
@@ -409,6 +459,7 @@ export class RouterEnrollmentService {
         routerId: router.id,
         tunnelAddress: enrollment.tunnelAddress,
         peerApplied: peer.applied,
+        ficheReprise: existante !== null,
       };
     });
   }
@@ -658,10 +709,25 @@ ${this.contournementHotspot()}:put "Tunnel, compte et certificat poses. Envoi de
 #    routeur, il ne manque que l'avis au serveur : regenerez un script depuis
 #    la console et recollez-le, rien ne sera fait en double.
 #
-#    Tout est calcule dans la commande elle-meme : collees une par une dans le
-#    terminal, des lignes << :local >> ne se voient pas l'une l'autre, et la
-#    valeur arriverait vide sans que rien ne le signale.
-/tool/fetch url="${callbackUrl}" http-method=post http-header-field="Content-Type:application/json" http-data=("{\\"publicKey\\":\\"" . [/interface/wireguard/get [find name=${WG_INTERFACE}] public-key] . "\\",\\"identity\\":\\"" . [/system/identity/get name] . "\\"}") output=none
+#    **Le numero de serie part avec.** C'est la seule chose stable que ce
+#    routeur puisse dire de lui-meme : son nom se change, et sa cle publique
+#    est refaite a chaque execution de ce script. Sans lui, rejouer le
+#    raccordement creait une fiche de plus a chaque fois - trois sur le meme
+#    appareil le 24/09/2026, sans qu'aucune ne dise laquelle etait vivante.
+#    Entre parentheses : une carte absente (CHR, x86) ferait echouer la
+#    commande au lieu de rendre une chaine vide.
+#
+#    << :global >> et non << :local >>, et c'est la seule forme qui marche
+#    ici : collees une par une dans le terminal, deux lignes ne partagent pas
+#    leurs variables locales, et le numero arriverait vide **sans que rien ne
+#    le signale**. Le reste du script evite les variables pour cette raison
+#    precise ; celle-ci ne peut pas s'en passer, parce qu'une carte absente
+#    (CHR, x86) ferait echouer la commande au lieu de rendre une chaine vide.
+#    La variable est effacee juste apres, pour ne rien laisser derriere.
+:global gmSerie ""
+:do { :global gmSerie [/system/routerboard/get serial-number] } on-error={}
+/tool/fetch url="${callbackUrl}" http-method=post http-header-field="Content-Type:application/json" http-data=("{\\"publicKey\\":\\"" . [/interface/wireguard/get [find name=${WG_INTERFACE}] public-key] . "\\",\\"identity\\":\\"" . [/system/identity/get name] . "\\",\\"serial\\":\\"" . $gmSerie . "\\"}") output=none
+:set gmSerie
 `;
   }
 }

@@ -447,5 +447,110 @@ describe('RouterEnrollmentService', () => {
       expect(script).toMatch(/timeout connecting/);
       expect(script).toMatch(/pare-feu/);
     });
+
+    it('demande le numero de serie de la carte', async () => {
+      const script = (await asA(() => service.invite('Routeur serie'))).script;
+
+      expect(script).toContain('/system/routerboard/get serial-number');
+      // `:global` et non `:local` : collees une par une dans le terminal, deux
+      // lignes ne partagent pas leurs variables locales, et le numero
+      // arriverait vide sans que rien ne le signale. L'epreuve plus haut
+      // interdit `:local` dans tout le script ; celle-ci exige la forme qui
+      // marche.
+      expect(script).toContain(':global gmSerie');
+      expect(script).toContain('\\"serial\\":');
+      // Une carte absente -- CHR, x86 -- ferait echouer la commande au lieu
+      // de rendre une chaine vide : elle est donc a l'abri.
+      expect(script).toMatch(/:do \{ :global gmSerie .* \} on-error=\{\}/);
+      // Et la variable ne reste pas dans l'environnement du routeur.
+      expect(script).toContain(':set gmSerie');
+    });
+  });
+
+  /**
+   * Rejouer le script ne doit plus creer une fiche de plus.
+   *
+   * C'est ce qui s'est passe le 24/09/2026 : trois executions sur le meme
+   * appareil, trois fiches, toutes injoignables, et rien ne disait laquelle
+   * etait vivante -- les deux premieres portaient des cles mortes. Et rejouer
+   * est exactement ce qu'on fait quand on croit que ca n'a pas marche.
+   */
+  describe('un appareil, une fiche', () => {
+    it('reprend la fiche existante quand le numero de serie est le meme', async () => {
+      const serial = `HDX${suffix}`;
+      const premier = await asA(() => service.invite('hAP'));
+      const a = await service.consume(premier.script.match(/callback\/([\w-]+)/)![1], {
+        publicKey: routerKey('f'),
+        identity: 'hAP',
+        serial,
+      });
+
+      const second = await asA(() => service.invite('hAP'));
+      const b = await service.consume(second.script.match(/callback\/([\w-]+)/)![1], {
+        publicKey: routerKey('g'),
+        identity: 'hAP',
+        serial,
+      });
+
+      // Meme fiche : elle garde donc ses clients, ses tickets et son journal.
+      expect(b.routerId).toBe(a.routerId);
+      expect(b.ficheReprise).toBe(true);
+
+      // Et tout ce qui decrit le tunnel est remplace : le script vient de
+      // reecrire l'adresse et la cle sur le routeur, et l'ancien mot de passe
+      // d'API est devenu faux.
+      const fiche = await prisma.router.findUniqueOrThrow({ where: { id: a.routerId } });
+      expect(fiche.tunnelPublicKey).toBe(routerKey('g'));
+      expect(fiche.tunnelAddress).toBe(b.tunnelAddress);
+      expect(b.tunnelAddress).not.toBe(a.tunnelAddress);
+
+      expect(await prisma.router.count({ where: { tenantId: tenantA, serialNumber: serial } })).toBe(
+        1,
+      );
+    });
+
+    it('cree une fiche quand le routeur ne sait pas dire son numero', async () => {
+      // Une machine sans carte RouterBOARD -- CHR, x86 -- en envoie une chaine
+      // vide. Deviner sur le nom serait pire : deux routeurs sortis d'usine
+      // s'appellent tous les deux << MikroTik >>, et les confondre melangerait
+      // les clients de deux sites.
+      const un = await asA(() => service.invite('CHR'));
+      const a = await service.consume(un.script.match(/callback\/([\w-]+)/)![1], {
+        publicKey: routerKey('h'),
+        identity: 'MikroTik',
+        serial: '',
+      });
+
+      const deux = await asA(() => service.invite('CHR'));
+      const b = await service.consume(deux.script.match(/callback\/([\w-]+)/)![1], {
+        publicKey: routerKey('i'),
+        identity: 'MikroTik',
+        serial: '',
+      });
+
+      expect(b.routerId).not.toBe(a.routerId);
+      expect(b.ficheReprise).toBe(false);
+    });
+
+    it('ne rapproche jamais deux exploitants sur le meme numero', async () => {
+      // Deux exploitants peuvent avoir achete le meme modele, et un numero
+      // recopie de travers ne doit pas faire basculer un routeur d'un parc a
+      // l'autre.
+      const serial = `PARTAGE${suffix}`;
+      const chezA = await asA(() => service.invite('hAP'));
+      const a = await service.consume(chezA.script.match(/callback\/([\w-]+)/)![1], {
+        publicKey: routerKey('j'),
+        serial,
+      });
+
+      const chezB = await tenantContext.runAsTenant(tenantB, () => service.invite('hAP'));
+      const b = await service.consume(chezB.script.match(/callback\/([\w-]+)/)![1], {
+        publicKey: routerKey('l'),
+        serial,
+      });
+
+      expect(b.routerId).not.toBe(a.routerId);
+      expect(b.ficheReprise).toBe(false);
+    });
   });
 });

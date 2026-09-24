@@ -4,3 +4,8 @@ dist
 
 # Les reglages de production : secrets en clair, jamais versionnes.
 .env.production
+
+# Toute variante du .env, y compris les copies de sauvegarde : elles
+# portent les memes secrets que l original.
+.env.*
+!.env.example

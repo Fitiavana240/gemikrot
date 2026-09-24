@@ -8,7 +8,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from 'class-validator';
 import { Public } from '../auth/public.decorator.js';
 import { AdminRole } from '@prisma/client';
 import { Roles } from '../auth/roles.decorator.js';
@@ -67,6 +67,25 @@ export class EnrollRouterDto {
   @IsString()
   @Length(1, 60)
   identity?: string;
+
+  /**
+   * Le numero de serie de la carte RouterBOARD.
+   *
+   * **La seule chose stable qu'un routeur dise de lui-meme**, et donc la
+   * seule qui permette de reconnaitre un appareil deja raccorde : son nom se
+   * change, et sa cle publique WireGuard est refaite a chaque execution du
+   * script. Sans lui, rejouer un raccordement creait une fiche de plus a
+   * chaque fois.
+   *
+   * **Chaine vide accepte**, et pas seulement absent : une machine sans carte
+   * RouterBOARD -- CHR, x86 -- en envoie une. Exiger une longueur minimale
+   * ferait echouer son raccordement par un 400 que le script rend comme un
+   * simple << Status 400 >>, sans un mot de plus.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  serial?: string;
 }
 
 @Controller('router-enrollments')
