@@ -7,7 +7,7 @@ import { TenantContextService } from '../tenancy/tenant-context.service.js';
  * un modèle oublié resterait visible de tous, mieux vaut le déclarer que le
  * déduire.
  */
-const TENANT_SCOPED_MODELS = new Set<string>([
+export const TENANT_SCOPED_MODELS = new Set<string>([
   'Router',
   'Plan',
   'Customer',

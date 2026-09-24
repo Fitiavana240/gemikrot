@@ -85,12 +85,17 @@ export class SupervisionService {
 
     // Deux agrégats par exploitant, en deux requêtes pour tous : une boucle de
     // requêtes ferait vingt allers-retours pour vingt exploitants.
+    //
+    // Hors cloisonnement, et c'est l'écran même : la supervision est la vue
+    // du SUPER_ADMIN sur tous les exploitants. Un client cloisonné ne rendrait
+    // rien, puisqu'il n'appartient à aucun.
     const [recettes, attentes] = await Promise.all([
       this.prisma.payment.groupBy({
         by: ['tenantId'],
         where: { status: PaymentStatus.VERIFIED, verifiedAt: { gte: ilYA30Jours } },
         _sum: { amount: true },
       }),
+      // Hors cloisonnement : même raison que l'agrégat précédent.
       this.prisma.payment.groupBy({
         by: ['tenantId'],
         where: { status: PaymentStatus.PENDING },

@@ -112,6 +112,9 @@ export class RouterHealthService {
     // Client brut : ce service tourne aussi hors requête HTTP — file
     // d'opérations différées, travaux de fond — où le cloisonnement n'a pas de
     // contexte et ne rendrait rien.
+    // Hors cloisonnement : ce service tourne aussi en dehors d'une requête
+    // HTTP — file d'opérations différées, travaux de fond — où le
+    // cloisonnement n'a pas de contexte et ne rendrait rien.
     void this.prisma.router
       .update({ where: { id: routerId }, data: { status: 'online', lastSeenAt: new Date() } })
       .catch((error: unknown) => {

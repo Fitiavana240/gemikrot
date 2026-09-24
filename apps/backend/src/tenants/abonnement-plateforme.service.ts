@@ -125,6 +125,9 @@ export class AbonnementPlateformeService {
           currency: true,
         },
       }),
+      // Hors cloisonnement : l'exploitant est nommé dans le `where`. Le client
+      // cloisonné ne rendrait rien au SUPER_ADMIN, qui est justement celui qui
+      // consulte l'abonnement d'un autre.
       this.prisma.router.count({ where: { tenantId } }),
     ]);
 

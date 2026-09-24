@@ -363,6 +363,10 @@ export class PublicService {
         create: { tenantId: tenant.id, name: input.holderName.trim(), phone },
       });
 
+      // Hors cloisonnement, et à dessein : la collision d'identifiant se
+      // cherche chez tout le monde. L'appartenance est revérifiée juste après
+      // — `luiMême` compare le `tenantId` — et rien de cette ligne ne sort
+      // d'ici : seul le fait que le nom soit pris est dit au client.
       const déjàPris = await this.prisma.voucher.findFirst({
         // **Insensible à la casse**, et c'est un vrai piège : l'index unique
         // de Postgres, lui, distingue `Naivo-Doublon` de `naivo-doublon`. La

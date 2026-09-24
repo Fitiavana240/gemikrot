@@ -318,6 +318,9 @@ export class RouterEnrollmentService {
     token: string,
     body: { publicKey: string; identity?: string },
   ): Promise<{ routerId: string; tunnelAddress: string; peerApplied: boolean }> {
+    // Hors cloisonnement : le rappel du routeur arrive sans session. C'est
+    // le jeton qui désigne l'exploitant, et tout ce qui suit s'exécute
+    // dedans.
     const enrollment = await this.prisma.routerEnrollment.findUnique({
       where: { tokenHash: hashToken(token) },
     });
@@ -439,15 +442,21 @@ export class RouterEnrollmentService {
     // par l'index d'unicité tout en étant comptée comme libre plus bas : sans
     // ce nettoyage, réattribuer l'adresse échoue en base. Portée étroite —
     // seulement ce qui a expiré sans jamais avoir abouti.
+    // Hors cloisonnement : le plan d'adressage du tunnel est commun à tous.
+    // Une adresse tenue par l'invitation périmée d'un autre exploitant
+    // bloquerait celle-ci sans que personne ne comprenne pourquoi.
     await this.prisma.routerEnrollment.deleteMany({
       where: { consumedAt: null, expiresAt: { lte: new Date() } },
     });
 
     const [routers, invitations] = await Promise.all([
+      // Hors cloisonnement : même raison — une adresse déjà prise l'est pour
+      // tout le monde, quel que soit son propriétaire.
       this.prisma.router.findMany({
         where: { tunnelAddress: { not: null } },
         select: { tunnelAddress: true },
       }),
+      // Hors cloisonnement : même raison.
       this.prisma.routerEnrollment.findMany({
         // Une invitation périmée libère son adresse : sans quoi chaque essai
         // abandonné grignoterait le plan d'adressage.

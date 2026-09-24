@@ -87,6 +87,8 @@ export class TenantsService {
       throw new ForbiddenException("Le SUPER_ADMIN n'est rattaché à aucun exploitant");
     }
 
+    // Hors cloisonnement : une création ne filtre rien. C'est le `tenantId`
+    // posé juste en dessous, pris du contexte, qui décide à qui elle est.
     const account = await this.prisma.mobileMoneyAccount.create({
       data: {
         tenantId,
@@ -143,6 +145,9 @@ export class TenantsService {
     const account = await this.prisma.scoped.mobileMoneyAccount.findUnique({ where: { id } });
     if (!account) throw new NotFoundException(`Compte Mobile Money ${id} introuvable`);
 
+    // Hors cloisonnement : la ligne a déjà été trouvée par le client
+    // cloisonné juste au-dessus. Sans ce contrôle, deviner un identifiant
+    // suffirait à supprimer la puce d'un autre exploitant.
     await this.prisma.mobileMoneyAccount.delete({ where: { id } });
     await this.audit.log({
       adminUserId,

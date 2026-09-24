@@ -94,6 +94,8 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
    * tour suivant.
    */
   private async reconcileAll(): Promise<void> {
+    // Hors cloisonnement : la réconciliation parcourt tout le parc, et se
+    // place ensuite sur l'exploitant de chaque routeur, un par un.
     const routers = await this.prisma.router.findMany({
       select: { id: true, tenantId: true, label: true },
     });

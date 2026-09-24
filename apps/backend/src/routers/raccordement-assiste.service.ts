@@ -324,6 +324,8 @@ export class RaccordementAssisteService {
         : `Routeur enregistré dans la console, certificat épinglé.`,
     );
 
+    // Hors cloisonnement : cette fiche vient d'être créée, ou retrouvée par
+    // le client cloisonné, quelques lignes plus haut. On la complète.
     await this.prisma.router.update({
       where: { id: routeur.id },
       data: {

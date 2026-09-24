@@ -277,6 +277,9 @@ export class TicketGenerationService {
     // Client non cloisonné à dessein : `forRouter` a déjà résolu ce routeur
     // par le client cloisonné, donc l'appelant y a droit. On ne fait que lire
     // à qui il appartient.
+    // Hors cloisonnement à dessein : `forRouter` a déjà résolu ce routeur
+    // par le client cloisonné, donc l'appelant y a droit. On ne fait que
+    // lire à qui il appartient.
     const routeur = await this.prisma.router.findUniqueOrThrow({
       where: { id: routerId },
       select: { tenantId: true },

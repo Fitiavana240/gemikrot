@@ -94,6 +94,8 @@ export class RouterOperationQueue implements OnModuleInit {
     try {
       // Client brut : aucun exploitant n'est encore posé, et il s'agit
       // justement de reprendre les files de tous.
+      // Hors cloisonnement : aucun exploitant n'est encore posé au démarrage,
+      // et il s'agit justement de reprendre les files de tous.
       const enAttente = await this.prisma.routerOperation.groupBy({
         by: ['routerId'],
         where: { status: RouterOperationStatus.EN_ATTENTE },
@@ -169,6 +171,8 @@ export class RouterOperationQueue implements OnModuleInit {
     try {
       // Client brut : cette lecture précède la résolution de l'exploitant,
       // c'est elle qui la détermine. Restreinte à un routeur donné.
+      // Hors cloisonnement : cette lecture précède la résolution de
+      // l'exploitant, c'est elle qui la détermine. Restreinte à un routeur.
       const waiting = await this.prisma.routerOperation.findMany({
         where: { routerId, status: RouterOperationStatus.EN_ATTENTE },
         orderBy: { createdAt: 'asc' },

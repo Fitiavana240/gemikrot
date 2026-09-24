@@ -71,6 +71,8 @@ export class PurgeJobService {
       }),
     ]);
 
+    // Hors cloisonnement : une purge de rétention vaut pour tout le monde.
+    // La restreindre à un exploitant laisserait les autres grossir sans fin.
     const claims = await this.prisma.paymentClaim.deleteMany({
       where: { createdAt: { lt: avant(CLAIM_RETENTION_DAYS) } },
     });
@@ -81,6 +83,7 @@ export class PurgeJobService {
 
     // Les opérations achevées ou abandonnées ont fini de servir ; celles qui
     // attendent encore restent, quel que soit leur âge.
+    // Hors cloisonnement : même raison, et la période est la seule borne.
     const operations = await this.prisma.routerOperation.deleteMany({
       where: {
         status: { in: ['TERMINEE', 'ABANDONNEE'] },
@@ -92,6 +95,8 @@ export class PurgeJobService {
     // d'office tout ce qui n'a jamais été constaté expiré, et le statut est
     // vérifié en plus : un ticket repassé en vente ne doit pas disparaître
     // parce qu'il porte encore la date d'un ancien constat.
+    // Hors cloisonnement : même raison. Les deux conditions ci-dessous sont
+    // la vraie sécurité, pas l'exploitant.
     const vouchers = await this.prisma.voucher.deleteMany({
       where: {
         status: 'EXPIRED',

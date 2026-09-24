@@ -145,11 +145,11 @@ export class HealthService {
   /**
    * Les routeurs raccordés, et combien donnent signe de vie.
    *
-   * Lu en base, jamais composé. Le client cloisonné est volontairement évité :
-   * ce décompte porte sur toute l'installation, et il n'est rendu qu'au
-   * SUPER_ADMIN, qui n'appartient à aucun exploitant.
+   * Lu en base, jamais composé.
    */
   private async routeurs(): Promise<SanteRouteurs> {
+    // Hors cloisonnement : le décompte porte sur l'installation entière, et
+    // il n'est rendu qu'au SUPER_ADMIN, qui n'appartient à aucun exploitant.
     const raccordes = await this.prisma.router.findMany({
       where: { enrolledAt: { not: null } },
       select: { status: true, lastSeenAt: true },
