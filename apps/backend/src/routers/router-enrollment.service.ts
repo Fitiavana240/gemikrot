@@ -468,6 +468,10 @@ export class RouterEnrollmentService {
 # laisse. Sans cela, une seconde execution rend un mur de
 # << failure: already have... >> ou rien ne distingue l'echec attendu de
 # l'echec veritable.
+#
+# Ce script pose quatre choses : le tunnel, un compte applicatif aux droits
+# limites, un certificat pour l'API, puis il previent le serveur. Il ne touche
+# ni a votre compte admin, ni au HotSpot, ni a vos clients.
 # ============================================================
 
 # 1. Le tunnel. La cle privee est creee ici et ne quitte jamais ce routeur.
@@ -499,16 +503,42 @@ export class RouterEnrollmentService {
 /user/add name=${API_USERNAME} group=gemikrot password="${params.apiPassword}" \\
     comment="GeMikrot - compte applicatif"
 
-# Ce script ne touche PAS au service www-ssl, volontairement. Restreindre
-# l'API avant d'avoir eprouve le tunnel a deja coupe un routeur en essai :
+# 4. Le certificat de l'API, sans lequel la console ne peut pas parler.
+#
+#    La console dialogue en REST sur https : il faut donc que << www-ssl >>
+#    presente un certificat valide. Un routeur qui n'en a pas accepte la
+#    connexion puis la coupe net, **sans un mot d'explication** - ni dans le
+#    journal du routeur, ni cote console. Constate sur ce parc : api-ssl
+#    repondait << handshake_failure >> et www-ssl coupait sechement, les deux
+#    pour la meme raison.
+#
+#    La cause la plus frequente est l'horloge. Apres une coupure de courant,
+#    RouterOS repart en 1970 : le certificat devient << pas encore valide >>,
+#    et tout le TLS tombe. En regenerer un maintenant le date d'aujourd'hui,
+#    ce qui repare les deux cas d'un coup.
+#
+#    Rejouable, comme le reste : l'ancien part avant que le neuf arrive.
+:put "Verification du certificat..."
+/certificate remove [find name="gemikrot-api-cert"]
+/certificate add name="gemikrot-api-cert" common-name="${params.tunnelAddress}" \\
+    days-valid=3650 key-size=2048 \\
+    key-usage=digital-signature,key-encipherment,tls-server
+/certificate sign "gemikrot-api-cert"
+
+#    La signature prend quelques secondes et affiche sa progression. C'est
+#    normal : laissez-la finir sans rien taper.
+/ip/service set www-ssl certificate="gemikrot-api-cert" disabled=no
+
+# Ce script ne restreint PAS l'adresse de www-ssl, volontairement. Le faire
+# avant d'avoir eprouve le tunnel a deja coupe un routeur en essai :
 # << set www-ssl address=... >> REMPLACE la liste, et la forme censee y ajouter
 # une entree l'a effacee a la place. Le resserrage est une etape separee, que
 # la console propose une fois le tunnel constate - et qui, a ce moment-la,
 # peut etre annulee par le tunnel lui-meme.
 
-:put "Tunnel et compte poses. Envoi de la cle publique au serveur..."
+:put "Tunnel, compte et certificat poses. Envoi de la cle publique au serveur..."
 
-# 4. On previent le serveur, en lui donnant la cle publique de ce routeur.
+# 5. On previent le serveur, en lui donnant la cle publique de ce routeur.
 #
 #    **En dernier, et rien apres.** /tool/fetch bloque le terminal le temps de
 #    sa tentative. Si l'adresse ci-dessous n'est plus la bonne, il reste sur

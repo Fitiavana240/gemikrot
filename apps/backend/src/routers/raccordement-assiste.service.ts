@@ -75,6 +75,48 @@ export interface RaccordementAssiste {
   etapes: string[];
 }
 
+/**
+ * Pourquoi le certificat n'a pas pu etre releve, et quoi faire.
+ *
+ * Deux pannes se cachent derriere le meme ecran, et leurs remedes n'ont rien
+ * a voir :
+ *
+ * - **Rien ne repond** : le routeur est eteint, ailleurs, ou son service est
+ *   arrete. Il n'y a rien a reparer depuis ici.
+ * - **Le port repond puis coupe** : le service tourne, mais il n'a pas de
+ *   certificat utilisable. C'est reparable, et **par le script** — qui pose
+ *   un certificat neuf et le rattache a l'API.
+ *
+ * La seconde ne s'envoie surtout pas vers un terminal Winbox : la regle de ce
+ * produit est qu'on n'y tape rien, on n'y colle que ce que la console a
+ * genere. Une panne qu'on ne sait reparer qu'a la main est une panne qu'on ne
+ * repare pas.
+ */
+export function messageDeSondageRate(hote: string, port: number, e: unknown): string {
+  const detail = e instanceof Error ? e.message : String(e);
+  // Le routeur a accepte la connexion puis l'a coupee : signature exacte d'un
+  // service TLS sans certificat valide. Releve sur ce parc, sur `www-ssl` et
+  // `api-ssl` a la fois — les deux partagent le certificat du routeur.
+  const tlsCoupe =
+    /ECONNRESET|socket disconnected|handshake|alert|SSL|TLS/i.test(detail) &&
+    !/ECONNREFUSED|EHOSTUNREACH|ETIMEDOUT|ENETUNREACH/i.test(detail);
+
+  if (tlsCoupe) {
+    return (
+      `Le routeur ${hote} répond sur le port ${port}, mais coupe la connexion sécurisée : ` +
+      `il n'a pas de certificat utilisable. C'est fréquent après une coupure de courant — ` +
+      `l'horloge repart en arrière et le certificat devient « pas encore valide ». ` +
+      `Utilisez « Préparer un script à coller » : le script pose un certificat neuf et rétablit ` +
+      `l'API, puis ce raccordement automatique fonctionnera. Détail : ${detail}`
+    );
+  }
+  return (
+    `Aucune réponse de ${hote}:${port}. Vérifiez que le routeur est allumé et que vous êtes sur ` +
+    `le même réseau que lui. Si l'adresse est bonne, préparez un script à coller : il rétablit ` +
+    `le service sécurisé du routeur. Détail : ${detail}`
+  );
+}
+
 @Injectable()
 export class RaccordementAssisteService {
   private readonly logger = new Logger(RaccordementAssisteService.name);
@@ -121,10 +163,7 @@ export class RaccordementAssisteService {
         modele: null,
         empreinte: null,
         adressePerimee: perimee,
-        message:
-          `Aucune réponse de ${dto.host}:${port}. Vérifiez que le service « www-ssl » est actif ` +
-          `sur le routeur (IP > Services dans Winbox) et que vous êtes sur le même réseau que lui. ` +
-          `Détail : ${e instanceof Error ? e.message : String(e)}`,
+        message: messageDeSondageRate(dto.host, port, e),
       };
     }
 

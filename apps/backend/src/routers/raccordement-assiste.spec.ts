@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RaccordementAssisteService } from './raccordement-assiste.service.js';
+import {
+  RaccordementAssisteService,
+  messageDeSondageRate,
+} from './raccordement-assiste.service.js';
 
 /**
  * Raccorder un routeur sans coller de script.
@@ -240,5 +243,43 @@ describe('le routeur deja connu', () => {
     expect(dto.password).not.toBe(ADMIN.password);
     // Le nom n'est pas ecrase : l'exploitant l'a peut-etre choisi.
     expect(dto.label).toBeUndefined();
+  });
+});
+
+describe('pourquoi le sondage a rate', () => {
+  it('reconnait un routeur sans certificat, et renvoie au script', () => {
+    /**
+     * Le cas exact de ce parc : le port repond, puis coupe. Deux services TLS
+     * tombaient ensemble — `www-ssl` sechement, `api-ssl` avec un
+     * << handshake_failure >> — les deux pour la meme raison.
+     *
+     * Le message ne doit surtout pas renvoyer vers un terminal Winbox : la
+     * regle de ce produit est qu'on n'y tape rien, on n'y colle que ce que la
+     * console a genere. Une panne qu'on ne sait reparer qu'a la main est une
+     * panne qu'on ne repare pas.
+     */
+    const m = messageDeSondageRate(
+      '192.168.88.1',
+      443,
+      new Error('Client network socket disconnected before secure TLS connection was established'),
+    );
+
+    expect(m).toMatch(/pas de certificat utilisable/);
+    expect(m).toMatch(/script/);
+    expect(m).not.toMatch(/Winbox/);
+  });
+
+  it('distingue un routeur qui ne repond pas du tout', () => {
+    // Rien a reparer depuis la console : le routeur est eteint ou ailleurs.
+    const m = messageDeSondageRate('192.168.88.1', 443, new Error('connect ECONNREFUSED'));
+
+    expect(m).toMatch(/Aucune réponse/);
+    expect(m).not.toMatch(/pas de certificat utilisable/);
+  });
+
+  it('traite un delai depasse comme une absence de reponse', () => {
+    const m = messageDeSondageRate('192.168.88.1', 443, new Error('connect ETIMEDOUT'));
+
+    expect(m).toMatch(/Aucune réponse/);
   });
 });
