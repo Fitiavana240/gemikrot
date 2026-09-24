@@ -269,12 +269,9 @@ export class RoutersService {
       );
     }
 
+    // Sans adresse d'appel : c'est le routeur qui appelle.
     const r = await this.wireguard.addPeer(
-      {
-        publicKey: routeur.tunnelPublicKey,
-        tunnelAddress: routeur.tunnelAddress,
-        endpoint: routeur.tunnelEndpoint ?? undefined,
-      },
+      { publicKey: routeur.tunnelPublicKey, tunnelAddress: routeur.tunnelAddress },
       routeur.label,
     );
 
@@ -296,13 +293,11 @@ export class RoutersService {
     }
     return {
       ecrit: true,
-      message: routeur.tunnelEndpoint
-        ? `Pair réécrit : ${routeur.tunnelAddress} appelé à ${routeur.tunnelEndpoint}. ` +
-          `Rechargez le tunnel dans l'application WireGuard — elle garde sa propre copie ` +
-          `du fichier depuis l'import et ne le relit pas d'elle-même.`
-        : `Pair réécrit, mais ce routeur n'a pas de nom public : il ne sera joignable ` +
-          `que depuis son propre réseau. Relancez le raccordement pour lui en faire ` +
-          `demander un à MikroTik.`,
+      message:
+        `Pair réécrit pour ${routeur.tunnelAddress}. ` +
+        `Rechargez le tunnel dans l'application WireGuard — elle garde sa propre copie ` +
+        `du fichier depuis l'import et ne le relit pas d'elle-même. ` +
+        `C'est ensuite le routeur qui appelle : le tunnel montera de lui-même.`,
     };
   }
 

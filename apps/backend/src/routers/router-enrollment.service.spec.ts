@@ -112,11 +112,15 @@ describe('RouterEnrollmentService', () => {
       expect(invitation.script).toContain('persistent-keepalive=25 ');
     });
 
-    it('inverse le sens quand l\u2019adresse du serveur est privee', async () => {
-      // Une adresse privee ne se joint que depuis le meme reseau : le routeur
-      // ne pourrait pas l'appeler. Le sens s'inverse donc, et ce montage ne
-      // vaut que pour un essai sur place -- il exige en retour que le routeur
-      // soit joignable de l'exterieur, ce qui est rare.
+    it('ne change pas de sens quand l\u2019adresse du serveur est privee', async () => {
+      // Une adresse privee **limite la portee, pas le sens**. Le routeur doit
+      // etre sur le meme reseau pour l'atteindre -- mais alors il l'atteint
+      // tres bien, et c'est toujours lui qui appelle.
+      //
+      // J'avais inverse le sens dans ce cas, et c'etait une complication sans
+      // objet : l'inverse exige du routeur exactement ce qu'on cherche a ne pas
+      // exiger, etre joignable de l'exterieur. Sur ce parc, deux NAT l'en
+      // empechaient.
       const local: Record<string, string> = {
         ...SETTINGS,
         WIREGUARD_ENDPOINT_HOST: '192.168.88.23',
@@ -132,8 +136,11 @@ describe('RouterEnrollmentService', () => {
 
       const script = (await asA(() => surPlace.invite('Routeur local'))).script;
 
-      expect(script).not.toContain('endpoint-address=');
-      expect(script).not.toContain('persistent-keepalive=');
+      expect(script).toContain('endpoint-address=192.168.88.23');
+      expect(script).toContain('persistent-keepalive=25 ');
+      // Mais le script previent, en toutes lettres, que cela ne vaut qu'ici.
+      expect(script).toContain('est une adresse privee');
+      expect(script).toMatch(/nulle part\s+#\s+ailleurs|et nulle part/);
     });
 
     it('ouvre le port du tunnel en entree, en tete de chaine', async () => {

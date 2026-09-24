@@ -201,65 +201,50 @@ export class RouterEnrollmentService {
   }
 
   /**
-   * Le pair du serveur, dans le sens qui peut marcher.
+   * Le pair du serveur : **c'est ce routeur qui appelle, toujours.**
    *
-   * **Le routeur appelle le serveur** des que celui-ci a une adresse
-   * publique. C'est le seul sens fiable : un routeur derriere un NAT -- meme
-   * derriere deux, meme derriere celui de son operateur -- peut toujours
-   * appeler, jamais etre appele. Sur ce parc, le hAP avait un second routeur
-   * devant lui et l'operateur au-dessus : aucun port ouvert n'y pouvait rien,
-   * et le diagnostic a coute une journee.
+   * Un seul sens, et j'ai perdu une journee a en essayer deux. Il n'existe
+   * aucun cas ou le serveur appelant le routeur vaut mieux :
    *
-   * **Le serveur appelle le routeur** quand l'adresse du serveur est privee.
-   * Cela ne vaut que sur un meme reseau local -- un essai, un laboratoire --
-   * et demande en retour que le routeur, lui, soit joignable de l'exterieur.
+   * - Adresse du serveur publique : le routeur l'appelle, de partout.
+   * - Adresse du serveur privee : le routeur doit etre sur le meme reseau
+   *   pour l'atteindre -- mais alors il l'atteint tres bien. L'adresse privee
+   *   limite la portee, elle ne change pas le sens.
    *
-   * Le choix se fait sur un fait observable plutot que sur un reglage de plus.
-   * Un interrupteur serait un interrupteur a regler de travers, et le symptome
-   * d'un mauvais choix est un tunnel muet, sans le moindre message.
+   * L'inverse exige du routeur exactement ce qu'on cherche a ne pas exiger :
+   * etre joignable de l'exterieur. Un routeur derriere un NAT -- meme derriere
+   * deux, meme derriere celui de son operateur -- peut toujours appeler et ne
+   * peut jamais etre appele. C'est ce qui a bloque ce parc : un second routeur
+   * devant le hAP, et l'operateur au-dessus.
    */
   private pairDuServeur(): string {
     const { endpointHost, endpointPort, publicKey, subnet } = this.wireguard.settings;
-    const retrait =
-      ':do { /interface/wireguard/peers/remove [find comment="GeMikrot"] } on-error={}';
 
-    if (this.wireguard.endpointPrive) {
-      return [
-        "# 2. Le serveur, comme pair. **Sans point d'appel : c'est le serveur qui",
-        '#    appellera ce routeur.**',
-        '#',
-        "#    L'adresse annoncee de ce serveur est privee : un routeur situe",
-        '#    ailleurs ne la joindra jamais. Le sens est donc inverse, et ce',
-        "#    montage ne vaut que sur ce reseau local -- pour un essai. Il exige",
-        '#    en retour que ce routeur soit joignable de l\'exterieur, ce qui est',
-        '#    rare : un NAT d\'operateur devant lui suffit a l\'en empecher.',
-        '#',
-        "#    Sans point d'appel, WireGuard apprend l'adresse du serveur du",
-        '#    premier paquet recu et la suit quand elle change. Pas de battement',
-        '#    non plus : on ne maintient pas ouverte une conversation avec',
-        "#    quelqu'un dont on ignore l'adresse. C'est au serveur de le faire.",
-        retrait,
-        `/interface/wireguard/peers/add interface=${WG_INTERFACE} \\\\`,
-        `    public-key="${publicKey}" \\\\`,
-        `    allowed-address=${subnet} \\\\`,
-        '    comment="GeMikrot"',
-      ].join('\\n');
-    }
+    const avertissement = this.wireguard.endpointPrive
+      ? [
+          '#',
+          `#    **${endpointHost} est une adresse privee.** Ce routeur ne la joindra`,
+          '#    que depuis le meme reseau : le tunnel montera ici, et nulle part',
+          '#    ailleurs. Pour un acces a distance, le serveur doit porter une',
+          '#    adresse publique -- aucun reglage de ce cote-ci ne remplace cela.',
+        ]
+      : [];
 
     return [
       "# 2. Le serveur, comme pair. **C'est ce routeur qui appelle.**",
       '#',
-      '#    Le seul sens qui marche partout : un routeur derriere un NAT -- meme',
-      '#    derriere deux, meme derriere celui de son operateur -- peut toujours',
-      '#    appeler, jamais etre appele. Aucun port a ouvrir ici, aucune adresse',
-      '#    fixe necessaire de ce cote.',
+      '#    Le seul sens qui marche : un routeur derriere un NAT -- meme derriere',
+      '#    deux, meme derriere celui de son operateur -- peut toujours appeler,',
+      '#    jamais etre appele. Aucun port a ouvrir ici, aucune adresse fixe',
+      '#    necessaire de ce cote.',
       '#',
       '#    Le battement de 25 secondes maintient ouverte, dans le NAT, la porte',
       '#    que le premier paquet a percee. Sans lui elle se referme en quelques',
       '#    dizaines de secondes et le serveur ne peut plus repondre : le tunnel',
       '#    marcherait une minute puis mourrait, ce qui se diagnostique bien plus',
       "#    mal qu'une panne franche.",
-      retrait,
+      ...avertissement,
+      ':do { /interface/wireguard/peers/remove [find comment="GeMikrot"] } on-error={}',
       `/interface/wireguard/peers/add interface=${WG_INTERFACE} \\\\`,
       `    public-key="${publicKey}" \\\\`,
       `    endpoint-address=${endpointHost} endpoint-port=${endpointPort} \\\\`,
@@ -641,12 +626,11 @@ export class RouterEnrollmentService {
         data: { routerId: router.id },
       });
 
+      // Sans adresse d'appel : c'est le routeur qui appelle, et le serveur
+      // apprend la sienne du premier paquet recu. Lui en donner une le ferait
+      // frapper chez un routeur que son NAT rend injoignable.
       const peer = await this.wireguard.addPeer(
-        {
-          publicKey: body.publicKey,
-          tunnelAddress: enrollment.tunnelAddress,
-          endpoint: router.tunnelEndpoint ?? undefined,
-        },
+        { publicKey: body.publicKey, tunnelAddress: enrollment.tunnelAddress },
         router.label,
       );
 

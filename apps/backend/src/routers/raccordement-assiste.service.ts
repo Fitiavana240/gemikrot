@@ -312,7 +312,8 @@ export class RaccordementAssisteService {
     );
 
     const pair = await this.wireguard.addPeer(
-      { publicKey: cleDuRouteur, tunnelAddress, endpoint: appel ?? undefined },
+      // Sans adresse d'appel : c'est le routeur qui appelle.
+      { publicKey: cleDuRouteur, tunnelAddress },
       // La fiche n'existe pas encore a ce stade : l'etiquette vient de ce que
       // l'exploitant a saisi, ou de l'identite lue sur le routeur.
       dto.label?.trim() || sondage.identite || dto.host,
