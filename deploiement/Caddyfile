@@ -1,0 +1,51 @@
+# GeMikrot — un seul domaine, deux choses derrière.
+#
+# `DOMAINE` vient de l'environnement. Mis à `:80`, Caddy sert en clair sans
+# demander de certificat : c'est ce qu'il faut pour un essai local, où
+# Let's Encrypt ne peut de toute façon pas valider un nom qui n'existe pas.
+
+{$DOMAINE:":80"} {
+	encode zstd gzip
+
+	# `handle_path` retire le préfixe avant de relayer : le serveur expose
+	# `/auth/login`, pas `/api/auth/login`. C'est le même retrait que fait
+	# Vite en développement — les deux doivent rester d'accord, sans quoi
+	# l'application marche en local et rend des 404 en production.
+	handle_path /api/* {
+		reverse_proxy backend:3000
+	}
+
+	# Le point de santé, joignable sans passer par `/api` : un moniteur
+	# externe interroge une adresse, pas une convention de préfixe.
+	handle /health {
+		reverse_proxy backend:3000
+	}
+
+	handle {
+		root * /srv
+		# L'application tient sa propre navigation : toute adresse inconnue
+		# rend `index.html`, à charge pour le routeur React de décider. Sans
+		# cela, rafraîchir la page sur `/routeurs` rendrait un 404 — et le
+		# lien de paiement envoyé à un client, qui arrive toujours en
+		# navigation directe, ne marcherait jamais.
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Ce que le navigateur doit refuser, quoi qu'on lui serve.
+	header {
+		# Le jeton vit encore dans le stockage local : tant que c'est le cas,
+		# une injection de script vaut un vol de session. À revoir en même
+		# temps que le passage au cookie `HttpOnly`.
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		# `Server` en dit assez pour cibler une version connue.
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

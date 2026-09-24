@@ -1,0 +1,97 @@
+# GeMikrot — le serveur.
+#
+# Construit depuis la racine du dépôt (`context: ..`) et non depuis ce
+# dossier : le backend dépend de `packages/mikrotik-service` par le
+# mécanisme d'espaces de travail npm, et un contexte réduit à `apps/backend`
+# ne verrait ni ce paquet ni le `package-lock.json` qui fige les versions.
+
+# ---------------------------------------------------------------- dépendances
+# Debian et non Alpine. Prisma embarque un moteur compilé, et la variante musl
+# demande un `binaryTargets` explicite dans le schéma plus des paquets
+# OpenSSL choisis à la main. Les quelques dizaines de mégaoctets gagnés se
+# paient en incidents de démarrage qu'on ne reproduit pas en local.
+FROM node:24-bookworm-slim AS deps
+WORKDIR /app
+
+# OpenSSL **des la construction**, et pas seulement a l'execution.
+#
+# `prisma generate` choisit le moteur d'apres la version d'OpenSSL qu'il
+# trouve. Sans le paquet, il devine — et devine mal : le client etait
+# genere pour << debian-openssl-1.1.x >> alors que l'image d'execution, elle,
+# porte du 3.0. L'image se construisait sans une plainte, et le serveur
+# s'arretait au demarrage sur << could not locate the Query Engine >>.
+RUN apt-get update   && apt-get install -y --no-install-recommends openssl ca-certificates   && rm -rf /var/lib/apt/lists/*
+
+# Seuls les manifestes d'abord : tant qu'ils ne changent pas, Docker réutilise
+# la couche d'installation. Copier les sources ici referait `npm ci` à chaque
+# ligne de code modifiée.
+COPY package.json package-lock.json ./
+COPY apps/backend/package.json apps/backend/
+COPY apps/frontend/package.json apps/frontend/
+COPY packages/mikrotik-service/package.json packages/mikrotik-service/
+RUN npm ci
+
+# ---------------------------------------------------------------- construction
+FROM deps AS build
+WORKDIR /app
+COPY . .
+
+# Le client Prisma est généré pour la plateforme de l'image, pas pour celle du
+# développeur. Généré ailleurs, il échoue au premier appel avec un message qui
+# ne parle pas de plateforme.
+RUN npx prisma generate --schema apps/backend/prisma/schema.prisma
+RUN npm run build --workspace=packages/mikrotik-service
+RUN npm run build --workspace=apps/backend
+
+# npm remonte ce qu'il peut à la racine, mais pas tout : un conflit de
+# versions laisse des paquets dans le `node_modules` de l'espace concerné.
+# Le dossier existe donc pour certains espaces et pas pour d'autres, selon
+# l'arbre du moment — et `COPY` d'un chemin absent fait échouer la
+# construction. On le crée vide pour que la copie d'en dessous ne dépende
+# pas d'une décision de npm.
+RUN mkdir -p apps/backend/node_modules packages/mikrotik-service/node_modules
+
+# ---------------------------------------------------------------- exécution
+FROM node:24-bookworm-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+
+# `openssl` : Prisma en a besoin au démarrage, et l'image « slim » ne le porte
+# pas. L'absence se manifeste par une erreur de moteur illisible.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+# L'arbre entier des modules, y compris le paquet MikroTik lié par npm. Le
+# reconstruire avec `--omit=dev` casserait ce lien : npm réinstallerait le
+# paquet depuis le registre public, où il n'existe pas.
+#
+# **Les trois dossiers, et pas seulement celui de la racine.** Node cherche
+# `@nestjs/core` d'abord dans `apps/backend/node_modules`, puis remonte. Avec
+# la seule racine copiée, l'image se construit sans un mot et le serveur
+# s'arrête au démarrage sur « Cannot find package '@nestjs/core' » — une
+# panne qui n'apparaît qu'à l'exécution, là où elle coûte le plus cher.
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/apps/backend/node_modules ./apps/backend/node_modules
+COPY --from=build /app/packages/mikrotik-service/node_modules ./packages/mikrotik-service/node_modules
+COPY --from=build /app/packages/mikrotik-service/dist ./packages/mikrotik-service/dist
+COPY --from=build /app/packages/mikrotik-service/package.json ./packages/mikrotik-service/
+COPY --from=build /app/apps/backend/dist ./apps/backend/dist
+COPY --from=build /app/apps/backend/package.json ./apps/backend/
+# Le schéma suit l'image : c'est lui que `prisma migrate deploy` applique, et
+# le conteneur de migration part de cette même image.
+COPY --from=build /app/apps/backend/prisma ./apps/backend/prisma
+
+# Jamais root. Un serveur qui n'écrit nulle part n'a aucune raison d'en avoir
+# les droits, et l'image `node` fournit déjà cet utilisateur.
+USER node
+
+WORKDIR /app/apps/backend
+EXPOSE 3000
+
+# `/health` répond `503` quand la base est tombée : c'est ce code que Docker
+# lit, et non le corps de la réponse.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "dist/main"]

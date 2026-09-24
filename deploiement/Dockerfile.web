@@ -1,0 +1,31 @@
+# GeMikrot — la console et le portail public, servis par Caddy.
+#
+# Caddy plutôt que Traefik ou nginx. Traefik brille avec beaucoup de services
+# qui apparaissent et disparaissent ; il y en a deux ici. nginx impose
+# d'écrire la configuration TLS et de suivre le renouvellement à la main.
+# Caddy obtient et renouvelle le certificat tout seul, sert les fichiers
+# construits et relaie `/api` — sur le critère « tenable par une personne »,
+# il gagne.
+
+# ---------------------------------------------------------------- construction
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY apps/backend/package.json apps/backend/
+COPY apps/frontend/package.json apps/frontend/
+COPY packages/mikrotik-service/package.json packages/mikrotik-service/
+RUN npm ci
+
+COPY . .
+RUN npm run build --workspace=apps/frontend
+
+# ---------------------------------------------------------------- exécution
+FROM caddy:2-alpine AS runtime
+
+# Les fichiers construits, et rien d'autre : pas de Node dans cette image. Un
+# processus de moins à surveiller, à mettre à jour et à redémarrer.
+COPY --from=build /app/apps/frontend/dist /srv
+COPY deploiement/Caddyfile /etc/caddy/Caddyfile
+
+EXPOSE 80 443

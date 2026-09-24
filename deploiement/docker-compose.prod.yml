@@ -1,0 +1,90 @@
+# GeMikrot — la pile de production.
+#
+# Quatre conteneurs : la base, les migrations (une seule fois), le serveur,
+# et Caddy. Quatre gigaoctets suffisent largement.
+#
+#   docker compose -f deploiement/docker-compose.prod.yml up -d --build
+#
+# Lancé depuis la racine du dépôt : les images se construisent avec la racine
+# pour contexte, parce que le backend dépend du paquet MikroTik voisin.
+
+name: gemikrot
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?définir POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définir POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-gemikrot}
+    volumes:
+      - donnees_postgres:/var/lib/postgresql/data
+    # Aucun port publié : la base n'est joignable que par le réseau interne.
+    # L'exposer sur Internet pour « pouvoir la consulter » est la première
+    # cause de base perdue sur un VPS.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Les migrations dans un conteneur à usage unique, qui doit réussir avant
+  # que le serveur démarre.
+  #
+  # **Jamais dans le point d'entrée de l'application.** Le jour où il y a deux
+  # répliques, deux processus appliquent la même migration en même temps : la
+  # seconde échoue au milieu et laisse une base à moitié faite, sur laquelle
+  # l'application démarre quand même.
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploiement/Dockerfile.backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-gemikrot}?schema=public
+    command: ['npx', 'prisma', 'migrate', 'deploy', '--schema', 'prisma/schema.prisma']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  backend:
+    build:
+      context: ..
+      dockerfile: deploiement/Dockerfile.backend
+    restart: unless-stopped
+    env_file:
+      - ../.env.production
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-gemikrot}?schema=public
+      PORT: 3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploiement/Dockerfile.web
+    restart: unless-stopped
+    environment:
+      DOMAINE: ${DOMAINE:?définir DOMAINE — par exemple « gemikrot.mg » ou « :80 » pour un essai local}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      # Les certificats obtenus survivent au redémarrage. Sans ce volume,
+      # chaque `up` redemande un certificat à Let's Encrypt — et au cinquième
+      # de la semaine, la limite tombe et le site passe en clair.
+      - caddy_donnees:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
+volumes:
+  donnees_postgres:
+  caddy_donnees:
+  caddy_config:
