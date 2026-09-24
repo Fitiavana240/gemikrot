@@ -143,6 +143,39 @@ describe('RouterEnrollmentService', () => {
       expect(script).toMatch(/nulle part\s+#\s+ailleurs|et nulle part/);
     });
 
+    it('n\u2019emet aucun antislash-n litteral', async () => {
+      // Un bloc assemble avec `join('\\\\n')` au lieu de `join('\\n')` sort sur
+      // **une seule ligne**. Si elle commence par `#`, RouterOS lit tout
+      // comme un commentaire : les commandes qui suivent ne s'executent
+      // jamais, sans un message, sans une erreur.
+      //
+      // C'est arrive au pair du serveur le 24/09/2026. Le script s'est
+      // deroule entierement, le routeur n'a rien dit, et le tunnel ne pouvait
+      // pas monter -- le pair n'avait jamais ete ajoute.
+      const script = (await asA(() => service.invite('Routeur lignes'))).script;
+
+      const fautives = script
+        .split(/\r?\n/)
+        .map((l, i) => ({ l, i: i + 1 }))
+        .filter(({ l }) => l.includes('\\n'));
+
+      expect(
+        fautives.map(({ i, l }) => `ligne ${i} : ${l.slice(0, 70)}`),
+        'Un antislash-n litteral fait tenir plusieurs commandes sur une ligne.',
+      ).toEqual([]);
+    });
+
+    it('pose le pair du serveur sur sa propre ligne', async () => {
+      // `toContain` ne suffit pas : il trouvait `endpoint-address=` a
+      // l'interieur d'une ligne de commentaire et se declarait satisfait,
+      // alors que la commande n'etait jamais executee. C'est ce qui a laisse
+      // passer le defaut.
+      const lignes = (await asA(() => service.invite('Routeur pair'))).script.split(/\r?\n/);
+
+      expect(lignes.some((l) => l.startsWith('/interface/wireguard/peers/add'))).toBe(true);
+      expect(lignes.some((l) => l.trim().startsWith('endpoint-address='))).toBe(true);
+    });
+
     it('ouvre le port du tunnel en entree, en tete de chaine', async () => {
       // Le pare-feu par defaut de RouterOS refuse toute connexion entrante
       // non sollicitee : le tunnel resterait muet, sans un mot, et l'on

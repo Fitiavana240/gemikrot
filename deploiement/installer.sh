@@ -76,6 +76,19 @@ echo "── 3/6 · Les secrets"
 REGLAGES="$RACINE/.env.production"
 if [ -f "$REGLAGES" ]; then
   echo "   Déjà présents, conservés."
+  # **Une exception : l'adresse de rappel.**
+  #
+  # Caddy ne transmet au serveur que ce qui commence par « /api » ; le reste
+  # va à la console, qui refuse un POST par « 405 Method Not Allowed ». Les
+  # premières installations écrivaient l'adresse sans ce préfixe, et le
+  # routeur lisait ce 405 après un script entièrement déroulé.
+  #
+  # Les secrets, eux, restent intouchés : les retirer rendrait illisibles les
+  # identifiants de tous les routeurs déjà raccordés.
+  if grep -q "^PUBLIC_BASE_URL=.*[^i]$" "$REGLAGES" && ! grep -q "^PUBLIC_BASE_URL=.*/api$" "$REGLAGES"; then
+    sed -i "s|^PUBLIC_BASE_URL=.*|PUBLIC_BASE_URL=https://$DOMAINE_PUBLIC/api|" "$REGLAGES"
+    echo "   Adresse de rappel corrigée : elle passe désormais par /api."
+  fi
 else
   cat > "$REGLAGES" <<FIN
 POSTGRES_USER=gemikrot
@@ -92,7 +105,7 @@ WIREGUARD_SERVER_ADDRESS=10.88.0.1
 WIREGUARD_INTERFACE=wg0
 WIREGUARD_MANAGED=false
 WIREGUARD_CONFIG_PATH=/etc/wireguard/wg0.conf
-PUBLIC_BASE_URL=https://$DOMAINE_PUBLIC
+PUBLIC_BASE_URL=https://$DOMAINE_PUBLIC/api
 MIKROTIK_TLS_REJECT_UNAUTHORIZED=true
 SCHEDULER_ENABLED=true
 SEED_ADMIN_EMAIL=gemikrot@gmail.com
@@ -200,6 +213,28 @@ docker compose --env-file "$REGLAGES" -f deploiement/docker-compose.prod.yml up 
 echo "   Creation du compte d'acces..."
 docker compose --env-file "$REGLAGES" -f deploiement/docker-compose.prod.yml \
   run --rm --no-deps backend npx tsx prisma/seed.ts
+
+# L'epreuve qui manquait.
+#
+# Le routeur rappelle cette adresse a la fin de son script. Si le relais est
+# mal reglé, il lit « Status 405 » -- apres avoir tout pose sur son materiel,
+# et sans rien qui explique pourquoi. Le verifier ici coute deux secondes et
+# evite de le decouvrir sur un routeur en production.
+#
+# On attend 404 : le jeton est invente, donc inconnu. C'est la preuve que la
+# requete a bien atteint le serveur.
+echo
+echo "── Vérification du chemin de rappel"
+CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  "https://$DOMAINE_PUBLIC/api/router-enrollments/callback/verification" \
+  -H 'Content-Type: application/json' \
+  -d '{"publicKey":"vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv="}' || echo 000)
+case "$CODE" in
+  404) echo "   Le rappel atteint le serveur." ;;
+  405) echo "   ⚠ 405 : le relais /api ne mène pas au serveur. Le raccordement échouera." ;;
+  000) echo "   ⚠ Aucune réponse. Le certificat n'est peut-être pas encore délivré ; réessayez dans une minute." ;;
+  *)   echo "   ⚠ Réponse inattendue : $CODE" ;;
+esac
 
 echo
 echo "════════════════════════════════════════════════════════"

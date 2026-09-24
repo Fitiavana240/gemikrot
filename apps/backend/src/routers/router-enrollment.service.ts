@@ -250,7 +250,7 @@ export class RouterEnrollmentService {
       `    endpoint-address=${endpointHost} endpoint-port=${endpointPort} \\\\`,
       `    allowed-address=${subnet} \\\\`,
       '    persistent-keepalive=25 comment="GeMikrot"',
-    ].join('\\n');
+    ].join('\n');
   }
 
   /**
