@@ -201,6 +201,74 @@ export class RouterEnrollmentService {
   }
 
   /**
+   * Le pair du serveur, dans le sens qui peut marcher.
+   *
+   * **Le routeur appelle le serveur** des que celui-ci a une adresse
+   * publique. C'est le seul sens fiable : un routeur derriere un NAT -- meme
+   * derriere deux, meme derriere celui de son operateur -- peut toujours
+   * appeler, jamais etre appele. Sur ce parc, le hAP avait un second routeur
+   * devant lui et l'operateur au-dessus : aucun port ouvert n'y pouvait rien,
+   * et le diagnostic a coute une journee.
+   *
+   * **Le serveur appelle le routeur** quand l'adresse du serveur est privee.
+   * Cela ne vaut que sur un meme reseau local -- un essai, un laboratoire --
+   * et demande en retour que le routeur, lui, soit joignable de l'exterieur.
+   *
+   * Le choix se fait sur un fait observable plutot que sur un reglage de plus.
+   * Un interrupteur serait un interrupteur a regler de travers, et le symptome
+   * d'un mauvais choix est un tunnel muet, sans le moindre message.
+   */
+  private pairDuServeur(): string {
+    const { endpointHost, endpointPort, publicKey, subnet } = this.wireguard.settings;
+    const retrait =
+      ':do { /interface/wireguard/peers/remove [find comment="GeMikrot"] } on-error={}';
+
+    if (this.wireguard.endpointPrive) {
+      return [
+        "# 2. Le serveur, comme pair. **Sans point d'appel : c'est le serveur qui",
+        '#    appellera ce routeur.**',
+        '#',
+        "#    L'adresse annoncee de ce serveur est privee : un routeur situe",
+        '#    ailleurs ne la joindra jamais. Le sens est donc inverse, et ce',
+        "#    montage ne vaut que sur ce reseau local -- pour un essai. Il exige",
+        '#    en retour que ce routeur soit joignable de l\'exterieur, ce qui est',
+        '#    rare : un NAT d\'operateur devant lui suffit a l\'en empecher.',
+        '#',
+        "#    Sans point d'appel, WireGuard apprend l'adresse du serveur du",
+        '#    premier paquet recu et la suit quand elle change. Pas de battement',
+        '#    non plus : on ne maintient pas ouverte une conversation avec',
+        "#    quelqu'un dont on ignore l'adresse. C'est au serveur de le faire.",
+        retrait,
+        `/interface/wireguard/peers/add interface=${WG_INTERFACE} \\\\`,
+        `    public-key="${publicKey}" \\\\`,
+        `    allowed-address=${subnet} \\\\`,
+        '    comment="GeMikrot"',
+      ].join('\\n');
+    }
+
+    return [
+      "# 2. Le serveur, comme pair. **C'est ce routeur qui appelle.**",
+      '#',
+      '#    Le seul sens qui marche partout : un routeur derriere un NAT -- meme',
+      '#    derriere deux, meme derriere celui de son operateur -- peut toujours',
+      '#    appeler, jamais etre appele. Aucun port a ouvrir ici, aucune adresse',
+      '#    fixe necessaire de ce cote.',
+      '#',
+      '#    Le battement de 25 secondes maintient ouverte, dans le NAT, la porte',
+      '#    que le premier paquet a percee. Sans lui elle se referme en quelques',
+      '#    dizaines de secondes et le serveur ne peut plus repondre : le tunnel',
+      '#    marcherait une minute puis mourrait, ce qui se diagnostique bien plus',
+      "#    mal qu'une panne franche.",
+      retrait,
+      `/interface/wireguard/peers/add interface=${WG_INTERFACE} \\\\`,
+      `    public-key="${publicKey}" \\\\`,
+      `    endpoint-address=${endpointHost} endpoint-port=${endpointPort} \\\\`,
+      `    allowed-address=${subnet} \\\\`,
+      '    persistent-keepalive=25 comment="GeMikrot"',
+    ].join('\\n');
+  }
+
+  /**
    * Fait sortir la console du portail captif, quand elle est sur son reseau.
    *
    * **Le HotSpot occupe le port 80 du routeur, et souvent le 443 avec lui.**
@@ -760,28 +828,7 @@ export class RouterEnrollmentService {
 :do { /ip/route/remove [find comment="GeMikrot"] } on-error={}
 /ip/route/add dst-address=${subnet} gateway=${WG_INTERFACE} comment="GeMikrot"
 
-# 2. Le serveur, comme pair. **Sans point d'appel, et c'est le coeur du
-#    montage : c'est le serveur qui appellera ce routeur.**
-#
-#    Le sens inverse -- le routeur appelant le serveur -- etait le premier
-#    choix, et il reste le bon quand le serveur a une adresse publique fixe.
-#    Il s'effondre des que le serveur est mobile : un portable en partage de
-#    connexion recoit une adresse privee de l'operateur, partagee avec des
-#    milliers d'abonnes, et **personne ne peut l'appeler**. Aucun reglage ne
-#    contourne cela ; ce n'est pas une panne, c'est la topologie.
-#
-#    Sans << endpoint-address >>, WireGuard apprend l'adresse du serveur du
-#    premier paquet recu, et la suit quand elle change. Le portable peut donc
-#    passer du wifi a la 4G sans que rien ne soit a refaire.
-#
-#    Pas de << persistent-keepalive >> non plus : on ne peut pas maintenir ouverte
-#    une conversation avec quelqu'un dont on ignore l'adresse. C'est au
-#    serveur de le faire, et sa configuration le prevoit.
-:do { /interface/wireguard/peers/remove [find comment="GeMikrot"] } on-error={}
-/interface/wireguard/peers/add interface=${WG_INTERFACE} \\
-    public-key="${publicKey}" \\
-    allowed-address=${subnet} \\
-    comment="GeMikrot"
+${this.pairDuServeur()}
 
 # 2 bis. Le port du tunnel, ouvert en entree.
 #

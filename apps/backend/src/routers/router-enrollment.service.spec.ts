@@ -101,19 +101,39 @@ describe('RouterEnrollmentService', () => {
       // recevrait les appels du serveur sans savoir lui répondre.
       expect(invitation.script).toContain('/ip/route/add dst-address=10.88.0.0/24');
 
-      // **Le pair du serveur n'a pas de point d'appel, et c'est le coeur du
-      // montage : c'est le serveur qui appelle ce routeur.**
-      //
-      // Le sens inverse etait le premier choix, et il reste le bon quand le
-      // serveur a une adresse publique fixe. Il s'effondre des que le serveur
-      // est mobile : un portable en partage de connexion recoit une adresse
-      // privee de son operateur, et personne ne peut l'appeler.
-      expect(invitation.script).not.toContain('endpoint-address=');
-      // Ni battement : on ne maintient pas ouverte une conversation avec
-      // quelqu'un dont on ignore l'adresse. C'est au serveur de le faire.
-      // Le signe egal compte : le script *parle* de ce reglage dans son
-      // commentaire, pour dire pourquoi il ne le pose pas.
-      expect(invitation.script).not.toContain('persistent-keepalive=');
+      // **Le routeur appelle le serveur**, parce que l'adresse annoncee ici
+      // est publique. C'est le seul sens fiable : un routeur derriere un NAT
+      // -- meme derriere celui de son operateur -- peut toujours appeler,
+      // jamais etre appele.
+      expect(invitation.script).toContain('endpoint-address=vps.gemikrot.mg');
+      // Le battement maintient ouverte, dans le NAT, la porte que le premier
+      // paquet a percee. Sans lui elle se referme en quelques dizaines de
+      // secondes : le tunnel marcherait une minute puis mourrait.
+      expect(invitation.script).toContain('persistent-keepalive=25 ');
+    });
+
+    it('inverse le sens quand l\u2019adresse du serveur est privee', async () => {
+      // Une adresse privee ne se joint que depuis le meme reseau : le routeur
+      // ne pourrait pas l'appeler. Le sens s'inverse donc, et ce montage ne
+      // vaut que pour un essai sur place -- il exige en retour que le routeur
+      // soit joignable de l'exterieur, ce qui est rare.
+      const local: Record<string, string> = {
+        ...SETTINGS,
+        WIREGUARD_ENDPOINT_HOST: '192.168.88.23',
+      };
+      const conf = { get: (k: string) => local[k], getOrThrow: (k: string) => local[k] } as never;
+      const surPlace = new RouterEnrollmentService(
+        prisma,
+        new RouterCredentialsService(conf),
+        new WireguardService(conf),
+        tenantContext,
+        conf,
+      );
+
+      const script = (await asA(() => surPlace.invite('Routeur local'))).script;
+
+      expect(script).not.toContain('endpoint-address=');
+      expect(script).not.toContain('persistent-keepalive=');
     });
 
     it('ouvre le port du tunnel en entree, en tete de chaine', async () => {
