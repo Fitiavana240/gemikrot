@@ -321,6 +321,15 @@ export class RouterEnrollmentService {
     routerId: string;
     tunnelAddress: string;
     peerApplied: boolean;
+    /**
+     * Le pair a ete ecrit dans le fichier du tunnel, sans etre charge.
+     *
+     * Ce n'est pas `peerApplied` : le fichier est juste, le tunnel qui tourne
+     * ne le sait pas encore. C'est l'etat le plus frequent sur un serveur
+     * Windows, ou la console n'a pas les droits de piloter `wg` -- et celui
+     * qu'il faut nommer, parce que << injoignable >> decrit un routeur eteint.
+     */
+    peerEcrit: boolean;
     /** Vrai quand une fiche existante a ete reprise au lieu d'en creer une. */
     ficheReprise: boolean;
   }> {
@@ -439,16 +448,20 @@ export class RouterEnrollmentService {
         data: { routerId: router.id },
       });
 
-      const peer = await this.wireguard.addPeer({
-        publicKey: body.publicKey,
-        tunnelAddress: enrollment.tunnelAddress,
-      });
+      const peer = await this.wireguard.addPeer(
+        { publicKey: body.publicKey, tunnelAddress: enrollment.tunnelAddress },
+        router.label,
+      );
 
       this.logger.log(
         `Routeur « ${router.label} » ${existante ? 'raccorde de nouveau' : 'enrôlé'} ` +
           `sur ${enrollment.tunnelAddress}` +
           (serie ? ` (serie ${serie})` : ' — sans numero de serie, fiche non rapprochable') +
-          (peer.applied ? '' : ' — pair WireGuard à ajouter à la main sur le serveur'),
+          (peer.applied
+            ? ''
+            : peer.ecritDansLeFichier
+              ? ' — pair ecrit dans le fichier du tunnel, a recharger'
+              : ' — pair WireGuard à ajouter à la main sur le serveur'),
       );
 
       // Le certificat n'est pas épinglé ici : le routeur vient seulement
@@ -459,6 +472,7 @@ export class RouterEnrollmentService {
         routerId: router.id,
         tunnelAddress: enrollment.tunnelAddress,
         peerApplied: peer.applied,
+        peerEcrit: peer.ecritDansLeFichier,
         ficheReprise: existante !== null,
       };
     });
@@ -573,6 +587,11 @@ export class RouterEnrollmentService {
 # << failure: already have... >> ou rien ne distingue l'echec attendu de
 # l'echec veritable.
 #
+# **Une seule exception : l'interface WireGuard.** Elle porte la cle privee de
+# ce routeur, et la refaire en fabriquerait une neuve - donc un pair devenu
+# faux sur le serveur, a remettre a la main. Elle est creee si elle manque, et
+# laissee telle quelle sinon.
+#
 # Les retraits sont ecrits << :do { ... } on-error={} >>, et cette forme fait
 # deux choses a la fois : elle avale l'echec quand il n'y a rien a retirer -
 # sur un routeur vierge, c'est le cas de tous - et elle met la commande entre
@@ -587,8 +606,24 @@ export class RouterEnrollmentService {
 # ============================================================
 
 # 1. Le tunnel. La cle privee est creee ici et ne quitte jamais ce routeur.
-:do { /interface/wireguard/remove [find name=${WG_INTERFACE}] } on-error={}
-/interface/wireguard/add name=${WG_INTERFACE} listen-port=13231 comment="GeMikrot"
+#
+#    **L'interface n'est PAS refaite si elle existe deja**, et c'est la seule
+#    etape de ce script qui ne recommence pas de zero. La cle privee vit dans
+#    l'interface : la detruire en fabrique une neuve, donc une nouvelle cle
+#    publique, donc un pair devenu faux cote serveur - qu'il faut alors
+#    remettre a la main. Rejouer ce script coupait ainsi le tunnel a tous les
+#    coups, et rejouer est exactement ce qu'on fait quand on croit que ca n'a
+#    pas marche. Constate le 24/09/2026 : quatre executions, quatre cles,
+#    quatre fois le meme depannage.
+#
+#    Tout le reste - adresse, route, pair, compte, certificat - se refait
+#    sans dommage : rien de tout cela ne porte d'identite.
+:if ([:len [/interface/wireguard/find name=${WG_INTERFACE}]] = 0) do={
+  /interface/wireguard/add name=${WG_INTERFACE} listen-port=13231 comment="GeMikrot"
+  :put "Interface WireGuard creee."
+} else={
+  :put "Interface WireGuard deja presente : sa cle est conservee."
+}
 :do { /ip/address/remove [find interface=${WG_INTERFACE}] } on-error={}
 /ip/address/add address=${params.tunnelAddress}/32 interface=${WG_INTERFACE} comment="GeMikrot"
 # Une adresse en /32 ne cree aucune route : sans celle-ci, ce routeur saurait

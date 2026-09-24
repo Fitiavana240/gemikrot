@@ -260,11 +260,18 @@ export class RaccordementAssisteService {
     // a ete produite la-bas et ne doit pas en sortir. C'est toute la raison
     // pour laquelle le serveur ne configure pas le tunnel de bout en bout.
     const cleDuRouteur = await this.clePubliqueDuTunnel(client);
-    const pair = await this.wireguard.addPeer({ publicKey: cleDuRouteur, tunnelAddress });
+    const pair = await this.wireguard.addPeer(
+      { publicKey: cleDuRouteur, tunnelAddress },
+      // La fiche n'existe pas encore a ce stade : l'etiquette vient de ce que
+      // l'exploitant a saisi, ou de l'identite lue sur le routeur.
+      dto.label?.trim() || sondage.identite || dto.host,
+    );
     etapes.push(
       pair.applied
         ? `Routeur ajouté comme pair sur le serveur : le tunnel peut s'établir.`
-        : `Pair à ajouter à la main sur le serveur — le tunnel ne s'établira pas avant.`,
+        : pair.ecritDansLeFichier
+          ? `Pair écrit dans le fichier du tunnel. Rechargez le tunnel pour qu'il le prenne.`
+          : `Pair à ajouter à la main sur le serveur — le tunnel ne s'établira pas avant.`,
     );
 
     const label = dto.label?.trim() || sondage.identite || dto.host;
