@@ -105,6 +105,20 @@ export class EnrollRouterDto {
   @IsString()
   @MaxLength(120)
   endpoint?: string;
+
+  /**
+   * << oui >>, << non >> ou << inconnu >> : ce routeur est-il derriere le NAT
+   * de son fournisseur ?
+   *
+   * Calcule **sur le routeur**, parce que lui seul connait ses propres
+   * adresses : il compare celle que le service de noms annonce au monde avec
+   * celles qu'il porte. Le serveur, lui, ne verrait qu'un nom qui resout
+   * normalement, et n'aurait aucun moyen de savoir qu'il ne mene nulle part.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  derriereNat?: string;
 }
 
 @Controller('router-enrollments')

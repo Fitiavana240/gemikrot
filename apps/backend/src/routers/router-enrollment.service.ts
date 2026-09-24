@@ -410,7 +410,14 @@ export class RouterEnrollmentService {
    */
   async consume(
     token: string,
-    body: { publicKey: string; identity?: string; serial?: string; endpoint?: string },
+    body: {
+      publicKey: string;
+      identity?: string;
+      serial?: string;
+      endpoint?: string;
+      /** << oui >>, << non >> ou << inconnu >>, calcule par le routeur lui-meme. */
+      derriereNat?: string;
+    },
   ): Promise<{
     routerId: string;
     tunnelAddress: string;
@@ -491,6 +498,18 @@ export class RouterEnrollmentService {
       const pointDAppel = body.endpoint?.trim().replace(/^:/, '') || null;
 
       /**
+       * Un routeur derriere le NAT de son fournisseur **ne peut pas etre
+       * appele**, et son nom public ne vaut rien.
+       *
+       * Le garder ferait afficher une adresse d'appel plausible, un pair
+       * complet, et un tunnel qui ne monte jamais -- sans qu'aucun ecran ne
+       * dise pourquoi. Mieux vaut pas d'adresse du tout : la console dit
+       * alors franchement que ce routeur n'est pilotable que depuis son
+       * propre reseau.
+       */
+      const derriereNat = body.derriereNat?.trim() === 'oui';
+
+      /**
        * La fiche de cet appareil, s'il en a deja une.
        *
        * **Le numero de serie est la seule chose stable** qu'un routeur dise
@@ -522,7 +541,8 @@ export class RouterEnrollmentService {
         tunnelAddress: enrollment.tunnelAddress,
         tunnelPublicKey: body.publicKey,
         serialNumber: serie,
-        tunnelEndpoint: pointDAppel && pointDAppel.includes(':') ? pointDAppel : null,
+        tunnelEndpoint:
+          !derriereNat && pointDAppel && pointDAppel.includes(':') ? pointDAppel : null,
         enrolledAt: new Date(),
         status: 'enrolled',
       };
@@ -922,9 +942,28 @@ ${this.contournementHotspot()}:put "Tunnel, compte et certificat poses. Envoi de
 #    laisser chercher.
 :global gmNom ""
 :do { :global gmNom [/ip/cloud/get dns-name] } on-error={}
-/tool/fetch url="${callbackUrl}" http-method=post http-header-field="Content-Type:application/json" http-data=("{\\"publicKey\\":\\"" . [/interface/wireguard/get [find name=${WG_INTERFACE}] public-key] . "\\",\\"identity\\":\\"" . [/system/identity/get name] . "\\",\\"serial\\":\\"" . $gmSerie . "\\",\\"endpoint\\":\\"" . $gmNom . ":${WG_LISTEN_PORT}\\"}") output=none
+#
+#    **Ce routeur est-il derriere le NAT de son fournisseur ?**
+#
+#    C'est la question decisive, et elle ne se voit d'aucun autre endroit.
+#    '/ip/cloud' rend un nom des qu'il est active, et ce nom resout : tout
+#    parait en place. Mais l'adresse qu'il annonce est celle **vue de
+#    l'exterieur**, et si le fournisseur partage une adresse publique entre
+#    ses abonnes -- ou si un second routeur se tient devant celui-ci -- elle
+#    n'appartient a aucun equipement d'ici. Personne ne peut alors appeler ce
+#    routeur, quel que soit le port ouvert.
+#
+#    La comparaison se fait ici parce que ce routeur seul connait ses propres
+#    adresses : le serveur, lui, ne verrait qu'un nom qui resout normalement.
+#    Constate sur ce parc : 129.222.109.230 annonce, 192.168.1.x sur le WAN,
+#    et 100.64.0.1 au saut suivant -- la plage que les operateurs emploient
+#    justement pour partager une adresse.
+:global gmNat "inconnu"
+:do { :if ([:len [/ip/address/find address~("^" . [/ip/cloud/get public-address])]] > 0) do={ :set gmNat "non" } else={ :set gmNat "oui" } } on-error={}
+/tool/fetch url="${callbackUrl}" http-method=post http-header-field="Content-Type:application/json" http-data=("{\\"publicKey\\":\\"" . [/interface/wireguard/get [find name=${WG_INTERFACE}] public-key] . "\\",\\"identity\\":\\"" . [/system/identity/get name] . "\\",\\"serial\\":\\"" . $gmSerie . "\\",\\"endpoint\\":\\"" . $gmNom . ":${WG_LISTEN_PORT}\\",\\"derriereNat\\":\\"" . $gmNat . "\\"}") output=none
 :set gmSerie
 :set gmNom
+:set gmNat
 `;
   }
 }
