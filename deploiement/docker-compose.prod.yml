@@ -59,7 +59,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-gemikrot}?schema=public
       PORT: 3000
     volumes:
-      # **Le fichier du tunnel, ecrit par la console.**
+      # **Le fichier des pairs, et lui seul.**
       #
       # Sans ce montage, `WIREGUARD_CONFIG_PATH` designe un chemin qui
       # n'existe que dans le conteneur : la console croit ecrire le pair,
@@ -67,9 +67,13 @@ services:
       # routeur. L'ecran affiche << Pair pose : non >> sans qu'aucune cause ne
       # soit visible.
       #
-      # Un observateur systemd sur l'hote applique ensuite la modification
-      # sans couper l'interface -- voir l'installateur.
-      - /etc/wireguard:/etc/wireguard
+      # **Seulement ce fichier.** Monter tout /etc/wireguard donnerait la
+      # cle privee du serveur a l'application : elle figure dans wg0.conf, et
+      # rien dans le produit n'en a besoin.
+      #
+      # Un observateur systemd sur l'hote reassemble wg0.conf et applique les
+      # pairs sans couper l'interface -- voir l'installateur.
+      - /etc/wireguard/pairs.conf:/etc/wireguard/pairs.conf
     depends_on:
       postgres:
         condition: service_healthy

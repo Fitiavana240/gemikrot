@@ -93,6 +93,17 @@ if [ -f "$REGLAGES" ]; then
     # les scripts qu'il produit enverraient les routeurs au mauvais endroit.
     RECREER=oui
   fi
+  # **Et le chemin du fichier de pairs.**
+  #
+  # Il visait `wg0.conf`, que le conteneur ne peut pas ecrire : ce fichier
+  # porte la cle privee du serveur et n'appartient qu'a root. La console
+  # annoncait << Le serveur n'a pas pu ecrire le fichier du tunnel >> et le
+  # raccordement s'arretait la.
+  if grep -q '^WIREGUARD_CONFIG_PATH=.*wg0\.conf$' "$REGLAGES"; then
+    sed -i 's|^WIREGUARD_CONFIG_PATH=.*|WIREGUARD_CONFIG_PATH=/etc/wireguard/pairs.conf|' "$REGLAGES"
+    echo "   Chemin du fichier de pairs corrigé : la console peut désormais l'écrire."
+    RECREER=oui
+  fi
 else
   cat > "$REGLAGES" <<FIN
 POSTGRES_USER=gemikrot
@@ -108,7 +119,7 @@ WIREGUARD_SUBNET=10.88.0.0/16
 WIREGUARD_SERVER_ADDRESS=10.88.0.1
 WIREGUARD_INTERFACE=wg0
 WIREGUARD_MANAGED=false
-WIREGUARD_CONFIG_PATH=/etc/wireguard/wg0.conf
+WIREGUARD_CONFIG_PATH=/etc/wireguard/pairs.conf
 PUBLIC_BASE_URL=https://$DOMAINE_PUBLIC/api
 MIKROTIK_TLS_REJECT_UNAUTHORIZED=true
 SCHEDULER_ENABLED=true
@@ -121,23 +132,40 @@ fi
 
 # ────────────────────────────────────────────────────────── 4. Le tunnel
 #
-# La clé privée du serveur est produite ici et n'en sort jamais. La perdre
-# obligerait à raccorder de nouveau chaque routeur, sur place.
+# **Trois fichiers, et non un.** La console doit pouvoir ecrire les pairs ;
+# elle tourne dans un conteneur, sous un utilisateur sans droits. Lui ouvrir
+# `wg0.conf` aurait marche -- et lui aurait donne la cle privee du serveur par
+# la meme occasion, puisqu'elle y figure.
+#
+#   interface.conf   la cle privee. root seul, jamais montee dans le conteneur
+#   pairs.conf       les pairs. Ecrit par la console, monte chez elle
+#   wg0.conf         assemble par systemd des que pairs.conf change
+#
+# La perdre obligerait a raccorder de nouveau chaque routeur, sur place.
 echo
 echo "── 4/6 · Le tunnel"
-if [ -f /etc/wireguard/wg0.conf ]; then
-  echo "   Déjà monté, conservé."
-else
-  umask 077
-  mkdir -p /etc/wireguard
-  wg genkey > /etc/wireguard/serveur.cle
+mkdir -p /etc/wireguard
+
+# L'utilisateur du conteneur. L'image `node` le numerote 1000, et c'est lui
+# qui doit pouvoir ecrire les pairs.
+UID_CONTENEUR=1000
+
+if [ ! -f /etc/wireguard/serveur.cle ]; then
+  (umask 077; wg genkey > /etc/wireguard/serveur.cle)
   wg pubkey < /etc/wireguard/serveur.cle > /etc/wireguard/serveur.pub
-  cat > /etc/wireguard/wg0.conf <<FIN
+  echo "   Clé du serveur produite."
+else
+  echo "   Clé du serveur déjà présente, conservée."
+fi
+CLE_PUBLIQUE=$(cat /etc/wireguard/serveur.pub)
+
+# L'interface, avec la cle. Refaite a chaque passage : elle ne contient rien
+# qu'on ne puisse reconstruire, et la cle vient du fichier conserve ci-dessus.
+cat > /etc/wireguard/interface.conf <<FIN
 # GeMikrot — bout serveur du tunnel.
 #
-# Les pairs s'ajoutent tout seuls : la console écrit ce fichier après chaque
-# raccordement, et un observateur systemd applique la modification sans
-# couper le tunnel. Aucun geste manuel.
+# **Ne pas modifier wg0.conf à la main** : il est réassemblé à partir de ce
+# fichier et de pairs.conf dès que la console écrit un pair.
 
 [Interface]
 PrivateKey = $(cat /etc/wireguard/serveur.cle)
@@ -147,37 +175,55 @@ PrivateKey = $(cat /etc/wireguard/serveur.cle)
 Address = 10.88.0.1/16
 ListenPort = $PORT_TUNNEL
 FIN
-  echo "   Clé produite, interface décrite."
+chmod 600 /etc/wireguard/interface.conf
+
+# Les pairs. **Recuperes de wg0.conf s'ils y sont deja** : une installation
+# anterieure les y a peut-etre ecrits, et les perdre couperait des routeurs
+# qui fonctionnent.
+if [ ! -f /etc/wireguard/pairs.conf ]; then
+  if [ -f /etc/wireguard/wg0.conf ] && grep -q '^\[Peer\]' /etc/wireguard/wg0.conf; then
+    sed -n '/^\[Peer\]/,$p' /etc/wireguard/wg0.conf > /etc/wireguard/pairs.conf
+    echo "   Pairs existants récupérés depuis wg0.conf."
+  else
+    printf '%s\n' '# Les pairs, écrits par la console après chaque raccordement.' \
+      > /etc/wireguard/pairs.conf
+  fi
 fi
-CLE_PUBLIQUE=$(cat /etc/wireguard/serveur.pub)
-grep -q '^WIREGUARD_SERVER_PUBLIC_KEY=' "$REGLAGES" \
-  || echo "WIREGUARD_SERVER_PUBLIC_KEY=$CLE_PUBLIQUE" >> "$REGLAGES"
+
+# Le conteneur doit pouvoir ecrire ce fichier, et seulement celui-la.
+chown "root:$UID_CONTENEUR" /etc/wireguard/pairs.conf
+chmod 660 /etc/wireguard/pairs.conf
+# Et traverser le dossier pour l'atteindre, sans pouvoir le lister en entier.
+chmod 710 /etc/wireguard
+chown "root:$UID_CONTENEUR" /etc/wireguard
+
+cat /etc/wireguard/interface.conf /etc/wireguard/pairs.conf > /etc/wireguard/wg0.conf
+chmod 600 /etc/wireguard/wg0.conf
 
 systemctl enable --now wg-quick@wg0 >/dev/null 2>&1 || systemctl restart wg-quick@wg0
 
-# **L'observateur.** La console écrit le fichier ; sans cela il faudrait
-# recharger le tunnel à la main après chaque raccordement — l'étape qui a
-# échoué quatre fois de suite sur le poste de développement.
+# **L'observateur.** La console ecrit `pairs.conf` ; sans lui il faudrait
+# recharger le tunnel a la main apres chaque raccordement.
 #
 # `syncconf` et non `down/up` : il applique les pairs sans couper l'interface,
-# donc sans faire tomber les routeurs déjà connectés.
+# donc sans faire tomber les routeurs deja connectes.
 cat > /etc/systemd/system/gemikrot-tunnel.path <<'FIN'
 [Unit]
-Description=Surveille wg0.conf et applique les pairs que la console y écrit
+Description=Surveille pairs.conf et applique les pairs que la console y écrit
 
 [Path]
-PathChanged=/etc/wireguard/wg0.conf
+PathChanged=/etc/wireguard/pairs.conf
 
 [Install]
 WantedBy=multi-user.target
 FIN
 cat > /etc/systemd/system/gemikrot-tunnel.service <<'FIN'
 [Unit]
-Description=Applique les pairs de wg0.conf sans couper le tunnel
+Description=Réassemble wg0.conf et applique les pairs sans couper le tunnel
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'wg syncconf wg0 <(wg-quick strip wg0)'
+ExecStart=/bin/sh -c 'cat /etc/wireguard/interface.conf /etc/wireguard/pairs.conf > /etc/wireguard/wg0.conf && wg syncconf wg0 <(wg-quick strip wg0)'
 FIN
 systemctl daemon-reload
 systemctl enable --now gemikrot-tunnel.path >/dev/null 2>&1
