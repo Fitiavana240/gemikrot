@@ -517,17 +517,33 @@ export class RouterEnrollmentService {
 #    et tout le TLS tombe. En regenerer un maintenant le date d'aujourd'hui,
 #    ce qui repare les deux cas d'un coup.
 #
-#    Rejouable, comme le reste : l'ancien part avant que le neuf arrive.
-:put "Verification du certificat..."
+#    **Deux certificats, et il en faut bien deux.** Un certificat ne peut se
+#    signer lui-meme que s'il porte le droit de signer des certificats
+#    (key-cert-sign) - droit qu'un certificat de serveur n'a pas, et ne doit
+#    pas avoir. Sans autorite, RouterOS en cherche une et repond
+#    << failure: CA not found >>. On pose donc une petite autorite, qui se
+#    signe elle-meme, puis elle signe le certificat du service.
+#
+#    Rejouable, comme le reste : l'ancien part avant que le neuf arrive. Le
+#    certificat de service part en premier, l'autorite ensuite : RouterOS
+#    refuse de retirer une autorite dont un certificat depend encore.
+:put "Pose du certificat de l'API..."
 /certificate remove [find name="gemikrot-api-cert"]
+/certificate remove [find name="gemikrot-ca"]
+
+/certificate add name="gemikrot-ca" common-name="GeMikrot CA" \\
+    days-valid=3650 key-size=2048 key-usage=key-cert-sign,crl-sign
+/certificate sign "gemikrot-ca"
+
 /certificate add name="gemikrot-api-cert" common-name="${params.tunnelAddress}" \\
     days-valid=3650 key-size=2048 \\
     key-usage=digital-signature,key-encipherment,tls-server
-/certificate sign "gemikrot-api-cert"
+/certificate sign "gemikrot-api-cert" ca="gemikrot-ca"
 
-#    La signature prend quelques secondes et affiche sa progression. C'est
-#    normal : laissez-la finir sans rien taper.
+#    Chaque signature prend quelques secondes et affiche sa progression.
+#    C'est normal : laissez-les finir sans rien taper.
 /ip/service set www-ssl certificate="gemikrot-api-cert" disabled=no
+:put "Certificat en place, service securise actif."
 
 # Ce script ne restreint PAS l'adresse de www-ssl, volontairement. Le faire
 # avant d'avoir eprouve le tunnel a deja coupe un routeur en essai :
@@ -545,6 +561,13 @@ export class RouterEnrollmentService {
 #    << status: connecting >> et **avale les lignes collees a sa suite**, qui
 #    reapparaissent tronquees en erreur de syntaxe. On cherche alors un defaut
 #    de script la ou il n'y a qu'une adresse perimee.
+#
+#    **Si vous lisez << timeout connecting >>**, le serveur n'est pas joignable
+#    depuis ce routeur. L'adresse est peut-etre juste : sur Windows, le
+#    pare-feu bloque par defaut toute entree quand la carte reseau est en
+#    profil << Public >>, et le port reste ferme vu du routeur. Il faut
+#    l'ouvrir cote serveur. Tout le reste de ce script a deja ete pose : il
+#    suffira de recoller un nouveau script une fois le port ouvert.
 #
 #    **Si vous lisez << Status 404 >> ou << Status 410 >> ci-dessous**, le
 #    script est perime : il ne vaut que 30 minutes, et preparer un nouveau

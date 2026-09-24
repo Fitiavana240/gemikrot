@@ -257,4 +257,77 @@ describe('RouterEnrollmentService', () => {
 
     await expect(asA(() => etroit.invite('Étroit 2'))).rejects.toBeInstanceOf(ConflictException);
   });
+
+
+  /**
+   * Le certificat que le script pose.
+   *
+   * Le premier essai repondait << failure: CA not found >> sur un routeur reel :
+   * un certificat de serveur ne porte pas `key-cert-sign`, il ne peut donc pas
+   * se signer lui-meme, et RouterOS cherche alors une autorite qui n'existe pas.
+   * Ces epreuves fixent la forme qui marche.
+   */
+  describe('le certificat dans le script', () => {
+    it('pose une autorite avant le certificat de service', async () => {
+      const invitation = await asA(() => service.invite('Routeur certificat'));
+      const script = invitation.script;
+
+      const poseCa = script.indexOf('add name="gemikrot-ca"');
+      const signeCa = script.indexOf('sign "gemikrot-ca"');
+      const poseCert = script.indexOf('add name="gemikrot-api-cert"');
+      const signeCert = script.indexOf('sign "gemikrot-api-cert" ca="gemikrot-ca"');
+
+      expect(poseCa).toBeGreaterThan(-1);
+      expect(signeCa).toBeGreaterThan(poseCa);
+      expect(poseCert).toBeGreaterThan(signeCa);
+      expect(signeCert).toBeGreaterThan(poseCert);
+    });
+
+    it('donne a l\u2019autorite le droit de signer, et pas au certificat de service', async () => {
+      // C'est toute la raison d'etre des deux : `key-cert-sign` est ce qui
+      // permet de signer, et un certificat de serveur ne doit pas l'avoir.
+      const script = (await asA(() => service.invite('Routeur droits'))).script;
+
+      expect(script).toMatch(/name="gemikrot-ca"[\s\S]*?key-usage=key-cert-sign,crl-sign/);
+      expect(script).toMatch(
+        /name="gemikrot-api-cert"[\s\S]*?key-usage=digital-signature,key-encipherment,tls-server/,
+      );
+    });
+
+    it('retire le certificat de service avant son autorite', async () => {
+      // RouterOS refuse de retirer une autorite dont un certificat depend.
+      const script = (await asA(() => service.invite('Routeur nettoyage'))).script;
+
+      const retireCert = script.indexOf('remove [find name="gemikrot-api-cert"]');
+      const retireCa = script.indexOf('remove [find name="gemikrot-ca"]');
+
+      expect(retireCert).toBeGreaterThan(-1);
+      expect(retireCa).toBeGreaterThan(retireCert);
+    });
+
+    it('rattache le certificat au service et l\u2019active', async () => {
+      const script = (await asA(() => service.invite('Routeur service'))).script;
+
+      expect(script).toMatch(
+        /\/ip\/service set www-ssl certificate="gemikrot-api-cert" disabled=no/,
+      );
+      /**
+       * Sans restreindre l'adresse : cette forme a déjà coupé un routeur en
+       * essai. On regarde les **commandes**, pas les commentaires — le script
+       * explique justement pourquoi il ne le fait pas, et cette explication
+       * ne doit pas faire échouer l'épreuve.
+       */
+      const commandes = script.split('\n').filter((l) => !l.trimStart().startsWith('#'));
+      expect(commandes.filter((l) => l.includes('www-ssl') && l.includes('address='))).toEqual([]);
+    });
+
+    it('explique ce que veut dire « timeout connecting »', async () => {
+      // La panne qu'on vient de rencontrer : le port du serveur ferme par le
+      // pare-feu. Sans cette ligne, on cherche la faute dans l'adresse.
+      const script = (await asA(() => service.invite('Routeur pare-feu'))).script;
+
+      expect(script).toMatch(/timeout connecting/);
+      expect(script).toMatch(/pare-feu/);
+    });
+  });
 });
