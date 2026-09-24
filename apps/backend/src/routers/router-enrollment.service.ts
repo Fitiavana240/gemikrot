@@ -469,24 +469,30 @@ export class RouterEnrollmentService {
 # << failure: already have... >> ou rien ne distingue l'echec attendu de
 # l'echec veritable.
 #
+# Les retraits sont ecrits << :do { ... } on-error={} >>, et cette forme fait
+# deux choses a la fois : elle avale l'echec quand il n'y a rien a retirer -
+# sur un routeur vierge, c'est le cas de tous - et elle met la commande entre
+# accolades, ou le terminal n'execute rien avant l'accolade fermante. Un
+# collage ne peut donc pas l'interrompre a mi-chemin.
+#
 # Ce script pose quatre choses : le tunnel, un compte applicatif aux droits
 # limites, un certificat pour l'API, puis il previent le serveur. Il ne touche
 # ni a votre compte admin, ni au HotSpot, ni a vos clients.
 # ============================================================
 
 # 1. Le tunnel. La cle privee est creee ici et ne quitte jamais ce routeur.
-/interface/wireguard/remove [find name=${WG_INTERFACE}]
+:do { /interface/wireguard/remove [find name=${WG_INTERFACE}] } on-error={}
 /interface/wireguard/add name=${WG_INTERFACE} listen-port=13231 comment="GeMikrot"
-/ip/address/remove [find interface=${WG_INTERFACE}]
+:do { /ip/address/remove [find interface=${WG_INTERFACE}] } on-error={}
 /ip/address/add address=${params.tunnelAddress}/32 interface=${WG_INTERFACE} comment="GeMikrot"
 # Une adresse en /32 ne cree aucune route : sans celle-ci, ce routeur saurait
 # recevoir les appels du serveur mais pas lui repondre.
-/ip/route/remove [find comment="GeMikrot"]
+:do { /ip/route/remove [find comment="GeMikrot"] } on-error={}
 /ip/route/add dst-address=${subnet} gateway=${WG_INTERFACE} comment="GeMikrot"
 
 # 2. Le serveur, comme pair. C'est ce routeur qui appelle, jamais l'inverse :
 #    aucun port a ouvrir, aucune adresse fixe necessaire cote routeur.
-/interface/wireguard/peers/remove [find comment="GeMikrot"]
+:do { /interface/wireguard/peers/remove [find comment="GeMikrot"] } on-error={}
 /interface/wireguard/peers/add interface=${WG_INTERFACE} \\
     public-key="${publicKey}" \\
     endpoint-address=${endpointHost} endpoint-port=${endpointPort} \\
@@ -496,8 +502,8 @@ export class RouterEnrollmentService {
 # 3. Un compte dedie a l'application, aux droits limites. Jamais << admin >>.
 #    Le compte part avant son groupe : RouterOS refuse de retirer un groupe
 #    dont un utilisateur depend encore.
-/user/remove [find name=${API_USERNAME}]
-/user/group/remove [find name=gemikrot]
+:do { /user/remove [find name=${API_USERNAME}] } on-error={}
+:do { /user/group/remove [find name=gemikrot] } on-error={}
 /user/group/add name=gemikrot policy=read,write,api,rest-api,test \\
     comment="GeMikrot - lecture/ecriture HotSpot et User Manager"
 /user/add name=${API_USERNAME} group=gemikrot password="${params.apiPassword}" \\
@@ -544,8 +550,9 @@ export class RouterEnrollmentService {
 #    l'appel au serveur - n'attend pas les signatures.
 :put "Pose du certificat de l'API, en arriere-plan..."
 :execute script={
-  /certificate remove [find name="gemikrot-api-cert"];
-  /certificate remove [find name="gemikrot-ca"];
+  :log info "GeMikrot : debut de la pose du certificat.";
+  :do { /certificate remove [find name="gemikrot-api-cert"] } on-error={};
+  :do { /certificate remove [find name="gemikrot-ca"] } on-error={};
   /certificate add name="gemikrot-ca" common-name="GeMikrot CA" days-valid=3650 key-size=2048 key-usage=key-cert-sign,crl-sign;
   /certificate sign "gemikrot-ca";
   :delay 20s;
@@ -560,10 +567,11 @@ export class RouterEnrollmentService {
 #    rien a attendre : la suite du script continue, et le resultat s'inscrit
 #    dans le journal du routeur (Log) sous << GeMikrot >>.
 #
-#    **Ce journal est le seul temoin du bloc.** S'il tourne en arriere-plan,
-#    rien d'autre ne dit s'il a abouti : la ligne presente une minute plus
-#    tard signifie que le certificat est en place et le service actif ; son
-#    absence signifie que le bloc s'est arrete en chemin.
+#    **Ce journal est le seul temoin du bloc.** Il en ecrit deux lignes : une
+#    au depart, une a l'arrivee. Les deux presentes, le certificat est en
+#    place et le service actif. La premiere seule, le bloc s'est arrete en
+#    chemin - et la ligne d'erreur de RouterOS sera juste au-dessus. Aucune
+#    des deux, le bloc n'a jamais demarre.
 
 # Ce script ne restreint PAS l'adresse de www-ssl, volontairement. Le faire
 # avant d'avoir eprouve le tunnel a deja coupe un routeur en essai :

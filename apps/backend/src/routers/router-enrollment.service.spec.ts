@@ -369,6 +369,40 @@ describe('RouterEnrollmentService', () => {
       expect(script).toMatch(/:log info "GeMikrot/);
     });
 
+    it('met chaque retrait a l’abri de l’echec et du collage', async () => {
+      /**
+       * `:do { ... } on-error={}` fait deux choses a la fois : il avale
+       * l'echec quand il n'y a rien a retirer — sur un routeur vierge, c'est
+       * le cas de tous — et il met la commande entre accolades, ou le
+       * terminal n'execute rien avant l'accolade fermante. Un collage ne peut
+       * donc pas l'interrompre a mi-chemin.
+       *
+       * Idiome repris du script d'un autre produit, ou il sert exactement a
+       * cela. Le notre rendait un mur de « failure: no such item » au premier
+       * passage.
+       */
+      const script = (await asA(() => service.invite('Routeur retraits'))).script;
+
+      const retraits = script
+        .split('\n')
+        .filter((l) => l.includes('/remove ') && !l.trimStart().startsWith('#'));
+
+      expect(retraits.length).toBeGreaterThan(3);
+      for (const ligne of retraits) {
+        expect(ligne).toMatch(/:do \{.*\} on-error=\{\}/);
+      }
+    });
+
+    it('marque le debut et la fin du bloc dans le journal', async () => {
+      // Deux lignes : les deux presentes, le bloc a abouti ; la premiere
+      // seule, il s'est arrete en chemin et l'erreur de RouterOS est juste
+      // au-dessus ; aucune, il n'a jamais demarre.
+      const script = (await asA(() => service.invite('Routeur temoins'))).script;
+
+      expect(script).toMatch(/:log info "GeMikrot : debut/);
+      expect(script).toMatch(/:log info "GeMikrot : certificat/);
+    });
+
     it('explique ce que veut dire « timeout connecting »', async () => {
       // La panne qu'on vient de rencontrer : le port du serveur ferme par le
       // pare-feu. Sans cette ligne, on cherche la faute dans l'adresse.
