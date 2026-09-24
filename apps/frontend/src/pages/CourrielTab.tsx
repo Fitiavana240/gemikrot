@@ -120,6 +120,21 @@ export function CourrielTab({ portee = 'exploitant' }: { portee?: Portee } = {})
   const champ = (clef: keyof Reglages, valeur: string | number | boolean) =>
     setForm((f) => (f ? { ...f, [clef]: valeur } : f));
 
+  /**
+   * Gmail refuse le mot de passe du compte, et le dit mal.
+   *
+   * La reponse est `535-5.7.8 Username and Password not accepted` : on relit
+   * son mot de passe, on le retape, on le change — et rien ne marche, parce
+   * que ce n'est pas celui-la qu'il faut. Il faut un **mot de passe
+   * d'application**, qui n'existe qu'une fois la validation en deux etapes
+   * activee.
+   *
+   * L'avertissement s'affiche des que le serveur ressemble a Gmail, avant
+   * l'essai plutot qu'apres : decouvrir la regle en lisant un code d'erreur
+   * SMTP n'est pas une decouverte, c'est une enigme.
+   */
+  const gmail = /gmail\.com|googlemail\.com/i.test(form?.host ?? '');
+
   return (
     <div className="space-y-4">
       {compteRendu && (
@@ -193,6 +208,33 @@ export function CourrielTab({ portee = 'exploitant' }: { portee?: Portee } = {})
                 />
               </FormField>
             </div>
+
+            {gmail && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <p className="font-semibold">
+                  Gmail n’accepte pas le mot de passe de votre compte.
+                </p>
+                <p className="mt-1">
+                  Il faut un <strong>mot de passe d’application</strong> — seize lettres, que
+                  Google engendre pour ce seul usage. Activez d’abord la validation en deux
+                  étapes sur le compte, puis créez-en un sur{' '}
+                  <a
+                    href="https://myaccount.google.com/apppasswords"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium underline hover:no-underline"
+                  >
+                    myaccount.google.com/apppasswords
+                  </a>
+                  . Collez-le ici <strong>sans les espaces</strong>.
+                </p>
+                <p className="mt-1 text-xs">
+                  Sans cela, Gmail répond « 535-5.7.8 Username and Password not accepted » —
+                  ce qui laisse croire à une faute de frappe, et on retape indéfiniment un mot
+                  de passe qui ne peut pas convenir.
+                </p>
+              </div>
+            )}
 
             <FormField
               label="Expéditeur"
