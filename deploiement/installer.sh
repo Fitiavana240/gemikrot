@@ -88,6 +88,10 @@ if [ -f "$REGLAGES" ]; then
   if grep -q "^PUBLIC_BASE_URL=.*[^i]$" "$REGLAGES" && ! grep -q "^PUBLIC_BASE_URL=.*/api$" "$REGLAGES"; then
     sed -i "s|^PUBLIC_BASE_URL=.*|PUBLIC_BASE_URL=https://$DOMAINE_PUBLIC/api|" "$REGLAGES"
     echo "   Adresse de rappel corrigée : elle passe désormais par /api."
+    # Docker ne recrée pas toujours un conteneur quand seul le contenu du
+    # fichier de réglages change : le serveur garderait l'ancienne adresse, et
+    # les scripts qu'il produit enverraient les routeurs au mauvais endroit.
+    RECREER=oui
   fi
 else
   cat > "$REGLAGES" <<FIN
@@ -199,6 +203,10 @@ echo
 echo "── 6/6 · La plateforme"
 cd "$RACINE"
 docker compose --env-file "$REGLAGES" -f deploiement/docker-compose.prod.yml up -d --build
+if [ "${RECREER:-non}" = oui ]; then
+  echo "   Redémarrage du serveur pour qu'il lise la nouvelle adresse…"
+  docker compose --env-file "$REGLAGES" -f deploiement/docker-compose.prod.yml     up -d --force-recreate backend
+fi
 
 # Le compte d'acces.
 #
