@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   adressePerimee,
   estIPv4,
+  estPrivee,
   hoteDeLUrl,
   memeReseau24,
 } from './adresses-locales.js';
@@ -40,12 +41,41 @@ describe('adressePerimee', () => {
     });
   });
 
+  it('ne signale jamais une adresse publique', () => {
+    /**
+     * Le serveur est derriere du NAT : son adresse publique appartient a la
+     * box, jamais a sa propre carte reseau. Son absence est la normale.
+     *
+     * Releve en vrai : annoncer 129.222.109.58 pour du raccordement distant
+     * declenchait une alerte << adresse perimee >> a chaque ouverture du
+     * formulaire, sur une configuration parfaitement juste. Une alerte qui se
+     * trompe fait douter de toutes les autres.
+     */
+    expect(adressePerimee('129.222.109.58', LOCALES)).toBeNull();
+    expect(adressePerimee('8.8.8.8', LOCALES)).toBeNull();
+  });
+
   it('laisse un nom de domaine tranquille', () => {
     // Une mise en production sérieuse annonce `console.exemple.net`, que cette
     // machine ne porte évidemment sur aucune carte. La signaler périmée
     // crierait au loup à chaque déploiement réussi.
     expect(adressePerimee('console.exemple.net', LOCALES)).toBeNull();
     expect(adressePerimee('localhost', LOCALES)).toBeNull();
+  });
+});
+
+describe('estPrivee', () => {
+  it('reconnait les trois plages privees et le lien-local', () => {
+    expect(estPrivee('192.168.88.23')).toBe(true);
+    expect(estPrivee('10.88.0.1')).toBe(true);
+    expect(estPrivee('172.20.128.1')).toBe(true);
+    expect(estPrivee('169.254.1.1')).toBe(true);
+  });
+
+  it('rend faux pour une adresse publique ou un domaine', () => {
+    expect(estPrivee('129.222.109.58')).toBe(false);
+    expect(estPrivee('172.32.0.1')).toBe(false);
+    expect(estPrivee('console.exemple.net')).toBe(false);
   });
 });
 

@@ -39,6 +39,33 @@ export function estIPv4(hote: string): boolean {
 }
 
 /**
+ * Cette adresse est-elle d'un reseau prive ?
+ *
+ * La distinction decide de tout ici. Une adresse **privee** absente des cartes
+ * de la machine a vraiment perime : elle designait ce poste sur ce reseau, et
+ * ne le designe plus. Une adresse **publique** absente des cartes est au
+ * contraire la situation normale — le serveur est derriere du NAT, son adresse
+ * publique appartient a la box, jamais a sa propre carte reseau.
+ *
+ * Sans cette distinction, annoncer l'adresse publique du serveur pour du
+ * raccordement distant declenchait une alerte << adresse perimee >> a chaque
+ * ouverture du formulaire, sur une configuration parfaitement juste. Une
+ * alerte qui se trompe fait douter de toutes les autres.
+ */
+export function estPrivee(hote: string): boolean {
+  if (!estIPv4(hote)) return false;
+  const [a, b] = hote.split('.').map(Number);
+  return (
+    a === 10 ||
+    a === 127 ||
+    (a === 192 && b === 168) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    // Lien-local : ce que rend une machine sans bail DHCP.
+    (a === 169 && b === 254)
+  );
+}
+
+/**
  * Deux adresses sur le même /24 ?
  *
  * Le masque réel n'est pas lu : celui de la console ne dit rien de celui du
@@ -70,14 +97,27 @@ export interface AdressePerimee {
  *
  * **Un nom de domaine n'est jamais périmé**, et c'est délibéré : une mise en
  * production sérieuse annonce `console.exemple.net`, que cette machine ne
- * porte évidemment pas sur une carte réseau. Seule une adresse IPv4 écrite en
- * dur se vérifie — c'est précisément la forme qui pourrit.
+ * porte évidemment pas sur une carte réseau.
+ *
+ * **Une adresse publique non plus.** Un serveur derrière du NAT annonce
+ * l'adresse de sa box, qui n'est sur aucune de ses cartes : son absence est
+ * la normale, pas un symptôme. Signaler ce cas déclenchait une alerte à
+ * chaque ouverture du formulaire de raccordement distant, sur une
+ * configuration parfaitement juste — et une alerte qui se trompe fait douter
+ * de toutes les autres.
+ *
+ * Reste donc le seul cas qui pourrit vraiment : une **adresse privée** écrite
+ * en dur que cette machine ne porte plus.
  */
 export function adressePerimee(
   hote: string,
   locales: string[] = adressesLocales(),
 ): AdressePerimee | null {
   if (!estIPv4(hote)) return null;
+  // Une adresse publique n'est jamais sur une carte de cette machine quand
+  // elle est derriere du NAT : son absence ne prouve rien, et la signaler
+  // criait au loup sur une configuration juste.
+  if (!estPrivee(hote)) return null;
   if (locales.includes(hote)) return null;
 
   return {

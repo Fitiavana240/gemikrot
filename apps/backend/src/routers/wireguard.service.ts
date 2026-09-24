@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { estPrivee } from '../common/adresses-locales.js';
 import { ConfigService } from '@nestjs/config';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -79,19 +80,14 @@ export class WireguardService {
   get endpointPrive(): boolean {
     const hôte = this.settings.endpointHost.trim();
     if (hôte === '') return false;
-    // Un nom de domaine est présumé public : on ne le résout pas, et se
-    // tromper dans ce sens ne fait qu'omettre un avertissement.
-    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(hôte)) return false;
-
-    const [a, b] = hôte.split('.').map(Number);
-    return (
-      a === 10 ||
-      a === 127 ||
-      (a === 192 && b === 168) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      // Lien-local : ce que rend une machine sans bail DHCP.
-      (a === 169 && b === 254)
-    );
+    // Un nom de domaine est présumé public : `estPrivee` le rend faux sans
+    // le résoudre, et se tromper dans ce sens ne fait qu'omettre un
+    // avertissement.
+    //
+    // La meme definition que `adressePerimee`, et volontairement partagee :
+    // deux copies de « qu'est-ce qu'une adresse privee » finiraient par
+    // diverger, et l'une des deux se tromperait sans qu'on sache laquelle.
+    return estPrivee(hôte);
   }
 
   /** Ce qui manque pour qu'un enrôlement soit possible, en clair. */
