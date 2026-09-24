@@ -72,9 +72,18 @@ services:
     environment:
       DOMAINE: ${DOMAINE:?définir DOMAINE — par exemple « gemikrot.mg » ou « :80 » pour un essai local}
     ports:
-      - '80:80'
-      - '443:443'
-      - '443:443/udp'
+      # Les ports se reglent : 80 et 443 en production, autre chose pour un
+      # essai sur une machine qui les occupe deja.
+      #
+      # **Ne pas confondre avec `DOMAINE`.** Celui-ci dit a Caddy sur quoi
+      # ecouter *dans* le conteneur ; ceux-la disent sur quoi le publier *sur
+      # la machine*. Regler `DOMAINE` a `:8080` en publiant `8080:80` donne un
+      # Caddy qui ecoute 8080 pendant qu'on lui envoie le trafic sur 80 :
+      # connexion refusee, sans rien dans les journaux qui l'explique.
+      # Pour un essai en clair : `DOMAINE=:80` et `PORT_HTTP=8080`.
+      - '${PORT_HTTP:-80}:80'
+      - '${PORT_HTTPS:-443}:443'
+      - '${PORT_HTTPS:-443}:443/udp'
     volumes:
       # Les certificats obtenus survivent au redémarrage. Sans ce volume,
       # chaque `up` redemande un certificat à Let's Encrypt — et au cinquième
