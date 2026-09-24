@@ -85,6 +85,32 @@ export interface EnrollmentInvitation {
  * octets sortants montent, les entrants restent a zero. La consigne partait
  * dans un avertissement de journal que personne ne lit.
  */
+/**
+ * L'etat d'un routeur dans le tunnel, **vu du serveur**.
+ *
+ * Tout ici se lit sans toucher au routeur : la fiche, et le fichier du tunnel.
+ * C'est ce qui rend ce diagnostic utilisable quand le routeur ne repond pas --
+ * c'est-a-dire precisement quand on en a besoin.
+ */
+export interface EtatRouteurDansLeTunnel {
+  routerId: string;
+  label: string;
+  tunnelAddress: string;
+  /**
+   * L'adresse a laquelle le serveur appelle ce routeur, `null` si aucune.
+   *
+   * Sans elle, le routeur n'est pilotable que depuis son propre reseau : le
+   * serveur ne sait pas ou frapper. C'est le renseignement decisif, et il
+   * n'apparaissait nulle part.
+   */
+  pointDAppel: string | null;
+  /** Le pair de ce routeur est-il inscrit dans le fichier du tunnel ? */
+  pairEcrit: boolean;
+  /** Ce qui manque a ce routeur pour etre joint de loin, en clair. */
+  manque: string | null;
+  lastSeenAt: Date | null;
+}
+
 export interface EtatServeurTunnel {
   endpoint: string;
   /** Une adresse privee ne se joint que depuis le meme reseau. */
@@ -93,10 +119,14 @@ export interface EtatServeurTunnel {
   pilote: boolean;
   /** Le nom de l'interface cote serveur, pour les commandes a passer. */
   interfaceName: string;
+  /** Le fichier que la console ecrit, ou la chaine vide si aucun n'est regle. */
+  fichier: string;
   /** Ce qui empeche un routeur distant de joindre ce serveur, en clair. */
   manques: string[];
   /** Les pairs a poser a la main, faute de pilotage. */
   pairs: { label: string; commande: string }[];
+  /** Un par routeur : le serveur peut-il l'appeler, et sinon pourquoi. */
+  routeurs: EtatRouteurDansLeTunnel[];
 }
 
 @Injectable()
@@ -290,12 +320,10 @@ export class RouterEnrollmentService {
           'donnee ci-dessous.',
       );
     }
-    if (prive) {
+    if (!this.wireguard.cheminDuFichier) {
       manques.push(
-        `L'adresse annoncee aux routeurs, ${endpointHost}, est une adresse privee : ` +
-          "elle ne se joint que depuis ce reseau. Un routeur situe ailleurs ne l'atteindra " +
-          'jamais. Pour du distant, le serveur doit avoir une adresse publique ou une ' +
-          'redirection de port.',
+        "WIREGUARD_CONFIG_PATH n'est pas renseigne : la console ne peut pas ecrire les " +
+          'pairs dans le fichier du tunnel, et chacun devra etre recopie a la main.',
       );
     }
 
@@ -303,20 +331,60 @@ export class RouterEnrollmentService {
     // tunnel, et proposer une commande pour eux n'aurait pas de sens.
     const routeurs = await this.prisma.scopedStrict.router.findMany({
       where: { tunnelPublicKey: { not: null }, tunnelAddress: { not: null } },
-      select: { label: true, tunnelPublicKey: true, tunnelAddress: true },
+      select: {
+        id: true,
+        label: true,
+        tunnelPublicKey: true,
+        tunnelAddress: true,
+        tunnelEndpoint: true,
+        lastSeenAt: true,
+      },
       orderBy: { createdAt: 'asc' },
     });
+
+    const inscrits = new Set(this.wireguard.pairsDuFichier().map((p) => p.publicKey));
 
     return {
       endpoint: `${endpointHost}:${endpointPort}`,
       endpointPrive: prive,
       pilote,
       interfaceName,
+      fichier: this.wireguard.cheminDuFichier,
       manques,
       pairs: routeurs.map((r) => ({
         label: r.label,
         commande: `wg set ${interfaceName} peer ${r.tunnelPublicKey} allowed-ips ${r.tunnelAddress}/32`,
       })),
+      routeurs: routeurs.map((r) => {
+        const pairEcrit = inscrits.has(r.tunnelPublicKey!);
+        /**
+         * Une seule phrase, celle qui bloque en premier.
+         *
+         * En empiler trois ferait relire le meme diagnostic a chaque fois, et
+         * la premiere est de toute facon la seule sur laquelle on peut agir.
+         */
+        const manque = !r.tunnelEndpoint
+          ? "Ce routeur n'a pas de nom public : le serveur ne sait pas ou l'appeler. " +
+            'Il reste pilotable depuis son propre reseau. Relancez le raccordement pour ' +
+            'lui en faire demander un a MikroTik.'
+          : !this.wireguard.cheminDuFichier
+            ? 'Le fichier du tunnel n\'est pas indique au serveur : son pair doit etre ' +
+              'recopie a la main.'
+            : !pairEcrit
+              ? 'Son pair ne figure pas dans le fichier du tunnel. Relancez le ' +
+                'raccordement, ou ajoutez-le a la main.'
+              : null;
+
+        return {
+          routerId: r.id,
+          label: r.label,
+          tunnelAddress: r.tunnelAddress!,
+          pointDAppel: r.tunnelEndpoint,
+          pairEcrit,
+          manque,
+          lastSeenAt: r.lastSeenAt,
+        };
+      }),
     };
   }
 

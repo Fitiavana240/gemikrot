@@ -16,6 +16,7 @@ import { Modale } from '../components/Modale';
 import { RaccordementAssisteModale } from '../components/RaccordementAssiste';
 import { AideRouteur, AIDE_RACCORDEMENT } from '../components/AideRouteur';
 import { ServeurTunnel } from '../components/ServeurTunnel';
+import { EtatDuTunnel } from '../components/EtatDuTunnel';
 
 /**
  * Combien de temps ce script vaut-il encore.
@@ -278,6 +279,7 @@ export function RoutersPage() {
 
       {/* Muet quand tout va bien. Un panneau permanent devient du decor. */}
       <ServeurTunnel />
+      <EtatDuTunnel />
 
       {canWrite && (
         <div className="flex flex-wrap items-center gap-2">

@@ -262,6 +262,37 @@ export class WireguardService {
   }
 
   /**
+   * Les cles publiques inscrites dans le `.conf`, et leur adresse d'appel.
+   *
+   * Lu du cote serveur, donc **disponible quand le routeur ne repond pas** --
+   * c'est-a-dire precisement quand on cherche pourquoi. L'onglet Tunnel, lui,
+   * lit tout sur le routeur : il ne peut rien dire d'une panne de tunnel.
+   *
+   * Rend une liste vide plutot que de lever : l'absence de fichier est un
+   * renseignement, pas une erreur.
+   */
+  pairsDuFichier(): { publicKey: string; endpoint: string | null }[] {
+    const chemin = this.settings.configPath;
+    if (!chemin) return [];
+    try {
+      return decouperEnBlocs(readFileSync(chemin, 'utf8'))
+        .pairs.map((bloc) => {
+          const cle = /^\s*PublicKey\s*=\s*(\S+)/m.exec(bloc)?.[1];
+          const appel = /^\s*Endpoint\s*=\s*(\S+)/m.exec(bloc)?.[1] ?? null;
+          return cle ? { publicKey: cle, endpoint: appel } : null;
+        })
+        .filter((p): p is { publicKey: string; endpoint: string | null } => p !== null);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Le fichier que la console ecrit, ou la chaine vide si aucun n'est regle. */
+  get cheminDuFichier(): string {
+    return this.settings.configPath;
+  }
+
+  /**
    * Efface le bloc de ce pair dans le `.conf`, s'il y est.
    *
    * Le laisser derrière garderait ouverte, dans le tunnel, une route vers un

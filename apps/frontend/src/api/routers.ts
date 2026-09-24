@@ -157,16 +157,34 @@ export interface RaccordementAssisteInput {
  * n'ecoute en face, rien ne le dit : WireGuard n'a pas d'erreur, les octets
  * sortants montent, les entrants restent a zero.
  */
+/**
+ * L'etat d'un routeur dans le tunnel, **vu du serveur**.
+ *
+ * Tout se lit sans toucher au routeur : c'est ce qui rend ce diagnostic
+ * utilisable quand il ne repond pas, donc quand on en a besoin.
+ */
+export interface EtatRouteurDansLeTunnel {
+  routerId: string;
+  label: string;
+  tunnelAddress: string;
+  /** L'adresse a laquelle le serveur appelle ce routeur, `null` si aucune. */
+  pointDAppel: string | null;
+  pairEcrit: boolean;
+  /** Ce qui manque a ce routeur pour etre joint de loin, en clair. */
+  manque: string | null;
+  lastSeenAt: string | null;
+}
+
 export interface EtatServeurTunnel {
   endpoint: string;
   endpointPrive: boolean;
-  /** L’adresse a laquelle le routeur rappellera la console. */
-  rappel: string;
-  rappelPrive: boolean;
   pilote: boolean;
   interfaceName: string;
+  /** Le fichier que la console ecrit, vide si aucun n'est regle. */
+  fichier: string;
   manques: string[];
   pairs: { label: string; commande: string }[];
+  routeurs: EtatRouteurDansLeTunnel[];
 }
 
 export interface PendingEnrollment {
