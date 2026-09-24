@@ -101,9 +101,47 @@ describe('RouterEnrollmentService', () => {
       // recevrait les appels du serveur sans savoir lui répondre.
       expect(invitation.script).toContain('/ip/route/add dst-address=10.88.0.0/24');
 
-      // Documenté comme un entier : « 25s » serait refusé sous cette lecture,
-      // « 25 » vaut 25 secondes dans les deux cas.
-      expect(invitation.script).toContain('persistent-keepalive=25 ');
+      // **Le pair du serveur n'a pas de point d'appel, et c'est le coeur du
+      // montage : c'est le serveur qui appelle ce routeur.**
+      //
+      // Le sens inverse etait le premier choix, et il reste le bon quand le
+      // serveur a une adresse publique fixe. Il s'effondre des que le serveur
+      // est mobile : un portable en partage de connexion recoit une adresse
+      // privee de son operateur, et personne ne peut l'appeler.
+      expect(invitation.script).not.toContain('endpoint-address=');
+      // Ni battement : on ne maintient pas ouverte une conversation avec
+      // quelqu'un dont on ignore l'adresse. C'est au serveur de le faire.
+      // Le signe egal compte : le script *parle* de ce reglage dans son
+      // commentaire, pour dire pourquoi il ne le pose pas.
+      expect(invitation.script).not.toContain('persistent-keepalive=');
+    });
+
+    it('ouvre le port du tunnel en entree, en tete de chaine', async () => {
+      // Le pare-feu par defaut de RouterOS refuse toute connexion entrante
+      // non sollicitee : le tunnel resterait muet, sans un mot, et l'on
+      // chercherait du cote des cles. Posee en queue, la regle serait
+      // precedee du refus general et ne servirait a rien.
+      const script = (await asA(() => service.invite('Routeur ouvert'))).script;
+
+      expect(script).toContain('chain=input protocol=udp dst-port=13231');
+      expect(script).toContain('place-before=0');
+      // Rejouable, comme le reste.
+      expect(script).toMatch(/:do \{ \/ip\/firewall\/filter\/remove .* \} on-error=\{\}/);
+    });
+
+    it('demande a MikroTik un nom stable, et le rapporte', async () => {
+      // L'adresse publique du routeur est attribuee par son fournisseur et
+      // change sans prevenir -- celle de ce parc a change en une nuit, et le
+      // tunnel a silencieusement cesse de fonctionner.
+      const script = (await asA(() => service.invite('Routeur nomme'))).script;
+
+      expect(script).toContain('/ip/cloud set ddns-enabled=yes');
+      expect(script).toContain('/ip/cloud/get dns-name');
+      expect(script).toContain('\\"endpoint\\":');
+      // `:global` et non `:local` : collees une par une dans le terminal, deux
+      // lignes ne partagent pas leurs variables locales.
+      expect(script).toContain(':global gmNom');
+      expect(script.split(/\r?\n/).some((l) => l.startsWith(':local'))).toBe(false);
     });
 
     it('stocke le jeton haché, jamais en clair', async () => {
@@ -475,6 +513,36 @@ describe('RouterEnrollmentService', () => {
    * etait vivante -- les deux premieres portaient des cles mortes. Et rejouer
    * est exactement ce qu'on fait quand on croit que ca n'a pas marche.
    */
+  describe('le point d’appel du routeur', () => {
+    it('est enregistre tel que le routeur le rapporte', async () => {
+      const invitation = await asA(() => service.invite('hAP'));
+      const r = await service.consume(invitation.script.match(/callback\/([\w-]+)/)![1], {
+        publicKey: routerKey('m'),
+        serial: `NOM${suffix}`,
+        endpoint: 'abcd1234.sn.mynetname.net:13231',
+      });
+
+      const fiche = await prisma.router.findUniqueOrThrow({ where: { id: r.routerId } });
+      expect(fiche.tunnelEndpoint).toBe('abcd1234.sn.mynetname.net:13231');
+    });
+
+    it('reste vide quand le nom manque, plutot que de garder un port seul', async () => {
+      // `/ip/cloud` peut n'avoir pas encore repondu, ou le fournisseur peut
+      // placer ce routeur derriere son propre NAT. Un << :13231 >> seul
+      // ressemble a une adresse et n'en est pas : le serveur appellerait dans
+      // le vide, et le tunnel resterait muet sans un mot d'explication.
+      const invitation = await asA(() => service.invite('hAP sans nom'));
+      const r = await service.consume(invitation.script.match(/callback\/([\w-]+)/)![1], {
+        publicKey: routerKey('n'),
+        serial: `SANSNOM${suffix}`,
+        endpoint: ':13231',
+      });
+
+      const fiche = await prisma.router.findUniqueOrThrow({ where: { id: r.routerId } });
+      expect(fiche.tunnelEndpoint).toBeNull();
+    });
+  });
+
   describe('un appareil, une fiche', () => {
     it('reprend la fiche existante quand le numero de serie est le meme', async () => {
       const serial = `HDX${suffix}`;

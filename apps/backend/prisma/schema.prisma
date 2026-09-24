@@ -487,6 +487,19 @@ model Router {
   /// Clé publique WireGuard du routeur. La privée est générée par le routeur
   /// et ne le quitte jamais.
   tunnelPublicKey      String?   @map("tunnel_public_key")
+  /// L'adresse à laquelle **le serveur appelle ce routeur** pour monter le
+  /// tunnel, sous la forme `nom:port`.
+  ///
+  /// Le montage d'origine était l'inverse : le routeur appelait le serveur.
+  /// C'est le bon sens quand le serveur a une adresse publique et que les
+  /// routeurs sont derrière des NAT d'opérateur. Il ne vaut plus dès que le
+  /// serveur lui-même est mobile — un portable en partage de connexion n'a
+  /// aucune adresse joignable, et personne ne peut l'appeler.
+  ///
+  /// Le nom vient de `/ip/cloud` : MikroTik en donne un gratuitement, et il
+  /// suit l'adresse du routeur quand elle change. Une adresse recopiée un
+  /// jour, elle, périme sans prévenir.
+  tunnelEndpoint       String?   @map("tunnel_endpoint")
   /// Numéro de série de la carte, rapporté par le routeur à son raccordement.
   ///
   /// **La seule chose stable qu'un routeur puisse dire de lui-même.** Son nom

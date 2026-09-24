@@ -24,6 +24,14 @@ const TOKEN_TTL_MS = 30 * 60 * 1000;
 /** Nom du compte d'API dédié créé sur le routeur. Jamais `admin`. */
 const API_USERNAME = 'gemikrot-api';
 const WG_INTERFACE = 'gemikrot';
+/**
+ * Le port sur lequel le routeur ecoute le tunnel.
+ *
+ * Fixe, et le meme pour tout le parc : c'est le serveur qui appelle, il doit
+ * savoir ou frapper sans avoir a le demander. 13231 est celui que RouterOS
+ * propose par defaut pour WireGuard.
+ */
+const WG_LISTEN_PORT = 13231;
 
 export interface EnrollmentInvitation {
   id: string;
@@ -316,7 +324,7 @@ export class RouterEnrollmentService {
    */
   async consume(
     token: string,
-    body: { publicKey: string; identity?: string; serial?: string },
+    body: { publicKey: string; identity?: string; serial?: string; endpoint?: string },
   ): Promise<{
     routerId: string;
     tunnelAddress: string;
@@ -385,6 +393,16 @@ export class RouterEnrollmentService {
       }
 
       const serie = body.serial?.trim() || null;
+      /**
+       * Le point d'appel du routeur : `nom:port`, tel que MikroTik le donne.
+       *
+       * Ecarte quand le nom manque -- `/ip/cloud` pas encore repondu, ou
+       * fournisseur qui place le routeur derriere son propre NAT. On garderait
+       * sinon un `:13231` seul, qui ressemble a une adresse et n'en est pas :
+       * le serveur appellerait dans le vide, et le tunnel resterait muet sans
+       * un mot d'explication.
+       */
+      const pointDAppel = body.endpoint?.trim().replace(/^:/, '') || null;
 
       /**
        * La fiche de cet appareil, s'il en a deja une.
@@ -418,6 +436,7 @@ export class RouterEnrollmentService {
         tunnelAddress: enrollment.tunnelAddress,
         tunnelPublicKey: body.publicKey,
         serialNumber: serie,
+        tunnelEndpoint: pointDAppel && pointDAppel.includes(':') ? pointDAppel : null,
         enrolledAt: new Date(),
         status: 'enrolled',
       };
@@ -449,7 +468,11 @@ export class RouterEnrollmentService {
       });
 
       const peer = await this.wireguard.addPeer(
-        { publicKey: body.publicKey, tunnelAddress: enrollment.tunnelAddress },
+        {
+          publicKey: body.publicKey,
+          tunnelAddress: enrollment.tunnelAddress,
+          endpoint: router.tunnelEndpoint ?? undefined,
+        },
         router.label,
       );
 
@@ -619,7 +642,7 @@ export class RouterEnrollmentService {
 #    Tout le reste - adresse, route, pair, compte, certificat - se refait
 #    sans dommage : rien de tout cela ne porte d'identite.
 :if ([:len [/interface/wireguard/find name=${WG_INTERFACE}]] = 0) do={
-  /interface/wireguard/add name=${WG_INTERFACE} listen-port=13231 comment="GeMikrot"
+  /interface/wireguard/add name=${WG_INTERFACE} listen-port=${WG_LISTEN_PORT} comment="GeMikrot"
   :put "Interface WireGuard creee."
 } else={
   :put "Interface WireGuard deja presente : sa cle est conservee."
@@ -631,14 +654,55 @@ export class RouterEnrollmentService {
 :do { /ip/route/remove [find comment="GeMikrot"] } on-error={}
 /ip/route/add dst-address=${subnet} gateway=${WG_INTERFACE} comment="GeMikrot"
 
-# 2. Le serveur, comme pair. C'est ce routeur qui appelle, jamais l'inverse :
-#    aucun port a ouvrir, aucune adresse fixe necessaire cote routeur.
+# 2. Le serveur, comme pair. **Sans point d'appel, et c'est le coeur du
+#    montage : c'est le serveur qui appellera ce routeur.**
+#
+#    Le sens inverse -- le routeur appelant le serveur -- etait le premier
+#    choix, et il reste le bon quand le serveur a une adresse publique fixe.
+#    Il s'effondre des que le serveur est mobile : un portable en partage de
+#    connexion recoit une adresse privee de l'operateur, partagee avec des
+#    milliers d'abonnes, et **personne ne peut l'appeler**. Aucun reglage ne
+#    contourne cela ; ce n'est pas une panne, c'est la topologie.
+#
+#    Sans << endpoint-address >>, WireGuard apprend l'adresse du serveur du
+#    premier paquet recu, et la suit quand elle change. Le portable peut donc
+#    passer du wifi a la 4G sans que rien ne soit a refaire.
+#
+#    Pas de << persistent-keepalive >> non plus : on ne peut pas maintenir ouverte
+#    une conversation avec quelqu'un dont on ignore l'adresse. C'est au
+#    serveur de le faire, et sa configuration le prevoit.
 :do { /interface/wireguard/peers/remove [find comment="GeMikrot"] } on-error={}
 /interface/wireguard/peers/add interface=${WG_INTERFACE} \\
     public-key="${publicKey}" \\
-    endpoint-address=${endpointHost} endpoint-port=${endpointPort} \\
     allowed-address=${subnet} \\
-    persistent-keepalive=25 comment="GeMikrot"
+    comment="GeMikrot"
+
+# 2 bis. Le port du tunnel, ouvert en entree.
+#
+#    Puisque c'est le serveur qui appelle, ce routeur doit accepter d'etre
+#    appele. Le pare-feu par defaut de RouterOS refuse toute connexion
+#    entrante non sollicitee -- le tunnel resterait muet, **sans un mot**, et
+#    l'on chercherait du cote des cles.
+#
+#    La regle passe en tete de la chaine : posee en queue, elle serait
+#    precedee du refus general et ne servirait a rien.
+#
+#    Ce que cela expose : un port UDP qui ne repond rien a qui ne possede pas
+#    la cle. WireGuard ne se signale pas, ne repond pas aux sondes, n'apparait
+#    pas a un balayage de ports. C'est la maniere prevue de le publier.
+:do { /ip/firewall/filter/remove [find comment="GeMikrot - tunnel"] } on-error={}
+/ip/firewall/filter/add chain=input protocol=udp dst-port=${WG_LISTEN_PORT} \\
+    action=accept comment="GeMikrot - tunnel" place-before=0
+
+# 2 ter. Un nom stable pour ce routeur.
+#
+#    Son adresse publique est attribuee par le fournisseur et change sans
+#    prevenir -- celle de ce parc a change en une nuit, et le tunnel a
+#    silencieusement cesse de fonctionner. MikroTik donne gratuitement un nom
+#    qui suit l'adresse : c'est lui que le serveur appellera.
+/ip/cloud set ddns-enabled=yes
+:put "Nom public demande a MikroTik, cela prend quelques secondes..."
+:delay 8s
 
 # 3. Un compte dedie a l'application, aux droits limites. Jamais << admin >>.
 #    Le compte part avant son groupe : RouterOS refuse de retirer un groupe
@@ -761,8 +825,20 @@ ${this.contournementHotspot()}:put "Tunnel, compte et certificat poses. Envoi de
 #    La variable est effacee juste apres, pour ne rien laisser derriere.
 :global gmSerie ""
 :do { :global gmSerie [/system/routerboard/get serial-number] } on-error={}
-/tool/fetch url="${callbackUrl}" http-method=post http-header-field="Content-Type:application/json" http-data=("{\\"publicKey\\":\\"" . [/interface/wireguard/get [find name=${WG_INTERFACE}] public-key] . "\\",\\"identity\\":\\"" . [/system/identity/get name] . "\\",\\"serial\\":\\"" . $gmSerie . "\\"}") output=none
+#
+#    Le nom public, demande plus haut a MikroTik. C'est **l'adresse a laquelle
+#    le serveur appellera ce routeur** : sans elle, le raccordement aboutit,
+#    la fiche apparait, et le tunnel ne monte jamais -- le serveur ne saurait
+#    pas ou frapper.
+#
+#    Vide si << /ip/cloud >> n'a pas encore repondu, ou si le fournisseur place ce
+#    routeur derriere son propre NAT. La console le dira, plutot que de
+#    laisser chercher.
+:global gmNom ""
+:do { :global gmNom [/ip/cloud/get dns-name] } on-error={}
+/tool/fetch url="${callbackUrl}" http-method=post http-header-field="Content-Type:application/json" http-data=("{\\"publicKey\\":\\"" . [/interface/wireguard/get [find name=${WG_INTERFACE}] public-key] . "\\",\\"identity\\":\\"" . [/system/identity/get name] . "\\",\\"serial\\":\\"" . $gmSerie . "\\",\\"endpoint\\":\\"" . $gmNom . ":${WG_LISTEN_PORT}\\"}") output=none
 :set gmSerie
+:set gmNom
 `;
   }
 }

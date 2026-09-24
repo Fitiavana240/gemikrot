@@ -36,6 +36,14 @@ export interface PeerToAdd {
   publicKey: string;
   /** L'adresse /32 du routeur : c'est elle, et elle seule, qui est routée. */
   tunnelAddress: string;
+  /**
+   * `nom:port` a appeler pour joindre ce routeur, quand c'est le serveur qui
+   * appelle.
+   *
+   * Absent, le pair reste a l'ecoute : c'est le montage ou le routeur appelle
+   * le serveur, qui vaut quand le serveur a une adresse publique fixe.
+   */
+  endpoint?: string;
 }
 
 /**
@@ -197,9 +205,25 @@ export class WireguardService {
         '#',
         '# AllowedIPs en /32 : ce pair ne reçoit que ce qui lui est destiné. Une',
         '# plage plus large ferait passer par lui le trafic des autres routeurs.',
+        ...(peer.endpoint
+          ? [
+              '#',
+              '# Endpoint : c\u2019est ce serveur qui appelle le routeur. Un nom, et non',
+              '# une adresse \u2014 celle du routeur est attribuee par son fournisseur et',
+              '# change sans prevenir ; celle de ce parc a change en une nuit, et le',
+              '# tunnel a cesse de fonctionner sans un mot.',
+              '#',
+              '# PersistentKeepalive : ce serveur est derriere le NAT de son',
+              '# operateur. Sans ce battement, la porte que sa premiere requete a',
+              '# ouverte se referme apres quelques dizaines de secondes, et le',
+              '# routeur ne peut plus repondre \u2014 le tunnel marche une minute, puis',
+              '# meurt, ce qui se diagnostique bien plus mal qu\u2019une panne franche.',
+            ]
+          : []),
         '[Peer]',
         `PublicKey = ${peer.publicKey}`,
         `AllowedIPs = ${peer.tunnelAddress}/32`,
+        ...(peer.endpoint ? [`Endpoint = ${peer.endpoint}`, 'PersistentKeepalive = 25'] : []),
       ].join('\n');
 
       const apres = [blocs.interface.trimEnd(), '', ...survivants, nouveau, ''].join('\n');
