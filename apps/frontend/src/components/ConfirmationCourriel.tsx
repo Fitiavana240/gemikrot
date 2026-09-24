@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
+import { courrielPlateformePossible } from '../api/auth';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Input } from './ui';
 
@@ -17,6 +19,14 @@ import { Button, Input } from './ui';
  * prévenir l'exploitant de rien** — ni échéance, ni reçu d'abonnement, ni
  * paiement d'un client qui attend son code. Le bandeau le dit dans ces
  * termes plutôt qu'en réclamant une formalité.
+ *
+ * **Et quand aucun courriel ne peut partir, il ne réclame pas de code.** Le
+ * bandeau annonçait << un code a été envoyé >> sans savoir si quoi que ce
+ * soit était parti. Le serveur d'envoi de la plateforme n'étant pas réglé,
+ * rien ne partait : l'exploitant relisait sa boîte, ses indésirables,
+ * recliquait sur << Renvoyer >> qui répondait encore que c'était parti. Il
+ * n'avait rien fait de travers et aucun moyen de s'en sortir. Le champ
+ * disparaît donc, et la cause prend sa place.
  */
 
 export function ConfirmationCourriel() {
@@ -45,7 +55,43 @@ export function ConfirmationCourriel() {
     onError: (e) => setErreur(e instanceof ApiError ? e.message : 'Le renvoi a échoué.'),
   });
 
+  // Interrogee avant de reclamer quoi que ce soit. Tant qu'on ne sait pas,
+  // on ne montre rien : afficher un champ puis le retirer serait pire que
+  // d'attendre une seconde.
+  const courriel = useQuery({
+    queryKey: ['courriel-plateforme'],
+    queryFn: courrielPlateformePossible,
+    staleTime: 60_000,
+  });
+
   if (!user || user.emailVerifie) return null;
+  if (courriel.isPending) return null;
+
+  if (courriel.data && !courriel.data.possible) {
+    return (
+      <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p className="font-semibold">Aucun courriel ne peut partir de la plateforme.</p>
+        <p className="mt-1">
+          Votre adresse <strong>{user.email}</strong> ne peut donc pas être confirmée : le code
+          à six chiffres n’a nulle part par où passer. Ce n’est pas de votre fait, et rien
+          n’est bloqué dans la console — mais tant que le serveur d’envoi n’est pas réglé,
+          nous ne pourrons vous prévenir de rien : ni échéance d’abonnement, ni paiement
+          d’un client qui attend son code, ni panne d’un routeur.
+        </p>
+        {user.role === 'SUPER_ADMIN' ? (
+          <p className="mt-2">
+            <Link to="/settings/plateforme" className="font-medium underline hover:no-underline">
+              Régler le courriel de la plateforme
+            </Link>
+          </p>
+        ) : (
+          <p className="mt-2">
+            Signalez-le à GeMikrot : le réglage est de son côté, pas du vôtre.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   const soumettre = (e: FormEvent) => {
     e.preventDefault();

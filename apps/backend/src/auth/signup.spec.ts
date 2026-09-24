@@ -24,7 +24,9 @@ function service(options: { superAdmins?: string[] } = {}) {
   // Typé par son argument : sans cela `mock.calls[0][0]` ne compile pas, et
   // c'est justement ce qu'on veut inspecter.
   const envoyerDeLaPlateforme = vi.fn(
-    async (_m: { destinataire: string; type: string; sujet: string; texte: string }) => undefined,
+    async (_m: { destinataire: string; type: string; sujet: string; texte: string }) => ({
+      envoye: true,
+    }),
   );
 
   const prisma: any = {
@@ -175,9 +177,18 @@ describe('le code de confirmation', () => {
  * C'est elle qui previent la plateforme : le SUPER_ADMIN apprend une arrivee
  * **joignable**, la seule sorte qui l'interesse.
  */
-function compte(options: { role?: string; code?: string; envoyeIlYA?: number; verifie?: boolean } = {}) {
+function compte(
+  options: {
+    role?: string;
+    code?: string;
+    envoyeIlYA?: number;
+    verifie?: boolean;
+    envoiEchoue?: boolean;
+  } = {},
+) {
   const envoyer = vi.fn(
-    async (_m: { destinataire: string; type: string; sujet: string; texte: string }) => undefined,
+    async (_m: { destinataire: string; type: string; sujet: string; texte: string }) =>
+      options.envoiEchoue ? { envoye: false, erreur: 'SMTP de la plateforme non regle' } : { envoye: true },
   );
   // Typé par son argument : sans cela `mock.calls[0][0]` ne compile pas, et
   // c'est justement ce qu'on veut inspecter.
@@ -253,5 +264,44 @@ describe('la confirmation', () => {
     await s.confirmerCourriel('a1', '123456');
 
     expect(envoyer.mock.calls.map((c) => c[0].type)).not.toContain('inscription-exploitant');
+  });
+});
+
+/**
+ * Le renvoi disait << c'est parti >> sans le savoir.
+ *
+ * `envoyerLeCode` avalait l'echec et ne rendait rien ; `renvoyerLeCode`
+ * repondait donc `{ envoye: true }` quel que soit le sort du message. Sur une
+ * plateforme dont le SMTP n'etait pas regle, cela donnait un ecran qui
+ * reclamait un code, un bouton << Renvoyer >> qui confirmait l'envoi, et
+ * aucun courriel nulle part. La personne n'avait rien fait de travers et
+ * aucun moyen de s'en sortir.
+ */
+describe('le renvoi du code', () => {
+  it('rend l’echec quand rien n’est parti', async () => {
+    const { service: s } = compte({ envoyeIlYA: 5 * 60 * 1000, envoiEchoue: true });
+
+    await expect(s.renvoyerLeCode('a1')).resolves.toMatchObject({
+      envoye: false,
+      erreur: 'SMTP de la plateforme non regle',
+    });
+  });
+
+  it('enregistre le code meme quand l’envoi echoue', async () => {
+    // L'horodatage borne la validite du code. Le retirer rendrait inutilisable
+    // un code bien enregistre, qui servira des que le SMTP sera regle.
+    const { service: s, update } = compte({ envoyeIlYA: 5 * 60 * 1000, envoiEchoue: true });
+
+    await s.renvoyerLeCode('a1');
+
+    const data = update.mock.calls[0][0].data as { emailCode: string; emailCodeSentAt: Date };
+    expect(data.emailCode).toMatch(/^\d{6}$/);
+    expect(data.emailCodeSentAt).toBeInstanceOf(Date);
+  });
+
+  it('confirme quand le message part', async () => {
+    const { service: s } = compte({ envoyeIlYA: 5 * 60 * 1000 });
+
+    await expect(s.renvoyerLeCode('a1')).resolves.toMatchObject({ envoye: true });
   });
 });

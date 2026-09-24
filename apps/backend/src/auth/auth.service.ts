@@ -18,7 +18,7 @@ import type { SignupDto } from './dto/signup.dto.js';
 import type { ChangePasswordDto } from './dto/change-password.dto.js';
 import { reserveTenantSlug } from '../tenants/tenant-slug.util.js';
 import { ESSAI_JOURS, JOUR_MS, offreParCode } from '../tenants/offres-plateforme.js';
-import { CourrielService } from '../courriel/courriel.service.js';
+import { CourrielService, type ResultatEnvoi } from '../courriel/courriel.service.js';
 
 /** L'offre d'essai du catalogue, resolue une fois. */
 const ESSAI = offreParCode('ESSAI')!;
@@ -406,23 +406,35 @@ export class AuthService {
    * compte d'equipe ce serait lui demander de valider une adresse avec un
    * serveur qu'il vient peut-etre de mal regler.
    */
-  private async envoyerLeCode(destinataire: string, code: string): Promise<void> {
-    if (!this.courriel) return;
+  /**
+   * Envoie le code, et **rend ce qui s'est reellement passe**.
+   *
+   * Cette methode ne levait rien et ne rendait rien : l'echec etait avale,
+   * et l'appelant annoncait un code parti. La console disait donc << un code
+   * a ete envoye a votre adresse >> alors qu'aucun courriel n'avait quitte le
+   * serveur, et le seul moyen de sortir de cet ecran etait justement ce code.
+   *
+   * Ne pas lever reste juste -- un code qui ne part pas ne doit pas emporter
+   * l'inscription -- mais se taire ne l'etait pas.
+   */
+  private async envoyerLeCode(destinataire: string, code: string): Promise<ResultatEnvoi> {
+    if (!this.courriel) {
+      return { envoye: false, erreur: "L'envoi de courriel n'est pas disponible." };
+    }
     try {
-      await this.envoyerLeCodeOuEchouer(destinataire, code);
+      return await this.envoyerLeCodeOuEchouer(destinataire, code);
     } catch (e) {
-      // Trace et oublie, comme l'avis a la plateforme. Un code qui ne part
-      // pas ne doit pas emporter l'inscription : le compte existe, l'essai
-      // court, et l'adresse se confirmera avec un nouveau code. L'inverse
-      // ferait d'un SMTP mal regle une panne totale du produit.
-      this.logger.warn(
-        `Code de confirmation non parti a ${destinataire} : ${e instanceof Error ? e.message : e}`,
-      );
+      const message = e instanceof Error ? e.message : String(e);
+      this.logger.warn(`Code de confirmation non parti a ${destinataire} : ${message}`);
+      return { envoye: false, erreur: message };
     }
   }
 
-  private async envoyerLeCodeOuEchouer(destinataire: string, code: string): Promise<void> {
-    await this.courriel!.envoyerDeLaPlateforme({
+  private async envoyerLeCodeOuEchouer(
+    destinataire: string,
+    code: string,
+  ): Promise<ResultatEnvoi> {
+    return this.courriel!.envoyerDeLaPlateforme({
       destinataire,
       sujet: `Votre code de confirmation : ${code}`,
       texte:
@@ -515,8 +527,25 @@ export class AuthService {
       where: { id: adminUserId },
       data: { emailCode: code, emailCodeSentAt: new Date() },
     });
-    await this.envoyerLeCode(compte.email, code);
-    return { envoye: true };
+
+    // L'horodatage est pose avant l'envoi et **reste pose meme s'il echoue** :
+    // c'est lui qui borne la validite du code. Le retirer rendrait inutilisable
+    // un code qui, lui, est bien enregistre -- et qui servira des que le SMTP
+    // sera regle.
+    return this.envoyerLeCode(compte.email, code);
+  }
+
+  /**
+   * La plateforme sait-elle ecrire ?
+   *
+   * Ouverte a tout compte connecte, et non au seul SUPER_ADMIN : c'est
+   * precisement l'exploitant coince devant le champ << code a six chiffres >>
+   * qui a besoin de savoir qu'aucun code ne viendra. Le detail du reglage,
+   * lui, reste reserve.
+   */
+  async plateformePeutEcrire(): Promise<{ possible: boolean }> {
+    if (!this.courriel) return { possible: false };
+    return { possible: await this.courriel.plateformePeutEcrire() };
   }
 
   private signToken(admin: { id: string; email: string; role: AdminRole; tenantId: string | null }) {

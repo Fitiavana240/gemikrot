@@ -1,4 +1,4 @@
-import { Body, Controller, Ip, Post } from '@nestjs/common';
+import { Body, Controller, Get, Ip, Post } from '@nestjs/common';
 import { CurrentUser } from './current-user.decorator.js';
 import type { AuthenticatedUser } from './jwt.strategy.js';
 import { AuthService } from './auth.service.js';
@@ -47,6 +47,18 @@ export class AuthController {
   @Post('renvoyer-code')
   renvoyerLeCode(@CurrentUser() user: AuthenticatedUser) {
     return this.authService.renvoyerLeCode(user.id);
+  }
+
+  /**
+   * La plateforme sait-elle ecrire ?
+   *
+   * Le bandeau de confirmation le demande avant de reclamer un code : si la
+   * reponse est non, aucun code n'arrivera jamais et le champ n'a rien a
+   * faire a l'ecran. Un booleen, rien du reglage.
+   */
+  @Get('courriel-plateforme')
+  courrielPlateforme() {
+    return this.authService.plateformePeutEcrire();
   }
 
   @Post('change-password')

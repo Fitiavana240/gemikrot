@@ -271,6 +271,23 @@ export class CourrielService {
     }
   }
 
+  /**
+   * La plateforme sait-elle ecrire ?
+   *
+   * La question n'est pas rhetorique : tant que la reponse est non, **aucun
+   * code de confirmation ne peut arriver**, et un ecran qui reclame ce code
+   * enferme celui qui le lit. Il n'a rien fait de travers, il n'a aucun
+   * moyen de s'en sortir, et rien ne le lui dit.
+   *
+   * Les memes trois conditions que l'envoi lui-meme, et pas seulement
+   * `smtpActif` : un interrupteur allume sur une configuration vide n'envoie
+   * pas davantage qu'un interrupteur eteint.
+   */
+  async plateformePeutEcrire(): Promise<boolean> {
+    const p = await this.prisma.plateforme.findUnique({ where: { id: ID_PLATEFORME } });
+    return Boolean(p?.smtpActif && p.smtpHost && p.smtpFrom);
+  }
+
   /** Ce que la plateforme a regle, mot de passe exclu. */
   async reglagesPlateforme(): Promise<ReglagesPlateforme> {
     const p = await this.prisma.plateforme.findUnique({ where: { id: ID_PLATEFORME } });

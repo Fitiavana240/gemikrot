@@ -20,3 +20,14 @@ export function login(email: string, password: string): Promise<LoginResponse> {
 export function changePassword(currentPassword: string, newPassword: string): Promise<{ ok: true }> {
   return api.post<{ ok: true }>('/auth/change-password', { currentPassword, newPassword });
 }
+
+/**
+ * La plateforme sait-elle ecrire ?
+ *
+ * Question posee avant de reclamer un code de confirmation. Tant que la
+ * reponse est non, aucun code n'arrivera : demander celui-ci enfermerait
+ * celui qui le lit devant un champ sans issue.
+ */
+export function courrielPlateformePossible(): Promise<{ possible: boolean }> {
+  return api.get<{ possible: boolean }>('/auth/courriel-plateforme');
+}

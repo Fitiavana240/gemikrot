@@ -161,3 +161,49 @@ describe('l’expéditeur', () => {
     ).resolves.toBeDefined();
   });
 });
+
+/**
+ * << La plateforme sait-elle ecrire ? >> se pose avant de reclamer un code.
+ *
+ * Tant que la reponse est non, aucun code de confirmation ne peut arriver, et
+ * un ecran qui en reclame un enferme celui qui le lit : il n'a rien fait de
+ * travers, et aucun moyen de s'en sortir.
+ */
+describe('la plateforme sait-elle ecrire', () => {
+  function plateforme(p: Record<string, unknown> | null) {
+    const prisma: any = {
+      tenant: { findUnique: vi.fn(async () => null), update: vi.fn() },
+      courriel: { create: vi.fn(async ({ data }: any) => data) },
+      plateforme: { findUnique: vi.fn(async () => p) },
+      scoped: { courriel: { findMany: vi.fn(async () => []) } },
+    };
+    return new CourrielService(
+      prisma,
+      { requireTenantId: () => 't1' } as never,
+      { log: vi.fn(async () => undefined) } as never,
+      { getOrThrow: () => CLEF } as never,
+    );
+  }
+
+  it('non quand rien n’est enregistre', async () => {
+    await expect(plateforme(null).plateformePeutEcrire()).resolves.toBe(false);
+  });
+
+  it('non quand l’interrupteur est eteint', async () => {
+    const s = plateforme({ smtpActif: false, smtpHost: 'smtp.exemple.mg', smtpFrom: 'a@b.mg' });
+    await expect(s.plateformePeutEcrire()).resolves.toBe(false);
+  });
+
+  it('non quand l’interrupteur est allume sur une configuration vide', async () => {
+    // Les memes trois conditions que l'envoi lui-meme : un interrupteur
+    // allume sur un serveur absent n'envoie pas davantage qu'un eteint, et
+    // repondre << oui >> ferait reclamer un code qui ne partira jamais.
+    const s = plateforme({ smtpActif: true, smtpHost: null, smtpFrom: null });
+    await expect(s.plateformePeutEcrire()).resolves.toBe(false);
+  });
+
+  it('oui quand les trois sont reunies', async () => {
+    const s = plateforme({ smtpActif: true, smtpHost: 'smtp.exemple.mg', smtpFrom: 'a@b.mg' });
+    await expect(s.plateformePeutEcrire()).resolves.toBe(true);
+  });
+});

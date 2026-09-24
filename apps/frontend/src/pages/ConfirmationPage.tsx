@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
+import { courrielPlateformePossible } from '../api/auth';
 import { useAuth } from '../auth/AuthContext';
 import { BrandMark } from '../components/Brand';
 import { Button, Input } from '../components/ui';
@@ -23,6 +24,12 @@ import { Button, Input } from '../components/ui';
  * derrière un courriel qui n'arrive pas — SMTP muet, boîte pleine, message en
  * indésirables — ferait d'un accessoire une panne totale, le premier jour.
  * Le bandeau de la console prend alors le relais.
+ *
+ * **Et si la plateforme ne sait pas écrire, l'écran ne s'affiche pas.** Il
+ * annonçait << un code vient de partir >> sans rien vérifier ; on arrivait
+ * donc, juste après s'être inscrit, devant un champ dont la clé n'existait
+ * pas. Le premier geste dans le produit était un échec inexplicable. On
+ * entre maintenant directement dans la console, et le bandeau dit pourquoi.
  */
 
 export function ConfirmationPage() {
@@ -50,9 +57,18 @@ export function ConfirmationPage() {
     onError: (e) => setErreur(e instanceof ApiError ? e.message : 'Le renvoi a échoué.'),
   });
 
+  const courriel = useQuery({
+    queryKey: ['courriel-plateforme'],
+    queryFn: courrielPlateformePossible,
+    staleTime: 60_000,
+  });
+
   if (!user) return <Navigate to="/login" replace />;
   // Déjà confirmée : rester ici demanderait un code qui n'existe plus.
   if (user.emailVerifie) return <Navigate to="/" replace />;
+  // Aucun courriel ne peut partir : demander le code serait demander
+  // l'impossible. La console, et son bandeau, disent la suite.
+  if (courriel.data && !courriel.data.possible) return <Navigate to="/" replace />;
 
   const soumettre = (e: FormEvent) => {
     e.preventDefault();
