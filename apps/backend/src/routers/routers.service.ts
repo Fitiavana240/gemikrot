@@ -246,6 +246,66 @@ export class RoutersService {
     return { supprime: true };
   }
 
+  /**
+   * Reecrit le pair de ce routeur dans le fichier du tunnel, depuis sa fiche.
+   *
+   * Le fichier peut diverger de la fiche -- un second raccordement interrompu,
+   * un outil qui repasse derriere, une sauvegarde restauree. Jusqu'ici la
+   * seule facon de le remettre d'aplomb etait de refaire tout le
+   * raccordement, ou de l'editer a la main : la premiere fait perdre du
+   * temps, la seconde a deja coute la cle privee du serveur et deux lignes
+   * d'interface.
+   *
+   * N'ecrit rien sur le routeur : la fiche est la source, et le routeur porte
+   * deja ce qu'il faut.
+   */
+  async reecrireLePair(id: string): Promise<{ ecrit: boolean; message: string }> {
+    const routeur = await this.requireRouter(id);
+
+    if (!routeur.tunnelPublicKey || !routeur.tunnelAddress) {
+      throw new ConflictException(
+        `« ${routeur.label} » n'a pas de clé de tunnel : il n'a jamais été raccordé. ` +
+          `Passez par « Préparer un script à coller ».`,
+      );
+    }
+
+    const r = await this.wireguard.addPeer(
+      {
+        publicKey: routeur.tunnelPublicKey,
+        tunnelAddress: routeur.tunnelAddress,
+        endpoint: routeur.tunnelEndpoint ?? undefined,
+      },
+      routeur.label,
+    );
+
+    await this.audit.log({
+      action: 'REWRITE_TUNNEL_PEER',
+      targetType: 'Router',
+      targetId: id,
+      routerId: id,
+      payloadDiff: { tunnelAddress: routeur.tunnelAddress, endpoint: routeur.tunnelEndpoint },
+    });
+
+    if (!r.ecritDansLeFichier) {
+      return {
+        ecrit: false,
+        message:
+          `Le serveur n'a pas pu écrire le fichier du tunnel. ` +
+          `À passer à la main : ${r.command}`,
+      };
+    }
+    return {
+      ecrit: true,
+      message: routeur.tunnelEndpoint
+        ? `Pair réécrit : ${routeur.tunnelAddress} appelé à ${routeur.tunnelEndpoint}. ` +
+          `Rechargez le tunnel dans l'application WireGuard — elle garde sa propre copie ` +
+          `du fichier depuis l'import et ne le relit pas d'elle-même.`
+        : `Pair réécrit, mais ce routeur n'a pas de nom public : il ne sera joignable ` +
+          `que depuis son propre réseau. Relancez le raccordement pour lui en faire ` +
+          `demander un à MikroTik.`,
+    };
+  }
+
   /** Ce qui disparaitrait avec ce routeur, en clair et au pluriel juste. */
   private async ceQuiEstAttache(id: string): Promise<string[]> {
     // Hors cloisonnement : le compte est fait pour un routeur deja resolu par

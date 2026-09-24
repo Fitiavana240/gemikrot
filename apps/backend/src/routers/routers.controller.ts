@@ -65,6 +65,18 @@ export class RoutersController {
    * La suppression ne touche pas au routeur lui-meme : elle efface la fiche,
    * pas la configuration posee dessus.
    */
+  /**
+   * Remet le pair de ce routeur dans le fichier du tunnel, depuis sa fiche.
+   *
+   * Ouvert aux administrateurs : c'est une reparation de leur propre
+   * installation, elle n'ecrit rien sur le routeur et ne detruit rien.
+   */
+  @Roles(...CAN_CONFIGURE)
+  @Post(':id/tunnel/pair')
+  reecrireLePair(@Param('id') id: string) {
+    return this.routersService.reecrireLePair(id);
+  }
+
   @Roles(AdminRole.SUPER_ADMIN)
   @Delete(':id')
   supprimer(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {

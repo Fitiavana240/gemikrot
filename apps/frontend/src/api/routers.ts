@@ -253,4 +253,12 @@ export const routersApi = {
    * certificat poses par le script y restent.
    */
   supprimer: (id: string) => api.delete<{ supprime: true }>(`/routers/${id}`),
+  /**
+   * Remet le pair de ce routeur dans le fichier du tunnel, depuis sa fiche.
+   *
+   * Le fichier peut diverger : un second raccordement interrompu, un outil
+   * qui repasse derriere. Reparer valait jusqu'ici tout refaire.
+   */
+  reecrireLePair: (id: string) =>
+    api.post<{ ecrit: boolean; message: string }>(`/routers/${id}/tunnel/pair`),
 };
