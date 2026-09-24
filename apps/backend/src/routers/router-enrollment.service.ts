@@ -527,23 +527,38 @@ export class RouterEnrollmentService {
 #    Rejouable, comme le reste : l'ancien part avant que le neuf arrive. Le
 #    certificat de service part en premier, l'autorite ensuite : RouterOS
 #    refuse de retirer une autorite dont un certificat depend encore.
-:put "Pose du certificat de l'API..."
-/certificate remove [find name="gemikrot-api-cert"]
-/certificate remove [find name="gemikrot-ca"]
+#
+#    **Tout tient dans un seul bloc, et ce n'est pas un choix de style.**
+#    << /certificate sign >> s'execute en arriere-plan et **toute frappe
+#    pendant son travail l'interrompt** : il repond alors
+#    << Process is uninterruptible, it will finish in background >>, et la
+#    ligne collee derriere lui est avalee - parfois a moitie, ce qui donne un
+#    << bad command name >> sur un fragment de commentaire. Les commandes
+#    suivantes disparaissent sans laisser de trace. Constate sur ce parc :
+#    les deux lignes qui creaient le certificat du service se sont evaporees,
+#    et l'on n'a vu que le refus final du service.
+#
+#    Entre accolades, le terminal n'execute rien avant l'accolade fermante :
+#    il accumule. Le collage ne peut donc rien interrompre. Et << :execute >>
+#    rend la main tout de suite, si bien que la suite du script - dont
+#    l'appel au serveur - n'attend pas les signatures.
+:put "Pose du certificat de l'API, en arriere-plan..."
+:execute script={
+  /certificate remove [find name="gemikrot-api-cert"];
+  /certificate remove [find name="gemikrot-ca"];
+  /certificate add name="gemikrot-ca" common-name="GeMikrot CA" days-valid=3650 key-size=2048 key-usage=key-cert-sign,crl-sign;
+  /certificate sign "gemikrot-ca";
+  :delay 20s;
+  /certificate add name="gemikrot-api-cert" common-name="${params.tunnelAddress}" days-valid=3650 key-size=2048 key-usage=digital-signature,key-encipherment,tls-server;
+  /certificate sign "gemikrot-api-cert" ca="gemikrot-ca";
+  :delay 20s;
+  /ip/service set www-ssl certificate="gemikrot-api-cert" disabled=no;
+  :log info "GeMikrot : certificat de l'API en place, service securise actif.";
+}
 
-/certificate add name="gemikrot-ca" common-name="GeMikrot CA" \\
-    days-valid=3650 key-size=2048 key-usage=key-cert-sign,crl-sign
-/certificate sign "gemikrot-ca"
-
-/certificate add name="gemikrot-api-cert" common-name="${params.tunnelAddress}" \\
-    days-valid=3650 key-size=2048 \\
-    key-usage=digital-signature,key-encipherment,tls-server
-/certificate sign "gemikrot-api-cert" ca="gemikrot-ca"
-
-#    Chaque signature prend quelques secondes et affiche sa progression.
-#    C'est normal : laissez-les finir sans rien taper.
-/ip/service set www-ssl certificate="gemikrot-api-cert" disabled=no
-:put "Certificat en place, service securise actif."
+#    Les signatures prennent une quarantaine de secondes en tout. Vous n'avez
+#    rien a attendre : la suite du script continue, et le resultat s'inscrit
+#    dans le journal du routeur (Log) sous << GeMikrot >>.
 
 # Ce script ne restreint PAS l'adresse de www-ssl, volontairement. Le faire
 # avant d'avoir eprouve le tunnel a deja coupe un routeur en essai :

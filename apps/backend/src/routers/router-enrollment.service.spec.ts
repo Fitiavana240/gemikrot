@@ -321,6 +321,54 @@ describe('RouterEnrollmentService', () => {
       expect(commandes.filter((l) => l.includes('www-ssl') && l.includes('address='))).toEqual([]);
     });
 
+      it('enferme les signatures dans un bloc que le collage ne peut pas interrompre', async () => {
+      /**
+       * Le defaut qui a coute une soiree : `/certificate sign` s'execute en
+       * arriere-plan et **toute frappe pendant son travail l'interrompt**. La
+       * ligne collee derriere lui est avalee — parfois a moitie, ce qui donne
+       * un « bad command name » sur un fragment de commentaire — et les
+       * commandes suivantes disparaissent sans laisser de trace.
+       *
+       * Entre accolades, le terminal n'execute rien avant l'accolade
+       * fermante : il accumule, et le collage ne peut rien interrompre.
+       */
+      const script = (await asA(() => service.invite('Routeur bloc'))).script;
+
+      const ouverture = script.indexOf(':execute script={');
+      const fermeture = script.indexOf('\n}', ouverture);
+      expect(ouverture).toBeGreaterThan(-1);
+      expect(fermeture).toBeGreaterThan(ouverture);
+
+      // Les quatre gestes du certificat vivent tous dans le bloc.
+      const bloc = script.slice(ouverture, fermeture);
+      for (const geste of [
+        'remove [find name="gemikrot-api-cert"]',
+        'add name="gemikrot-ca"',
+        'sign "gemikrot-ca"',
+        'sign "gemikrot-api-cert" ca="gemikrot-ca"',
+        'set www-ssl certificate="gemikrot-api-cert"',
+      ]) {
+        expect(bloc).toContain(geste);
+      }
+    });
+
+    it('laisse aux signatures le temps de finir avant de s’en servir', async () => {
+      // Sans attente, le certificat de service serait cree avant que son
+      // autorite existe, et le service recevrait un nom qui ne designe rien.
+      const script = (await asA(() => service.invite('Routeur delai'))).script;
+
+      expect(script).toMatch(/sign "gemikrot-ca";[\s\S]*?:delay \d+s;/);
+      expect(script).toMatch(/sign "gemikrot-api-cert"[^;]*;[\s\S]*?:delay \d+s;/);
+    });
+
+    it('laisse une trace dans le journal du routeur', async () => {
+      // Le bloc tourne en arriere-plan : sans cette ligne, son resultat
+      // n'apparait nulle part et l'on ne sait pas s'il a abouti.
+      const script = (await asA(() => service.invite('Routeur journal'))).script;
+
+      expect(script).toMatch(/:log info "GeMikrot/);
+    });
+
     it('explique ce que veut dire « timeout connecting »', async () => {
       // La panne qu'on vient de rencontrer : le port du serveur ferme par le
       // pare-feu. Sans cette ligne, on cherche la faute dans l'adresse.
