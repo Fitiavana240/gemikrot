@@ -11,9 +11,21 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définir POSTGRES_PASSWORD dans .env — voir .env.example}
       POSTGRES_DB: wifitati
     ports:
-      # 5432 est déjà pris par un Postgres natif sur cette machine — le
-      # conteneur est exposé sur 55432 pour éviter le conflit.
-      - "55432:5432"
+      # 15432, et les deux autres nombres ont été essayés avant.
+      #
+      # 5432 est déjà pris par un Postgres natif sur cette machine. 55432
+      # semblait libre — il ne l'est pas : Windows **réserve** des plages de
+      # ports dynamiques, et 55432 tombe dans l'une d'elles. Le symptôme n'est
+      # pas « port occupé » mais « bind: access denied », qu'on cherche du
+      # côté des droits ou du pare-feu pendant une heure.
+      #
+      #   netsh interface ipv4 show excludedportrange protocol=tcp
+      #
+      # 15432 est hors de ces plages. Ce nombre doit rester d'accord avec le
+      # `DATABASE_URL` de `apps/backend/.env` : deux valeurs différentes
+      # donnent un serveur qui ne démarre pas, et un message qui ne parle que
+      # de connexion refusée.
+      - "15432:5432"
     volumes:
       - wifitati_postgres_data:/var/lib/postgresql/data
 
