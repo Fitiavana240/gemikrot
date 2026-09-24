@@ -86,6 +86,25 @@ export class EnrollRouterDto {
   @IsString()
   @MaxLength(40)
   serial?: string;
+
+  /**
+   * `nom:port` a laquelle **le serveur appellera ce routeur**.
+   *
+   * Le nom vient de `/ip/cloud` : MikroTik en donne un gratuitement, et il
+   * suit l'adresse du routeur quand elle change. Sans lui, le raccordement
+   * aboutit, la fiche apparait, et le tunnel ne monte jamais -- le serveur ne
+   * saurait pas ou frapper.
+   *
+   * **Chaine vide acceptee**, et meme un `:13231` sans nom : `/ip/cloud` peut
+   * n'avoir pas encore repondu. Le refuser ferait echouer un raccordement qui,
+   * lui, a marche -- et la validation rejette la requete entiere, pas le seul
+   * champ fautif, si bien que le routeur lit << Status 400 >> apres un script
+   * qui s'est pourtant deroule jusqu'au bout.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  endpoint?: string;
 }
 
 @Controller('router-enrollments')
