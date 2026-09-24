@@ -23,6 +23,7 @@ import { TicketsModule } from './tickets/tickets.module.js';
 import { HotspotModule } from './hotspot/hotspot.module.js';
 import { SchedulingModule } from './scheduling/scheduling.module.js';
 import { PublicModule } from './public/public.module.js';
+import { HealthModule } from './health/health.module.js';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { PublicModule } from './public/public.module.js';
     HotspotModule,
     PublicModule,
     SchedulingModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
