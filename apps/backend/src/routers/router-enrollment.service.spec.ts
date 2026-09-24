@@ -403,6 +403,42 @@ describe('RouterEnrollmentService', () => {
       expect(script).toMatch(/:log info "GeMikrot : certificat/);
     });
 
+    it('fait sortir la console du portail captif quand elle est sur le reseau', async () => {
+      /**
+       * Le HotSpot occupe le port 80 du routeur, et souvent le 443 avec lui.
+       * Sur ce parc, le port 80 rendait une redirection vers la page du
+       * portail — pris pour WebFig — et le 443 coupait sans un octet, ce qui
+       * ressemble trait pour trait a un certificat d'API invalide sans en
+       * etre un. Trois hypotheses ont ete bati sur cette lecture erronee.
+       */
+      const s = new RouterEnrollmentService(
+        prisma,
+        new RouterCredentialsService(config),
+        new WireguardService(config),
+        tenantContext,
+        {
+          get: (k: string) =>
+            k === 'PUBLIC_BASE_URL' ? 'http://192.168.88.23:3000' : SETTINGS[k],
+          getOrThrow: (k: string) => SETTINGS[k],
+        } as never,
+      );
+
+      const script = (await asA(() => s.invite('Routeur portail'))).script;
+
+      expect(script).toContain('/ip/hotspot/ip-binding/add address=192.168.88.23 type=bypassed');
+      // Retire avant d'ajouter, comme tout le reste du script.
+      expect(script).toMatch(/:do \{ \/ip\/hotspot\/ip-binding\/remove .* \} on-error=\{\}/);
+    });
+
+    it('ne touche pas au portail quand le serveur a une adresse publique', async () => {
+      // Un serveur en production n'est pas sur le reseau du HotSpot : la ligne
+      // serait au mieux inutile, au pire une adresse etrangere posee en
+      // exception dans le portail d'un exploitant.
+      const script = (await asA(() => service.invite('Routeur distant'))).script;
+
+      expect(script).not.toContain('ip-binding');
+    });
+
     it('explique ce que veut dire « timeout connecting »', async () => {
       // La panne qu'on vient de rencontrer : le port du serveur ferme par le
       // pare-feu. Sans cette ligne, on cherche la faute dans l'adresse.

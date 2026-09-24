@@ -14,6 +14,7 @@ import { RouterCredentialsService } from './router-credentials.service.js';
 import { WireguardService } from './wireguard.service.js';
 import {
   adressePerimee,
+  estPrivee,
   hoteDeLUrl,
   type AdressePerimee,
 } from '../common/adresses-locales.js';
@@ -141,6 +142,49 @@ export class RouterEnrollmentService {
       endpointPrive: this.wireguard.endpointPrive,
       adressePerimee: this.adresseDeRappelPerimee(),
     };
+  }
+
+  /**
+   * Fait sortir la console du portail captif, quand elle est sur son reseau.
+   *
+   * **Le HotSpot occupe le port 80 du routeur, et souvent le 443 avec lui.**
+   * Sur ce parc, une requete vers le port 80 du routeur ne rend pas WebFig
+   * mais une redirection vers la page du portail — et sur 443, faute de
+   * certificat pour ce service-la, il accepte la connexion puis la coupe net.
+   * Vu de la console, cela ressemble trait pour trait a un routeur dont le
+   * certificat d'API serait invalide : meme absence de reponse, meme coupure
+   * sans un octet. On cherche alors du cote du certificat, qui n'y est pour
+   * rien.
+   *
+   * Le contournement dit au HotSpot d'ignorer cette machine : ses paquets ne
+   * passent plus par le portail, dans les deux sens. Le routeur peut alors
+   * la rappeler, et elle peut joindre l'API.
+   *
+   * **Emis seulement pour une adresse privee.** Un serveur en production a une
+   * adresse publique, n'est pas sur le reseau du HotSpot, et n'a donc rien a
+   * contourner : la ligne serait au mieux inutile, au pire une adresse
+   * etrangere posee en exception dans le portail d'un exploitant.
+   */
+  private contournementHotspot(): string {
+    const rappel = this.config.get<string>('PUBLIC_BASE_URL');
+    const hote = rappel ? hoteDeLUrl(rappel) : '';
+    if (!hote || !estPrivee(hote)) return '';
+
+    return [
+      '# 4 bis. La console, hors du portail captif.',
+      '#',
+      '#    Le HotSpot occupe le port 80 du routeur, et souvent le 443 avec lui.',
+      '#    Tant que la console est vue comme un client du portail, le routeur ne',
+      '#    peut ni la rappeler, ni lui servir son API : la connexion est acceptee',
+      '#    puis coupee sans un octet, ce qui ressemble a un certificat invalide',
+      '#    sans en etre un.',
+      '#',
+      '#    Cette exception ne concerne que la machine qui porte la console, et',
+      '#    elle ne change rien pour vos clients.',
+      `:do { /ip/hotspot/ip-binding/remove [find address="${hote}"] } on-error={}`,
+      `/ip/hotspot/ip-binding/add address=${hote} type=bypassed comment="GeMikrot - console"`,
+      '',
+    ].join('\n');
   }
 
   /**
@@ -475,9 +519,11 @@ export class RouterEnrollmentService {
 # accolades, ou le terminal n'execute rien avant l'accolade fermante. Un
 # collage ne peut donc pas l'interrompre a mi-chemin.
 #
-# Ce script pose quatre choses : le tunnel, un compte applicatif aux droits
-# limites, un certificat pour l'API, puis il previent le serveur. Il ne touche
-# ni a votre compte admin, ni au HotSpot, ni a vos clients.
+# Ce script pose le tunnel, un compte applicatif aux droits limites, un
+# certificat pour l'API, fait sortir la console du portail captif quand elle
+# est sur votre reseau, puis previent le serveur. Il ne touche ni a votre
+# compte admin, ni a vos clients, ni a la configuration de votre HotSpot -
+# seulement une exception nominative pour la machine qui porte la console.
 # ============================================================
 
 # 1. Le tunnel. La cle privee est creee ici et ne quitte jamais ce routeur.
@@ -580,7 +626,7 @@ export class RouterEnrollmentService {
 # la console propose une fois le tunnel constate - et qui, a ce moment-la,
 # peut etre annulee par le tunnel lui-meme.
 
-:put "Tunnel, compte et certificat poses. Envoi de la cle publique au serveur..."
+${this.contournementHotspot()}:put "Tunnel, compte et certificat poses. Envoi de la cle publique au serveur..."
 
 # 5. On previent le serveur, en lui donnant la cle publique de ce routeur.
 #
