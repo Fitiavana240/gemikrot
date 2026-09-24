@@ -44,6 +44,13 @@ import { adressePerimee, hoteDeLUrl, type AdressePerimee } from '../common/adres
 const COMPTE_API = 'gemikrot-api';
 /** Nom de l'interface WireGuard, côté routeur. */
 const INTERFACE_WG = 'gemikrot';
+/**
+ * Le port sur lequel le routeur ecoute le tunnel.
+ *
+ * Fixe, et le meme pour tout le parc : c'est le serveur qui appelle, il doit
+ * savoir ou frapper sans avoir a le demander.
+ */
+const PORT_ECOUTE_WG = 13231;
 /** Marque posée sur tout ce que la console crée, pour pouvoir le retrouver. */
 const MARQUE = 'GeMikrot';
 /** WireGuard et l'API REST sont apparus en 7.x : rien avant ne convient. */
@@ -260,8 +267,21 @@ export class RaccordementAssisteService {
     // a ete produite la-bas et ne doit pas en sortir. C'est toute la raison
     // pour laquelle le serveur ne configure pas le tunnel de bout en bout.
     const cleDuRouteur = await this.clePubliqueDuTunnel(client);
+
+    // Le nom public d'abord : c'est lui que le pair portera comme adresse
+    // d'appel. Le poser apres coup obligerait a reecrire le fichier du tunnel
+    // une seconde fois, et laisserait entre-temps un pair qu'on ne sait pas
+    // joindre.
+    const appel = await this.pointDAppel(client);
+    etapes.push(
+      appel
+        ? `Nom public obtenu aupres de MikroTik : ${appel}. Ce routeur sera joignable de loin.`
+        : `Aucun nom public : ce routeur ne sera pilotable que depuis son propre reseau. ` +
+          `Son fournisseur le place peut-etre derriere son NAT.`,
+    );
+
     const pair = await this.wireguard.addPeer(
-      { publicKey: cleDuRouteur, tunnelAddress },
+      { publicKey: cleDuRouteur, tunnelAddress, endpoint: appel ?? undefined },
       // La fiche n'existe pas encore a ce stade : l'etiquette vient de ce que
       // l'exploitant a saisi, ou de l'identite lue sur le routeur.
       dto.label?.trim() || sondage.identite || dto.host,
@@ -274,6 +294,12 @@ export class RaccordementAssisteService {
           : `Pair à ajouter à la main sur le serveur — le tunnel ne s'établira pas avant.`,
     );
 
+    // Le numero de serie : la seule chose stable qu'un routeur dise de
+    // lui-meme. Son nom se change, sa cle publique est refaite des qu'on
+    // recree l'interface. Sans lui, deux passages de l'assistant sur le meme
+    // appareil ne peuvent pas etre rapproches autrement que par l'hote, qui
+    // change des qu'on bascule sur le tunnel.
+    const serie = await this.numeroDeSerie(client);
     const label = dto.label?.trim() || sondage.identite || dto.host;
 
     /**
@@ -338,6 +364,11 @@ export class RaccordementAssisteService {
       data: {
         tunnelAddress,
         tunnelPublicKey: cleDuRouteur,
+        // Le point d'appel et le numero de serie : sans le premier, le serveur
+        // ne sait pas ou joindre ce routeur de loin, et la fiche paraitrait
+        // complete tout en restant inutilisable ailleurs que sur place.
+        tunnelEndpoint: appel,
+        serialNumber: serie,
         // `enrolledAt` reste vide a dessein : c'est lui qui fait basculer la
         // console sur le tunnel, et un tunnel pose n'est pas un tunnel
         // eprouve. L'onglet Tunnel le constate, et bascule alors.
@@ -391,12 +422,26 @@ export class RaccordementAssisteService {
       subnet: string;
     },
   ): Promise<void> {
-    await this.nettoyer(client, '/interface/wireguard', (x) => x.name === INTERFACE_WG);
-    await client.put('/interface/wireguard', {
-      name: INTERFACE_WG,
-      'listen-port': '13231',
-      comment: MARQUE,
-    });
+    /**
+     * **L'interface n'est pas refaite si elle existe deja.**
+     *
+     * La cle privee vit dedans : la detruire en fabrique une neuve, donc une
+     * nouvelle cle publique, donc un pair devenu faux cote serveur -- a
+     * remettre a la main. Relancer l'assistant coupait ainsi le tunnel a tous
+     * les coups, et le relancer est exactement ce qu'on fait quand on croit
+     * que ca n'a pas marche.
+     *
+     * Tout le reste -- adresse, route, pair, compte -- se refait sans dommage :
+     * rien de cela ne porte d'identite.
+     */
+    const interfaces = await client.get<{ name?: string }[]>('/interface/wireguard');
+    if (!interfaces.some((i) => i.name === INTERFACE_WG)) {
+      await client.put('/interface/wireguard', {
+        name: INTERFACE_WG,
+        'listen-port': String(PORT_ECOUTE_WG),
+        comment: MARQUE,
+      });
+    }
 
     await this.nettoyer(client, '/ip/address', (x) => x.interface === INTERFACE_WG);
     await client.put('/ip/address', {
@@ -412,18 +457,97 @@ export class RaccordementAssisteService {
       comment: MARQUE,
     });
 
+    /**
+     * Le serveur, comme pair, **sans point d'appel**.
+     *
+     * C'est le serveur qui appellera ce routeur. Le sens inverse reste le bon
+     * quand le serveur a une adresse publique fixe ; il s'effondre des que le
+     * serveur est mobile, car un portable en partage de connexion recoit une
+     * adresse privee d'operateur que personne ne peut appeler.
+     *
+     * Sans point d'appel, WireGuard apprend l'adresse du serveur du premier
+     * paquet recu et la suit quand elle change. Et pas de battement : on ne
+     * maintient pas ouverte une conversation avec quelqu'un dont on ignore
+     * l'adresse. C'est au serveur de le faire.
+     */
     await this.nettoyer(client, '/interface/wireguard/peers', (x) => x.comment === MARQUE);
     await client.put('/interface/wireguard/peers', {
       interface: INTERFACE_WG,
       'public-key': p.publicKey,
-      'endpoint-address': p.endpointHost,
-      'endpoint-port': String(p.endpointPort),
       'allowed-address': p.subnet,
-      // C'est ce routeur qui appelle, jamais l'inverse : aucun port à ouvrir
-      // chez lui, aucune adresse fixe nécessaire de son côté.
-      'persistent-keepalive': '25',
       comment: MARQUE,
     });
+
+    /**
+     * Le port du tunnel, ouvert en entree, en tete de chaine.
+     *
+     * Le pare-feu par defaut de RouterOS refuse toute connexion entrante non
+     * sollicitee : le tunnel resterait muet, **sans un mot**, et l'on
+     * chercherait du cote des cles. Posee en queue, la regle serait precedee
+     * du refus general et ne servirait a rien.
+     *
+     * Ce que cela expose : un port UDP qui ne repond rien a qui ne possede pas
+     * la cle. WireGuard ne se signale pas et n'apparait pas a un balayage.
+     */
+    await this.nettoyer(
+      client,
+      '/ip/firewall/filter',
+      (x) => x.comment === `${MARQUE} - tunnel`,
+    );
+    await client.put('/ip/firewall/filter', {
+      chain: 'input',
+      protocol: 'udp',
+      'dst-port': String(PORT_ECOUTE_WG),
+      action: 'accept',
+      comment: `${MARQUE} - tunnel`,
+      'place-before': '0',
+    });
+  }
+
+  /**
+   * Le nom public que MikroTik donne a ce routeur, et son port d'ecoute.
+   *
+   * L'adresse publique d'un routeur est attribuee par son fournisseur et
+   * change sans prevenir -- celle de ce parc a change en une nuit, et le
+   * tunnel a silencieusement cesse de fonctionner. `/ip/cloud` donne
+   * gratuitement un nom qui suit l'adresse.
+   *
+   * Rend `null` plutot que d'echouer : un raccordement qui a marche ne doit
+   * pas etre perdu parce que le service de noms tarde. La console le dira, et
+   * le routeur restera pilotable depuis son propre reseau.
+   */
+  private async pointDAppel(client: RouterOSRestClient): Promise<string | null> {
+    try {
+      await client.patch('/ip/cloud', { 'ddns-enabled': 'yes' });
+      // Le nom n'est pas attribue dans la seconde : MikroTik doit joindre son
+      // service et enregistrer l'adresse.
+      for (let essai = 0; essai < 6; essai += 1) {
+        const cloud = await client.get<{ 'dns-name'?: string }>('/ip/cloud');
+        const nom = cloud?.['dns-name']?.trim();
+        if (nom) return `${nom}:${PORT_ECOUTE_WG}`;
+        await new Promise((r) => setTimeout(r, 2500));
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Le numero de serie de la carte, ou `null` quand il n'y en a pas.
+   *
+   * Une machine sans carte RouterBOARD -- CHR, x86 -- n'en a pas, et la
+   * requete echoue au lieu de rendre une chaine vide. L'echec est avale : un
+   * raccordement qui a marche ne doit pas etre perdu pour un renseignement
+   * accessoire.
+   */
+  private async numeroDeSerie(client: RouterOSRestClient): Promise<string | null> {
+    try {
+      const carte = await client.get<{ 'serial-number'?: string }>('/system/routerboard');
+      return carte?.['serial-number']?.trim() || null;
+    } catch {
+      return null;
+    }
   }
 
   /**

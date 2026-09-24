@@ -19,7 +19,13 @@ import {
 const ADMIN = { host: '192.168.88.1', username: 'admin', password: 'secret-du-routeur' };
 
 function service(
-  options: { version?: string; refuseSession?: boolean; deja?: { id: string } | null } = {},
+  options: {
+    version?: string;
+    refuseSession?: boolean;
+    deja?: { id: string } | null;
+    /** Le routeur porte deja l'interface du tunnel, d'un raccordement anterieur. */
+    interfaceDeja?: boolean;
+  } = {},
 ) {
   const ecritures: { chemin: string; corps: unknown }[] = [];
   const auditLog = vi.fn(async (_entree: { payloadDiff?: Record<string, unknown> }) => undefined);
@@ -35,7 +41,9 @@ function service(
     if (chemin === '/system/identity') return { name: 'hAP' };
     if (chemin === '/interface/wireguard') {
       // Au sondage la liste est vide ; après création elle porte la clé.
-      return ecritures.some((e) => e.chemin === '/interface/wireguard')
+      // `interfaceDeja` simule un routeur déjà raccordé une fois : c'est le
+      // cas où la clé privée doit survivre.
+      return options.interfaceDeja || ecritures.some((e) => e.chemin === '/interface/wireguard')
         ? [{ name: 'gemikrot', 'public-key': 'CLE_PUBLIQUE_DU_ROUTEUR' }]
         : [];
     }
@@ -209,9 +217,61 @@ describe('le raccordement', () => {
     const pair = ecritures.find((e) => e.chemin === '/interface/wireguard/peers')
       ?.corps as Record<string, string>;
     expect(pair['public-key']).toBe('CLE_DU_SERVEUR');
-    expect(pair['endpoint-address']).toBe('192.168.88.23');
-    expect(pair['persistent-keepalive']).toBe('25');
-    expect(res.etapes.join(' ')).toMatch(/pair sur le serveur/);
+
+    // **Sans point d'appel, et c'est le coeur du montage : c'est le serveur
+    // qui appellera ce routeur.**
+    //
+    // Le sens inverse reste le bon quand le serveur a une adresse publique
+    // fixe. Il s'effondre des que le serveur est mobile : un portable en
+    // partage de connexion recoit une adresse privee d'operateur, et personne
+    // ne peut l'appeler.
+    expect(pair['endpoint-address']).toBeUndefined();
+    // Ni battement : on ne maintient pas ouverte une conversation avec
+    // quelqu'un dont on ignore l'adresse. C'est au serveur de le faire.
+    expect(pair['persistent-keepalive']).toBeUndefined();
+    expect(res.etapes.join(' ')).toMatch(/pair sur le serveur|fichier du tunnel/);
+  });
+
+  it('ouvre le port du tunnel en entree, en tete de chaine', async () => {
+    // Le pare-feu par defaut de RouterOS refuse toute connexion entrante non
+    // sollicitee : puisque c'est le serveur qui appelle, le tunnel resterait
+    // muet sans un mot. Posee en queue, la regle serait precedee du refus
+    // general et ne servirait a rien.
+    const { service: s, ecritures } = service();
+
+    await s.raccorder(ADMIN);
+
+    const regle = ecritures.find((e) => e.chemin === '/ip/firewall/filter')?.corps as Record<
+      string,
+      string
+    >;
+    expect(regle).toBeDefined();
+    expect(regle.chain).toBe('input');
+    expect(regle.protocol).toBe('udp');
+    expect(regle['dst-port']).toBe('13231');
+    expect(regle.action).toBe('accept');
+    expect(regle['place-before']).toBe('0');
+  });
+
+  it('cree l\u2019interface sur un routeur vierge', async () => {
+    const { service: s, ecritures } = service();
+
+    await s.raccorder(ADMIN);
+
+    expect(ecritures.filter((e) => e.chemin === '/interface/wireguard')).toHaveLength(1);
+  });
+
+  it('ne refait pas l\u2019interface quand elle existe deja', async () => {
+    // La cle privee vit dans l'interface : la detruire en fabrique une neuve,
+    // donc une nouvelle cle publique, donc un pair devenu faux cote serveur --
+    // a remettre a la main. Relancer l'assistant coupait ainsi le tunnel a
+    // tous les coups, et le relancer est exactement ce qu'on fait quand on
+    // croit que ca n'a pas marche.
+    const { service: s, ecritures } = service({ interfaceDeja: true });
+
+    await s.raccorder(ADMIN);
+
+    expect(ecritures.filter((e) => e.chemin === '/interface/wireguard')).toHaveLength(0);
   });
 });
 
