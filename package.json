@@ -14,7 +14,8 @@
     "test": "npm run test --workspaces --if-present"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "typescript": "6.0.3"
   },
   "allowScripts": {
     "bcrypt": true,
@@ -24,5 +25,9 @@
     "prisma@6.19.3": true,
     "@prisma/engines@6.19.3": true,
     "@prisma/client@6.19.3": true
+  },
+  "engines": {
+    "node": ">=22.0.0 <25",
+    "npm": ">=10"
   }
 }
