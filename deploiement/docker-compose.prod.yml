@@ -58,6 +58,18 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-gemikrot}?schema=public
       PORT: 3000
+    volumes:
+      # **Le fichier du tunnel, ecrit par la console.**
+      #
+      # Sans ce montage, `WIREGUARD_CONFIG_PATH` designe un chemin qui
+      # n'existe que dans le conteneur : la console croit ecrire le pair,
+      # rien ne dit le contraire, et le tunnel de l'hote ne connait jamais le
+      # routeur. L'ecran affiche << Pair pose : non >> sans qu'aucune cause ne
+      # soit visible.
+      #
+      # Un observateur systemd sur l'hote applique ensuite la modification
+      # sans couper l'interface -- voir l'installateur.
+      - /etc/wireguard:/etc/wireguard
     depends_on:
       postgres:
         condition: service_healthy

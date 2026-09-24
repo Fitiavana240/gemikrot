@@ -245,10 +245,10 @@ export class RouterEnrollmentService {
       "#    mal qu'une panne franche.",
       ...avertissement,
       ':do { /interface/wireguard/peers/remove [find comment="GeMikrot"] } on-error={}',
-      `/interface/wireguard/peers/add interface=${WG_INTERFACE} \\\\`,
-      `    public-key="${publicKey}" \\\\`,
-      `    endpoint-address=${endpointHost} endpoint-port=${endpointPort} \\\\`,
-      `    allowed-address=${subnet} \\\\`,
+      `/interface/wireguard/peers/add interface=${WG_INTERFACE} \\`,
+      `    public-key="${publicKey}" \\`,
+      `    endpoint-address=${endpointHost} endpoint-port=${endpointPort} \\`,
+      `    allowed-address=${subnet} \\`,
       '    persistent-keepalive=25 comment="GeMikrot"',
     ].join('\n');
   }
@@ -416,17 +416,25 @@ export class RouterEnrollmentService {
          * En empiler trois ferait relire le meme diagnostic a chaque fois, et
          * la premiere est de toute facon la seule sur laquelle on peut agir.
          */
-        const manque = !r.tunnelEndpoint
-          ? "Ce routeur n'a pas de nom public : le serveur ne sait pas ou l'appeler. " +
-            'Il reste pilotable depuis son propre reseau. Relancez le raccordement pour ' +
-            'lui en faire demander un a MikroTik.'
-          : !this.wireguard.cheminDuFichier
-            ? 'Le fichier du tunnel n\'est pas indique au serveur : son pair doit etre ' +
-              'recopie a la main.'
-            : !pairEcrit
-              ? 'Son pair ne figure pas dans le fichier du tunnel. Relancez le ' +
-                'raccordement, ou ajoutez-le a la main.'
-              : null;
+        /**
+         * Le nom public du routeur ne figure plus ici, et c'est delibere.
+         *
+         * Depuis que le routeur appelle le serveur, ce nom ne sert a rien :
+         * le serveur n'a pas a le joindre. L'ecran annoncait pourtant
+         * << aucun nom public : le serveur ne sait pas ou l'appeler >>, ce qui
+         * envoie chercher exactement au mauvais endroit -- le defaut le plus
+         * couteux de ce projet.
+         *
+         * Ce qui bloque vraiment : le pair doit figurer dans le fichier du
+         * tunnel, et le serveur doit savoir ou est ce fichier.
+         */
+        const manque = !this.wireguard.cheminDuFichier
+          ? "Le fichier du tunnel n'est pas indique au serveur : son pair doit etre " +
+            'recopie a la main.'
+          : !pairEcrit
+            ? 'Son pair ne figure pas dans le fichier du tunnel. Relancez le ' +
+              'raccordement, ou reecrivez-le avec le bouton ci-contre.'
+            : null;
 
         return {
           routerId: r.id,
