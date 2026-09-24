@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Logger,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 import { Public } from '../auth/public.decorator.js';
 import { AdminRole } from '@prisma/client';
@@ -62,6 +71,8 @@ export class EnrollRouterDto {
 
 @Controller('router-enrollments')
 export class RouterEnrollmentController {
+  private readonly logger = new Logger(RouterEnrollmentController.name);
+
   constructor(
     private readonly enrollment: RouterEnrollmentService,
     private readonly assiste: RaccordementAssisteService,
