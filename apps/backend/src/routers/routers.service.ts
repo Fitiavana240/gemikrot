@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Router } from '@prisma/client';
 import { connect as tlsConnect } from 'node:tls';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -9,6 +9,7 @@ import { RouterCredentialsService } from './router-credentials.service.js';
 import type { RouterHealth, RouterReachability } from './router-health.service.js';
 import { RouterHealthService } from './router-health.service.js';
 import { MikrotikClientFactory } from './mikrotik-client.factory.js';
+import { WireguardService } from './wireguard.service.js';
 import type { CreateRouterDto, UpdateRouterDto } from './dto/create-router.dto.js';
 
 /**
@@ -51,7 +52,10 @@ export class RoutersService {
     private readonly health: RouterHealthService,
     private readonly tenantContext: TenantContextService,
     private readonly abonnement: AbonnementPlateformeService,
+    private readonly wireguard: WireguardService,
   ) {}
+
+  private readonly logger = new Logger(RoutersService.name);
 
   async findAll(): Promise<RouterView[]> {
     const routers = await this.prisma.scoped.router.findMany({ orderBy: { createdAt: 'asc' } });
@@ -177,6 +181,93 @@ export class RoutersService {
       });
       socket.on('error', reject);
     });
+  }
+
+  /**
+   * Retire un routeur de la console.
+   *
+   * **Refuse tant que quelque chose y est attache**, et dit quoi. Un routeur
+   * porte les abonnements, les appareils, les lots de tickets et le journal
+   * d'un exploitant : les emporter d'un clic serait irreversible et muet. Une
+   * configuration d'essai qui n'a pas abouti, elle, ne porte rien -- c'est le
+   * cas courant, et celui qu'il faut rendre facile.
+   *
+   * **N'ecrit rien sur le routeur.** Le tunnel, le compte applicatif et le
+   * certificat poses par le script y restent : la console ne le joint peut-etre
+   * plus, et effacer a distance une configuration qu'on ne voit pas serait pire
+   * que la laisser. Rejouer le script les reprendra.
+   */
+  async supprimer(id: string, adminUserId?: string): Promise<{ supprime: true }> {
+    const routeur = await this.requireRouter(id);
+    const attaches = await this.ceQuiEstAttache(id);
+
+    if (attaches.length > 0) {
+      throw new ConflictException(
+        `Ce routeur porte encore ${attaches.join(', ')}. ` +
+          `Supprimez-les d'abord : les emporter avec lui serait irreversible.`,
+      );
+    }
+
+    // Le pair part avec la fiche. Le laisser derriere garderait ouverte, dans
+    // le tunnel, une route vers un routeur que la console ne connait plus.
+    await this.wireguard.removePeer(routeur.tunnelPublicKey ?? '').catch((error: unknown) => {
+      this.logger.warn(`Pair non retire pour ${routeur.label} : ${String(error)}`);
+    });
+
+    // Hors cloisonnement, et pour deux raisons. Le routeur a deja ete resolu
+    // par le client cloisonne juste au-dessus, donc l'appelant y a droit. Et
+    // `$transaction` d'un tableau attend des promesses du client de base :
+    // celles du client etendu ne s'y composent pas, et ce qui suit doit
+    // partir d'un seul bloc -- une fiche a moitie effacee laisserait des
+    // caches orphelins qu'aucun ecran ne montre.
+    await this.prisma.$transaction([
+      // Hors cloisonnement : voir ci-dessus, pour ce bloc entier.
+      this.prisma.routerEnrollment.deleteMany({ where: { routerId: id } }),
+      this.prisma.userCacheEntry.deleteMany({ where: { routerId: id } }),
+      this.prisma.sessionCacheEntry.deleteMany({ where: { routerId: id } }),
+      this.prisma.statsCacheEntry.deleteMany({ where: { routerId: id } }),
+      // Le journal survit a la fiche : c'est la trace de ce qui a ete fait,
+      // et elle doit rester lisible apres coup.
+      this.prisma.auditLog.updateMany({ where: { routerId: id }, data: { routerId: null } }),
+      // Hors cloisonnement : meme raison, et la fiche part en dernier -- les
+      // lignes qui la referencent doivent avoir disparu avant.
+      this.prisma.router.delete({ where: { id } }),
+    ]);
+
+    this.clients.invalidate(id);
+    await this.audit.log({
+      adminUserId,
+      action: 'DELETE_ROUTER',
+      targetType: 'Router',
+      targetId: id,
+      payloadDiff: { label: routeur.label, host: routeur.host },
+    });
+    this.logger.log(`Routeur << ${routeur.label} >> supprime de la console`);
+    return { supprime: true };
+  }
+
+  /** Ce qui disparaitrait avec ce routeur, en clair et au pluriel juste. */
+  private async ceQuiEstAttache(id: string): Promise<string[]> {
+    // Hors cloisonnement : le compte est fait pour un routeur deja resolu par
+    // le client cloisonne, et il doit voir *tout* ce qui y pend -- une ligne
+    // invisible au cloisonnement serait une suppression en cascade silencieuse.
+    const [abonnements, appareils, lots, operations] = await Promise.all([
+      this.prisma.subscription.count({ where: { routerId: id } }),
+      this.prisma.device.count({ where: { routerId: id } }),
+      this.prisma.voucherBatch.count({ where: { routerId: id } }),
+      // Hors cloisonnement : meme raison que les trois comptes ci-dessus.
+      this.prisma.routerOperation.count({ where: { routerId: id, status: 'EN_ATTENTE' } }),
+    ]);
+
+    const parties: string[] = [];
+    const ajouter = (nombre: number, singulier: string, pluriel: string) => {
+      if (nombre > 0) parties.push(`${nombre} ${nombre > 1 ? pluriel : singulier}`);
+    };
+    ajouter(abonnements, 'abonnement', 'abonnements');
+    ajouter(appareils, 'appareil', 'appareils');
+    ajouter(lots, 'lot de tickets', 'lots de tickets');
+    ajouter(operations, 'operation en attente', 'operations en attente');
+    return parties;
   }
 
   private async requireRouter(id: string): Promise<Router> {

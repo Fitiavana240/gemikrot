@@ -212,16 +212,54 @@ export class WireguardService {
     }
   }
 
-  /** Retire un pair. Un routeur retiré doit cesser d'atteindre le serveur. */
+  /**
+   * Retire un pair. Un routeur retiré doit cesser d'atteindre le serveur.
+   *
+   * **Une clé vide ne retire rien**, et ce garde-fou n'est pas théorique : un
+   * routeur enregistré à la main n'a jamais de clé de tunnel, l'appelant
+   * passe alors une chaîne vide, et un filtre « contient la clé » effacerait
+   * **tous** les pairs du fichier d'un coup — tout le parc injoignable pour
+   * une suppression de fiche vide.
+   */
   async removePeer(publicKey: string): Promise<void> {
+    if (!publicKey.trim()) return;
+
     if (!this.settings.managed) {
-      this.logger.warn(
-        `Pair WireGuard à retirer à la main : wg set ${this.settings.interfaceName} peer ${publicKey} remove`,
-      );
+      const retire = this.retirerPairDuFichier(publicKey);
+      if (!retire) {
+        this.logger.warn(
+          `Pair WireGuard à retirer à la main : wg set ${this.settings.interfaceName} peer ${publicKey} remove`,
+        );
+      }
       return;
     }
     await run('wg', ['set', this.settings.interfaceName, 'peer', publicKey, 'remove']);
     await run('sh', ['-c', `wg-quick save ${this.settings.interfaceName}`]).catch(() => undefined);
+  }
+
+  /**
+   * Efface le bloc de ce pair dans le `.conf`, s'il y est.
+   *
+   * Le laisser derrière garderait ouverte, dans le tunnel, une route vers un
+   * routeur que la console ne connaît plus — et personne ne saurait plus à
+   * quoi elle correspond.
+   */
+  private retirerPairDuFichier(publicKey: string): boolean {
+    const chemin = this.settings.configPath;
+    if (!chemin) return false;
+
+    try {
+      const blocs = decouperEnBlocs(readFileSync(chemin, 'utf8'));
+      const survivants = blocs.pairs.filter((bloc) => !bloc.includes(publicKey));
+      if (survivants.length === blocs.pairs.length) return false;
+
+      writeFileSync(chemin, [blocs.interface.trimEnd(), '', ...survivants, ''].join('\n'), 'utf8');
+      this.logger.log(`Pair retiré de ${chemin}`);
+      return true;
+    } catch (error) {
+      this.logger.error(`Pair non retiré de ${chemin} : ${String(error)}`);
+      return false;
+    }
   }
 }
 

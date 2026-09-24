@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { AdminRole } from '@prisma/client';
 import { Roles } from '../auth/roles.decorator.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
@@ -51,6 +51,24 @@ export class RoutersController {
   @Post()
   create(@Body() dto: CreateRouterDto, @CurrentUser() user: AuthenticatedUser) {
     return this.routersService.create(dto, user.id);
+  }
+
+  /**
+   * Retire un routeur de la console. **Reserve au SUPER_ADMIN.**
+   *
+   * Ce n'est pas une mesure de defiance envers l'exploitant : c'est un geste
+   * irreversible sur du materiel en production, et la personne qui gere la
+   * plateforme est celle qui peut en mesurer la portee. Un essai de
+   * raccordement qui n'aboutit pas laisse une fiche a nettoyer, et ce menage
+   * ne doit pas pouvoir emporter un routeur qui sert des clients.
+   *
+   * La suppression ne touche pas au routeur lui-meme : elle efface la fiche,
+   * pas la configuration posee dessus.
+   */
+  @Roles(AdminRole.SUPER_ADMIN)
+  @Delete(':id')
+  supprimer(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.routersService.supprimer(id, user.id);
   }
 
   @Roles(...CAN_CONFIGURE)

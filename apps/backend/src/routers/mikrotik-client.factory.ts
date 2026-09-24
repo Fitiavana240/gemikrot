@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Router } from '@prisma/client';
 import {
@@ -11,6 +11,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RouterCredentialsService } from './router-credentials.service.js';
 import { RouterHealthService, RouterUnreachableException } from './router-health.service.js';
+import { TenantContextService } from '../tenancy/tenant-context.service.js';
 
 interface CachedClient {
   service: IMikrotikService;
@@ -32,7 +33,31 @@ export class MikrotikClientFactory {
     private readonly credentials: RouterCredentialsService,
     private readonly config: ConfigService,
     private readonly health: RouterHealthService,
+    private readonly tenantContext: TenantContextService,
   ) {}
+
+  /**
+   * Le materiel d'un exploitant n'appartient qu'a lui.
+   *
+   * Le SUPER_ADMIN peut se placer sur un exploitant pour l'aider -- regler sa
+   * marque, lire son abonnement, nettoyer une fiche restee d'un essai. Mais
+   * **ouvrir une connexion vers son routeur est d'une autre nature** : c'est
+   * entrer chez lui, voir ses clients connectes, lire ses comptes HotSpot,
+   * ecrire dans sa configuration. Rien dans la gestion d'une plateforme ne
+   * l'exige, et la possibilite seule suffit a rendre la promesse fausse.
+   *
+   * `priseEnMain` marque exactement ce cas : un SUPER_ADMIN agissant au nom
+   * d'un exploitant. Hors requete HTTP -- travaux de fond, file d'operations
+   * differees -- il est absent, et les travaux passent : ils agissent pour
+   * l'exploitant, pas pour quelqu'un.
+   */
+  private refuserSiPriseEnMain(label: string): void {
+    if (this.tenantContext.get()?.priseEnMain !== true) return;
+    throw new ForbiddenException(
+      `Le routeur << ${label} >> appartient a son exploitant : la plateforme ne s'y connecte pas. ` +
+        `Vous pouvez gerer son abonnement et sa fiche, pas son materiel.`,
+    );
+  }
 
   async forRouter(routerId: string): Promise<IMikrotikService> {
     const router = await this.prisma.scoped.router.findUnique({ where: { id: routerId } });
@@ -112,6 +137,7 @@ export class MikrotikClientFactory {
   }
 
   private build(router: Router): IMikrotikService {
+    this.refuserSiPriseEnMain(router.label);
     const { hôte } = MikrotikClientFactory.adresseDuRouteur(router);
     // L'adresse entre dans la signature : basculer sur le tunnel doit
     // reconstruire le client, pas resservir celui qui visait le réseau local.

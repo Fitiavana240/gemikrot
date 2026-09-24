@@ -221,4 +221,12 @@ export const routersApi = {
   testConnection: (id: string) => api.get<ConnectionTest>(`/routers/${id}/test-connection`),
   import: (id: string, dryRun: boolean) =>
     api.post<ImportReport>(`/routers/${id}/import?dryRun=${dryRun}`),
+  /**
+   * Retire la fiche de la console. **Refuse si le routeur porte quelque
+   * chose**, et dit quoi : le serveur ne supprime jamais en cascade.
+   *
+   * N'ecrit rien sur le routeur. Le tunnel, le compte applicatif et le
+   * certificat poses par le script y restent.
+   */
+  supprimer: (id: string) => api.delete<{ supprime: true }>(`/routers/${id}`),
 };

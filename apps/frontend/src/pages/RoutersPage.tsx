@@ -79,7 +79,19 @@ function CompteARebours({ expiresAt }: { expiresAt: string }) {
 }
 
 export function RoutersPage() {
-  const { canWrite } = useAuth();
+  const { canWrite, user } = useAuth();
+  /**
+   * La suppression d'une fiche est reservee au SUPER_ADMIN.
+   *
+   * Ce n'est pas de la defiance envers l'exploitant : c'est un geste
+   * irreversible sur du materiel en production. Chaque essai de raccordement
+   * qui n'aboutit pas laisse une fiche a nettoyer, et ce menage ne doit pas
+   * pouvoir emporter un routeur qui sert des clients.
+   *
+   * Le serveur refuse de toute facon -- le bouton cache seulement ce qui ne
+   * marcherait pas, il ne protege rien a lui seul.
+   */
+  const peutSupprimer = user?.role === 'SUPER_ADMIN';
   const queryClient = useQueryClient();
   const [test, setTest] = useState<ConnectionTest | null>(null);
   const [report, setReport] = useState<ImportReport | null>(null);
@@ -143,6 +155,25 @@ export function RoutersPage() {
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
       queryClient.invalidateQueries({ queryKey: ['plans'] });
       queryClient.invalidateQueries({ queryKey: ['devices'] });
+    },
+    onError,
+  });
+
+  /**
+   * Le retrait d'une fiche.
+   *
+   * Un refus du serveur -- << ce routeur porte encore 12 abonnements >> --
+   * arrive par `onError` et s'affiche comme les autres. C'est voulu : la
+   * console ne doit pas deviner ce que le serveur refusera, sous peine de
+   * diverger de lui le jour ou la regle change.
+   */
+  const supprimer = useMutation({
+    mutationFn: (id: string) => routersApi.supprimer(id),
+    onSuccess: () => {
+      setError(null);
+      setReport(null);
+      queryClient.invalidateQueries({ queryKey: ['routers'] });
+      queryClient.invalidateQueries({ queryKey: ['router-enrollments'] });
     },
     onError,
   });
@@ -520,6 +551,27 @@ export function RoutersPage() {
                     Importer
                   </Button>
                 </>
+              )}
+              {peutSupprimer && (
+                <Button
+                  variant="secondary"
+                  className="text-red-700 hover:bg-red-50"
+                  disabled={supprimer.isPending}
+                  onClick={() => {
+                    // Le nom dans la question, et pas seulement << ce routeur >> :
+                    // avec plusieurs lignes semblables a l'ecran, une
+                    // confirmation anonyme ne dit pas laquelle on efface.
+                    const sur = window.confirm(
+                      `Retirer la fiche du routeur \u00ab\u00a0${router.label}\u00a0\u00bb (${router.host}) ?\n\n` +
+                        `La configuration posee sur le routeur n'est pas touchee : ` +
+                        `le tunnel, le compte et le certificat y restent, et recoller ` +
+                        `le script les reprendra.`,
+                    );
+                    if (sur) supprimer.mutate(router.id);
+                  }}
+                >
+                  Supprimer
+                </Button>
               )}
             </td>
           </tr>
