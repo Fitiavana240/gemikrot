@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import type { AdminRole } from '../api/types';
 import { groupeDe, navPourRole } from './nav';
+import { IconeChevron } from './icones';
 
 const MÉMOIRE = 'gemikrot_menus_replies';
 
@@ -61,12 +62,16 @@ export function SideNav({ role }: { role: AdminRole | undefined }) {
               className="flex w-full items-center justify-between rounded px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 transition-colors hover:text-slate-600"
             >
               {groupe.label}
-              <span
-                aria-hidden
-                className={`text-slate-300 transition-transform ${ouvert ? 'rotate-90' : ''}`}
-              >
-                ›
-              </span>
+              {/* Un `›` tenait lieu d'icône : un guillemet simple, dessiné
+                  dans la police du système, donc d'une épaisseur et d'une
+                  hauteur qui ne sont celles d'aucune autre marque de cette
+                  console. Le chevron du jeu porte le trait de toutes les
+                  autres. */}
+              <IconeChevron
+                className={`h-3.5 w-3.5 shrink-0 text-slate-300 transition-transform duration-200 ${
+                  ouvert ? 'rotate-90' : ''
+                }`}
+              />
             </button>
 
             {ouvert && (
@@ -81,14 +86,18 @@ export function SideNav({ role }: { role: AdminRole | undefined }) {
                       // La barre à gauche marque la page courante sans déplacer
                       // le texte : un décalage à chaque changement de page
                       // fait sautiller la lecture.
-                      `block border-l-2 py-1.5 pl-3 pr-2 text-sm transition-colors ${
+                      `flex items-center gap-2.5 border-l-2 py-1.5 pl-3 pr-2 text-sm transition-colors ${
                         isActive
                           ? 'border-sky-600 bg-sky-50 font-medium text-sky-700'
                           : 'border-transparent text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                       }`
                     }
                   >
-                    {item.label}
+                    {/* `shrink-0` : sans lui, un libellé long comprime son
+                        icône et le jeu perd sa régularité — c'est la seule
+                        chose qu'on remarque dans une colonne d'icônes. */}
+                    <item.icone className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{item.label}</span>
                   </NavLink>
                 ))}
               </div>

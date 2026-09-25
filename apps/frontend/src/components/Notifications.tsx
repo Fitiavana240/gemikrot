@@ -25,10 +25,23 @@ export interface Notification {
   lue: boolean;
 }
 
-const TON: Record<Notification['gravite'], string> = {
-  urgent: 'border-l-red-500 bg-red-50',
-  attention: 'border-l-amber-500 bg-amber-50',
-  info: 'border-l-slate-300 bg-white',
+/**
+ * La gravite, dite par une pastille et un fond -- et non par un onglet.
+ *
+ * Une bordure coloree de quatre pixels sur le cote d'une ligne est la marque
+ * la plus reconnaissable des interfaces fabriquees a la chaine, et elle ne
+ * porte rien que ces deux-la ne portent mieux : la pastille se voit a
+ * l'endroit ou l'oeil arrive, au debut du titre, la ou la bordure vit au bord
+ * du panneau, la ou il ne va pas.
+ *
+ * **Deux indices plutot qu'un.** La couleur seule laisse de cote qui la
+ * distingue mal ; la pastille ajoute une position et une forme, et le fond
+ * teinte la ligne entiere.
+ */
+const TON: Record<Notification['gravite'], { fond: string; pastille: string }> = {
+  urgent: { fond: 'bg-red-50', pastille: 'bg-red-500' },
+  attention: { fond: 'bg-amber-50', pastille: 'bg-amber-500' },
+  info: { fond: 'bg-white', pastille: 'bg-slate-300' },
 };
 
 export function Notifications() {
@@ -126,27 +139,40 @@ export function Notifications() {
               {notifications.map((n) => (
                 <li
                   key={n.cle}
-                  className={`border-l-4 px-4 py-3 ${n.lue ? 'border-l-slate-200 bg-white opacity-60' : TON[n.gravite]}`}
+                  className={`px-4 py-3 ${n.lue ? 'bg-white opacity-60' : TON[n.gravite].fond}`}
                 >
-                  <Link
-                    to={n.lien}
-                    onClick={() => setOuvert(false)}
-                    className="block text-sm font-medium text-slate-900 hover:underline"
-                  >
-                    {n.titre}
-                  </Link>
-                  <p className="mt-0.5 text-xs text-slate-600">{n.detail}</p>
-                  {/* Écarter ne résout rien et ne le prétend pas : c'est
-                      « j'ai vu », et la ligne reste lisible en dessous. */}
-                  {!n.lue && (
-                    <button
-                      type="button"
-                      onClick={() => ecarter.mutate(n.cle)}
-                      className="mt-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 hover:underline"
-                    >
-                      J&apos;ai vu
-                    </button>
-                  )}
+                  <div className="flex items-start gap-2.5">
+                    {/* `mt-1.5` aligne la pastille sur la premiere ligne du
+                        titre, et non sur le bloc : un titre qui passe sur
+                        deux lignes la laisserait flotter au milieu. */}
+                    <span
+                      aria-hidden
+                      className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+                        n.lue ? 'bg-slate-300' : TON[n.gravite].pastille
+                      }`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        to={n.lien}
+                        onClick={() => setOuvert(false)}
+                        className="block text-sm font-medium text-slate-900 hover:underline"
+                      >
+                        {n.titre}
+                      </Link>
+                      <p className="mt-0.5 text-xs text-slate-600">{n.detail}</p>
+                      {/* Écarter ne résout rien et ne le prétend pas : c'est
+                          « j'ai vu », et la ligne reste lisible en dessous. */}
+                      {!n.lue && (
+                        <button
+                          type="button"
+                          onClick={() => ecarter.mutate(n.cle)}
+                          className="mt-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 hover:underline"
+                        >
+                          J&apos;ai vu
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </li>
               ))}
             </ul>
