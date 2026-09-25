@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { plansApi, validitéEnHeures, type CreatePlanInput } from '../api/plans';
 import { hotspotTabsApi } from '../api/mikrotik-tabs';
 import { ChampDuree } from '../components/Edition';
+import { ChampOctets } from '../components/ChampOctets';
 import { useRouterSelection } from '../routers/RouterContext';
 import { useAuth } from '../auth/AuthContext';
 import { libellé, STATUT_SIMPLE } from '../api/libelles';
@@ -230,6 +231,67 @@ export function PlansPage() {
                 <option value="FIRST_AUTH">À la première connexion</option>
                 <option value="ASSIGNED">Dès l'attribution</option>
               </Select>
+            </FormField>
+            {/* **Quatre champs manquaient, et le serveur les acceptait deja.**
+                On ne pouvait pas creer une offre << 2 Go >> depuis la console :
+                la limite existait dans le modele et dans l'API, le formulaire
+                ne la demandait pas. C'est l'offre qui porte la limite -- un
+                ticket est une instance d'une offre, et deux tickets du meme
+                prix doivent valoir la meme chose. */}
+            <FormField label="Limite de données">
+              <ChampOctets
+                octets={form.transferLimitBytes}
+                onChange={(octets) => setForm({ ...form, transferLimitBytes: octets })}
+              />
+            </FormField>
+            <FormField label="Appareils simultanés">
+              <Input
+                type="number"
+                min={1}
+                max={100}
+                placeholder="sans limite"
+                value={form.maxSharedUsers ?? ''}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    maxSharedUsers: e.target.value ? Number(e.target.value) : undefined,
+                  })
+                }
+              />
+            </FormField>
+            <FormField label="Débit descendant (Mbit/s)">
+              <Input
+                type="number"
+                min={0}
+                step="0.1"
+                placeholder="sans limite"
+                value={form.rateLimitRxBps ? form.rateLimitRxBps / 1_000_000 : ''}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    rateLimitRxBps: e.target.value
+                      ? Math.round(Number(e.target.value) * 1_000_000)
+                      : undefined,
+                  })
+                }
+              />
+            </FormField>
+            <FormField label="Débit montant (Mbit/s)">
+              <Input
+                type="number"
+                min={0}
+                step="0.1"
+                placeholder="sans limite"
+                value={form.rateLimitTxBps ? form.rateLimitTxBps / 1_000_000 : ''}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    rateLimitTxBps: e.target.value
+                      ? Math.round(Number(e.target.value) * 1_000_000)
+                      : undefined,
+                  })
+                }
+              />
             </FormField>
             <div className="sm:col-span-2">
               {error && <p className="text-sm text-red-600">{error}</p>}
