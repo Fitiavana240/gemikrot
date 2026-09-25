@@ -58,6 +58,14 @@ export function normaliserHote(hote: string | undefined | null): string {
 
 export interface PublicTenantView {
   wifiName: string;
+  /**
+   * Le site ou se trouve ce client, quand sa page captive le nomme.
+   *
+   * Un exploitant peut tenir plusieurs routeurs -- plusieurs quartiers, un
+   * meme reseau. Sans cette ligne, le client ne sait pas a quel site il
+   * achete, et le vendeur qui recoit le paiement ne sait pas ou chercher.
+   */
+  site: string | null;
   logoUrl: string | null;
   currency: string;
   plans: {
@@ -147,13 +155,15 @@ export class PublicService {
    * la marque de l'exploitant, ses tarifs et l'adresse de sa page de
    * paiement -- rien qu'un passant du quartier ne puisse deja lire.
    */
-  async pageCaptive(slug: string): Promise<string> {
+  async pageCaptive(slug: string, routerPublicId?: string): Promise<string> {
     const tenant = await this.requireActiveTenant(slug);
     if (!this.pageConnexion) {
       throw new NotFoundException('Page de connexion indisponible sur ce serveur');
     }
     return this.tenantContext.runAsTenant(tenant.id, async () => {
-      const { contenu } = await this.pageConnexion!.apercu();
+      // L'identite passe telle quelle : c'est elle que la page gravera dans
+      // son lien d'achat, et elle revient au serveur au moment du paiement.
+      const { contenu } = await this.pageConnexion!.apercu(undefined, routerPublicId);
       return contenu;
     });
   }
@@ -272,8 +282,9 @@ export class PublicService {
    * de l'exploitant, ses domaines, son statut et ses puces désactivées n'ont
    * rien à faire dans une réponse publique.
    */
-  async getTenantView(slug: string): Promise<PublicTenantView> {
+  async getTenantView(slug: string, routerPublicId?: string): Promise<PublicTenantView> {
     const tenant = await this.requireActiveTenant(slug);
+    const routerId = await this.routeurDeLaPage(tenant.id, routerPublicId);
 
     return this.tenantContext.runAsTenant(tenant.id, async () => {
       const [plans, accounts] = await Promise.all([
@@ -299,6 +310,12 @@ export class PublicService {
 
       return {
         wifiName: tenant.wifiName,
+        site: routerId
+          ? ((await this.prisma.scopedStrict.router.findFirst({
+              where: { id: routerId },
+              select: { label: true },
+            })) ?? { label: null }).label
+          : null,
         logoUrl: tenant.logoUrl,
         currency: tenant.currency,
         supportWhatsapp: tenant.supportWhatsapp || null,
@@ -321,9 +338,19 @@ export class PublicService {
       phone: string;
       reference: string;
       holderName: string;
+      /**
+       * Le routeur ou se trouve le client, tel que sa page captive le nomme.
+       *
+       * Sans lui, la verification tire le ticket sur << le plus ancien
+       * routeur de l'exploitant >>. Sur un parc a un seul routeur cela ne se
+       * voit pas ; des qu'il y en a deux, le client paie sur le site B et
+       * recoit un code cree sur le site A, qui ne marche pas la ou il est.
+       */
+      routerPublicId?: string;
     },
   ): Promise<{ token: string; state: ClaimState; identifiant: string }> {
     const tenant = await this.requireActiveTenant(slug);
+    const routerId = await this.routeurDeLaPage(tenant.id, input.routerPublicId);
 
     const phone = normalizePhone(input.phone);
     const reference = normalizeReference(input.reference);
@@ -444,6 +471,7 @@ export class PublicService {
             currency: tenant.currency,
             method: account.provider,
             reference,
+            routerId,
             // `renewsVoucherId`, et non `voucherId` : celui-là est unique,
             // parce qu'un ticket ne se vend qu'une fois. Racheter du temps
             // n'est pas une seconde vente, et cela peut arriver tous les mois.
@@ -499,6 +527,7 @@ export class PublicService {
           currency: tenant.currency,
           method: account.provider,
           reference,
+          routerId,
           // Rattaché dès la déclaration : c'est ce ticket-là que la
           // vérification ouvrira, et non un tiré du stock. Sans ce lien, le
           // client recevrait un code aléatoire à la place de son nom.
@@ -564,6 +593,36 @@ export class PublicService {
       }
       return this.toView(claim);
     });
+  }
+
+  /**
+   * Le routeur ou se trouve ce client, d'apres sa page captive.
+   *
+   * **Silencieux sur un identifiant inconnu**, et c'est voulu : une page
+   * captive gravee sur un routeur peut survivre a la fiche qui l'a produite
+   * -- routeur remplace, base restauree. Refuser le paiement dans ce cas
+   * punirait le client pour une divergence dont il ne sait rien. Le paiement
+   * passe alors sans routeur, exactement comme avant que cette colonne
+   * existe, et la verification retombe sur le routeur par defaut.
+   *
+   * Cloisonne a la main : l'identite publique est unique sur tout le parc
+   * (elle doit resoudre avant qu'on sache a qui elle appartient), donc rien
+   * n'empeche d'y mettre celle d'un autre exploitant. Le `tenantId` du filtre
+   * est celui de l'adresse par laquelle le client est arrive.
+   */
+  private async routeurDeLaPage(
+    tenantId: string,
+    publicId?: string,
+  ): Promise<string | undefined> {
+    if (!publicId) return undefined;
+    // Hors cloisonnement : cette resolution a lieu avant tout contexte
+    // d'exploitant, pour un client qui n'est authentifie nulle part. Le
+    // `tenantId` ci-dessus la borne.
+    const routeur = await this.prisma.router.findFirst({
+      where: { publicId, tenantId },
+      select: { id: true },
+    });
+    return routeur?.id;
   }
 
   /**

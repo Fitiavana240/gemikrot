@@ -64,6 +64,8 @@ function service(options: {
    * sur le montage de labo, ou la console repond sur le reseau du routeur.
    */
   basePublique?: string;
+  /** L'identite publique du routeur, telle qu'elle part dans le lien d'achat. */
+  routeurPublicId?: string;
 }) {
   const mikrotik = {
     getHotspotServers: vi.fn(async () => options.serveurs ?? []),
@@ -101,6 +103,12 @@ function service(options: {
     scopedStrict: {
       plan: { findMany: vi.fn(async () => OFFRES) },
       mobileMoneyAccount: { count: vi.fn(async () => options.puces ?? 1) },
+      // L'identite publique du routeur : elle part dans le lien d'achat de la
+      // page, pour que le paiement sache de quel site vient le client.
+      router: {
+        findUnique: vi.fn(async () => ({ publicId: options.routeurPublicId ?? 'r-public-1' })),
+        findFirst: vi.fn(async () => ({ publicId: options.routeurPublicId ?? 'r-public-1' })),
+      },
     },
   };
 
@@ -262,7 +270,10 @@ describe('le bouton d’achat', () => {
     const { contenu } = await s.apercu();
 
     expect(contenu).toContain('class="payer"');
-    expect(contenu).toContain('href="http://10.0.0.2:5173/p/zone-wifi-tati"');
+    // Le lien porte l'identite du routeur : sans elle, un parc a deux sites
+    // vend depuis la meme adresse et le ticket se cree sur le mauvais.
+    // Vide ici : l'apercu se compose sans routeur choisi.
+    expect(contenu).toContain('href="http://10.0.0.2:5173/p/zone-wifi-tati?r="');
     expect(contenu).toContain('Payer maintenant');
   });
 
@@ -887,8 +898,10 @@ describe('le script de la page captive', () => {
     const { script, adresse } = await s.script('r1');
     const lignes = script.split('\n');
 
+    // `?r=` : le routeur demande **sa** page, et le lien d'achat qu'elle
+    // contient portera la meme identite jusqu'au paiement.
     expect(adresse).toBe(
-      'https://gemikrot.duckdns.org/api/public/zone-wifi-tati/page-captive',
+      'https://gemikrot.duckdns.org/api/public/zone-wifi-tati/page-captive?r=r-public-1',
     );
     expect(lignes).toContain(
       `/tool/fetch url="${adresse}" dst-path="hotspot/login.html"`,

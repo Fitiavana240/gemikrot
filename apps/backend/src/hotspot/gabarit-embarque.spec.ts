@@ -42,6 +42,17 @@ describe('le gabarit de la page captive', () => {
     expect(dockerfile).toMatch(/^COPY --from=build \/app\/hotspot \.\/hotspot$/m);
   });
 
+  it('grave l’identité du routeur dans le lien d’achat', () => {
+    // Sans elle, un exploitant à deux sites vend depuis la même adresse : le
+    // client paie au site B, et la vérification crée son ticket sur « le plus
+    // ancien routeur de l'exploitant », donc au site A. Son code ne marche
+    // pas là où il se trouve, et rien ne dit pourquoi — ni à lui, ni au
+    // vendeur. La panne est invisible tant qu'il n'y a qu'un routeur, c'est
+    //-à-dire pendant tout le développement.
+    const gabarit = readFileSync(GABARIT, 'utf8');
+    expect(gabarit).toMatch(/href="__PORTAIL__\/p\/__SLUG__\?r=__ROUTEUR__"/);
+  });
+
   it('ne porte aucun marqueur que le service ne remplace', () => {
     const service = readFileSync(SERVICE, 'utf8');
     const remplaces = marqueurs(

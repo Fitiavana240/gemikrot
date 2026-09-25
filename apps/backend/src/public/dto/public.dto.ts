@@ -1,8 +1,20 @@
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class ClaimPaymentDto {
   @IsString()
   planId!: string;
+
+  /**
+   * Le routeur ou se trouve le client, tel que sa page captive le nomme.
+   *
+   * Facultatif : une page captive posee avant cette version ne le porte pas,
+   * et refuser son paiement punirait le client pour une divergence dont il ne
+   * sait rien.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  routerPublicId?: string;
 
   /**
    * Le nom du client, qui deviendra son identifiant de connexion.

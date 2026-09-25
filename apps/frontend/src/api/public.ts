@@ -23,6 +23,16 @@ export interface PublicPaymentAccount {
 
 export interface PublicTenant {
   wifiName: string;
+  /**
+   * Le site d'ou vient le client, quand sa page captive le nomme.
+   *
+   * Un exploitant peut tenir plusieurs routeurs — plusieurs quartiers, un
+   * meme reseau. Sans cette ligne, le client ne sait pas a quel site il
+   * achete, et le vendeur qui recoit le paiement ne sait pas ou chercher.
+   *
+   * `null` pour une page captive posee avant que cette identite existe.
+   */
+  site: string | null;
   logoUrl: string | null;
   currency: string;
   plans: PublicPlan[];
@@ -87,7 +97,8 @@ export const publicApi = {
    * la console, et le cas le plus frequent.
    */
   resoudreHote: () => request<{ slug: string | null }>('/resolution/hote'),
-  tenant: (slug: string) => request<PublicTenant>(`/${slug}`),
+  tenant: (slug: string, routeur?: string) =>
+    request<PublicTenant>(`/${slug}${routeur ? `?r=${encodeURIComponent(routeur)}` : ''}`),
   claim: (
     slug: string,
     input: {
@@ -97,6 +108,15 @@ export const publicApi = {
       reference: string;
       /** Le nom du client : il deviendra son identifiant de connexion. */
       holderName: string;
+      /**
+       * Le routeur d'ou vient le client, tel que sa page captive le nomme.
+       *
+       * C'est lui qui decide **sur quel routeur le ticket sera cree**. Sans
+       * lui, la verification retombe sur le plus ancien routeur de
+       * l'exploitant : le client paie au site B et recoit un code qui ne
+       * marche qu'au site A.
+       */
+      routerPublicId?: string;
     },
   ) =>
     // `identifiant` est celui que le serveur a **réservé** : sur un rejeu, il

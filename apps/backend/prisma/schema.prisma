@@ -473,6 +473,21 @@ model AdminUser {
 
 model Router {
   id                   String    @id @default(uuid())
+  /// L'identite de ce routeur telle qu'elle sort de la base.
+  ///
+  /// **L'uuid ne doit pas sortir.** Il figurerait dans l'adresse gravee sur
+  /// la page captive de ce routeur, donc sur l'ecran de chaque client, donc
+  /// dans les journaux de tout ce qui passe entre les deux. Un identifiant
+  /// court tire au hasard dit la meme chose sans rien reveler de la base.
+  ///
+  /// Unique sur tout le parc, et non par exploitant : il sert a resoudre un
+  /// routeur **avant** de savoir a qui il appartient, puisqu'il arrive d'un
+  /// client qui n'est authentifie nulle part.
+  ///
+  /// Tire par defaut : cinq endroits creent un routeur -- l'enrolement, la
+  /// console, le seed et deux epreuves -- et un seul qui l'oublie ferait
+  /// echouer la creation sur une contrainte, la ou personne ne la cherche.
+  publicId             String    @unique @default(cuid()) @map("public_id")
   tenantId    String   @map("tenant_id")
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   label                String
@@ -516,6 +531,7 @@ model Router {
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 
+  payments             Payment[]
   voucherBatches       VoucherBatch[]
   userCache            UserCacheEntry[]
   sessionCache         SessionCacheEntry[]
@@ -811,6 +827,18 @@ model Payment {
   customer           Customer      @relation(fields: [tenantId, customerId], references: [tenantId, id])
   planId             String        @map("plan_id")
   plan               Plan          @relation(fields: [tenantId, planId], references: [tenantId, id])
+  /// Le routeur ou ce paiement a eu lieu.
+  ///
+  /// Toute la chaine commerciale ne portait que l'exploitant. Sur un parc a
+  /// un seul routeur cela ne se voit pas ; des qu'il y en a deux, un client
+  /// qui paie sur le site B recoit un ticket cree sur le site A -- le repli
+  /// etant << le plus ancien routeur de l'exploitant >>. Son code ne marche
+  /// alors pas la ou il se trouve, et rien n'explique pourquoi.
+  ///
+  /// Nullable : les paiements deja enregistres n'en portent pas, et leur en
+  /// inventer un serait mentir sur une vente passee.
+  routerId           String?       @map("router_id")
+  router             Router?       @relation(fields: [tenantId, routerId], references: [tenantId, id], onDelete: Restrict)
   amount             Decimal       @db.Decimal(12, 2)
   /// Devise au moment du paiement, figée même si l'exploitant en change.
   currency           String

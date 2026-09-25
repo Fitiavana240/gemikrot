@@ -19,6 +19,8 @@
     __BLOC_LOGO__          le logo, ou rien
     __PORTAIL__            l'adresse de la page de paiement, sans barre finale
     __SLUG__               l'identifiant public de l'exploitant
+    __ROUTEUR__            l'identifiant public de CE routeur, pour que la
+                           page de paiement sache d'ou vient le client
     __BLOC_TARIFS__        le tableau des tarifs, calcule depuis les offres
     __BLOC_PIED__          adresse, telephones, page Facebook
 
@@ -243,7 +245,7 @@
       -->
       <div class="ou">ou</div>
 
-      <a class="payer" href="__PORTAIL__/p/__SLUG__">__LIBELLE_ACHAT__</a>
+      <a class="payer" href="__PORTAIL__/p/__SLUG__?r=__ROUTEUR__">__LIBELLE_ACHAT__</a>
       <p class="payer-aide">__AIDE_ACHAT__</p>
 
       __BLOC_TARIFS__

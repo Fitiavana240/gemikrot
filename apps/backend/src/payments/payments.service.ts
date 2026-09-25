@@ -132,10 +132,17 @@ export class PaymentsService {
     // ligne crée le sien, au nom du client et avec sa référence pour mot de
     // passe. Tirer alors un ticket du stock rendrait un code aléatoire à la
     // place du nom, et laisserait le ticket réservé orphelin.
+    // **Sur le routeur où le client a payé.** Sans cet argument, le repli est
+    // « le plus ancien routeur de l'exploitant » : sur un parc à deux sites,
+    // un client qui paie au site B reçoit un code créé au site A, qui ne
+    // marche pas là où il se trouve — et rien ne dit pourquoi.
+    //
+    // `?? undefined` : un paiement d'avant cette colonne n'en porte pas, et
+    // le repli d'alors reste exact pour un parc à un seul routeur.
     const voucher = payment.voucherId
       ? await this.vouchers.findOne(payment.voucherId)
       : ((await this.vouchers.findAvailableForPlan(payment.planId)) ??
-        (await this.vouchers.generateSingle(payment.planId)));
+        (await this.vouchers.generateSingle(payment.planId, payment.routerId ?? undefined)));
 
     const activated = await this.vouchers.activate(voucher.id, {
       customerId: payment.customerId,

@@ -361,7 +361,17 @@ export class PageConnexionService {
    * routeur, et **plus personne ne se connecte** — ni les clients déjà
    * payants, ni ceux qui viennent d'acheter.
    */
-  async apercu(remplace?: Partial<ReglagesPageConnexion>): Promise<{
+  async apercu(
+    remplace?: Partial<ReglagesPageConnexion>,
+    /**
+     * L'identite publique du routeur dont on compose la page.
+     *
+     * Elle part dans le lien d'achat, pour que la page de paiement sache d'ou
+     * vient le client. Absente -- un apercu a l'ecran, sans routeur choisi --
+     * le lien reste celui de l'exploitant, comme avant.
+     */
+    routeurPublicId?: string,
+  ): Promise<{
     contenu: string;
     octets: number;
   }> {
@@ -437,7 +447,8 @@ export class PageConnexionService {
       .replaceAll('__BLOC_PIED__', blocPied(r))
       .replaceAll('__LIEU__', echapper(r.piedDePage))
       .replaceAll('__PORTAIL__', echapper(portail))
-      .replaceAll('__SLUG__', echapper(tenant.slug));
+      .replaceAll('__SLUG__', echapper(tenant.slug))
+      .replaceAll('__ROUTEUR__', echapper(routeurPublicId ?? ''));
 
     return { contenu, octets: contenu.length };
   }
@@ -908,7 +919,19 @@ export class PageConnexionService {
     }
 
     const hote = hoteDe(base);
-    const pageUrl = `${base}/api/public/${tenant.slug}/page-captive`;
+    // Le routeur demande **sa** page : le lien d'achat qu'elle contient
+    // portera son identite, et la page de paiement saura d'ou vient le
+    // client. Sans cela, un parc a deux sites vend depuis la meme adresse et
+    // le ticket se cree sur le mauvais routeur.
+    const routeur = routerId
+      ? await this.prisma.scopedStrict.router.findUnique({
+          where: { id: routerId },
+          select: { publicId: true },
+        })
+      : await this.prisma.scopedStrict.router.findFirst({ orderBy: { createdAt: 'asc' } });
+    const pageUrl =
+      `${base}/api/public/${tenant.slug}/page-captive` +
+      (routeur?.publicId ? `?r=${routeur.publicId}` : '');
 
     const lignes = [
       '# ============================================================',
@@ -963,7 +986,18 @@ export class PageConnexionService {
       throw new BadRequestException(etat.empechements.join(' '));
     }
 
-    const { contenu, octets } = await this.apercu();
+    // La page porte l'identite du routeur sur lequel on l'ecrit : c'est elle
+    // qui dira a la page de paiement d'ou vient le client.
+    const publicId = routerId
+      ? (
+          await this.prisma.scopedStrict.router.findUnique({
+            where: { id: routerId },
+            select: { publicId: true },
+          })
+        )?.publicId
+      : (await this.prisma.scopedStrict.router.findFirst({ orderBy: { createdAt: 'asc' } }))
+          ?.publicId;
+    const { contenu, octets } = await this.apercu(undefined, publicId);
     const mikrotik = routerId
       ? await this.clients.forRouter(routerId)
       : await this.clients.forDefaultRouter();

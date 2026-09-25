@@ -62,8 +62,11 @@ export class PublicController {
       },
     ]),
   )
-  getTenant(@Param('slug') slug: string) {
-    return this.publicService.getTenantView(slug);
+  getTenant(@Param('slug') slug: string, @Query('r') routeur?: string) {
+    // `?r=` et non un segment de plus : l'adresse est gravee dans la page
+    // captive de chaque routeur, et une page posee avant cette version
+    // continue de repondre sans lui.
+    return this.publicService.getTenantView(slug, routeur);
   }
 
   /**
@@ -89,8 +92,8 @@ export class PublicController {
       },
     ]),
   )
-  pageCaptive(@Param('slug') slug: string) {
-    return this.publicService.pageCaptive(slug);
+  pageCaptive(@Param('slug') slug: string, @Query('r') routeur?: string) {
+    return this.publicService.pageCaptive(slug, routeur);
   }
 
   @Post(':slug/claim')

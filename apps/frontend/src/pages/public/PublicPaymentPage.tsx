@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   publicApi,
@@ -26,6 +26,15 @@ const TOKEN_KEY = 'gemikrot_claim_token';
 
 export function PublicPaymentPage() {
   const { slug = '' } = useParams();
+  /**
+   * Le routeur d'ou vient le client, grave dans le lien de sa page captive.
+   *
+   * Il decide **sur quel routeur son ticket sera cree**. Absent -- lien tape
+   * a la main, page captive posee avant que cette identite existe -- tout se
+   * passe comme avant : la verification retombe sur le routeur par defaut,
+   * ce qui reste exact pour un exploitant a un seul site.
+   */
+  const routeur = useSearchParams()[0].get('r') ?? undefined;
 
   /**
    * La page du client reste claire, quel que soit le reglage de son telephone.
@@ -66,8 +75,8 @@ export function PublicPaymentPage() {
   const [error, setError] = useState<string | null>(null);
 
   const tenant = useQuery({
-    queryKey: ['public-tenant', slug],
-    queryFn: () => publicApi.tenant(slug),
+    queryKey: ['public-tenant', slug, routeur],
+    queryFn: () => publicApi.tenant(slug, routeur),
     retry: false,
   });
 
@@ -125,6 +134,7 @@ export function PublicPaymentPage() {
       lang={lang}
       onLang={setLang}
       wifiName={data.wifiName}
+      site={data.site}
       logoUrl={data.logoUrl}
       whatsapp={data.supportWhatsapp}
       footer={
@@ -162,6 +172,7 @@ export function PublicPaymentPage() {
       {step === 'paiement' && plan && (
         <PaymentStep
           slug={slug}
+          routeur={routeur}
           lang={lang}
           plan={plan}
           money={money}
@@ -208,6 +219,7 @@ function Shell({
   lang,
   onLang,
   wifiName,
+  site,
   logoUrl,
   children,
   footer,
@@ -216,6 +228,8 @@ function Shell({
   lang: Lang;
   onLang: (lang: Lang) => void;
   wifiName?: string;
+  /** Le site d'ou vient le client. Absent, rien ne s'affiche. */
+  site?: string | null;
   logoUrl?: string | null;
   children: React.ReactNode;
   footer?: React.ReactNode;
@@ -233,8 +247,15 @@ function Shell({
             ) : (
               <BrandMark className="h-9 w-9" />
             )}
-            <div className="text-lg font-semibold tracking-tight text-slate-900">
-              {wifiName ?? 'GeMikrot'}
+            <div>
+              <div className="text-lg font-semibold tracking-tight text-slate-900">
+                {wifiName ?? 'GeMikrot'}
+              </div>
+              {/* Le site, sous la marque. Un exploitant peut tenir plusieurs
+                  quartiers sous un meme reseau : le client doit savoir auquel
+                  il achete, et le vendeur qui recoit le paiement doit savoir
+                  ou chercher. */}
+              {site && <div className="text-xs text-slate-500">{site}</div>}
             </div>
           </div>
 
@@ -343,6 +364,7 @@ function OffersStep({
 
 function PaymentStep({
   slug,
+  routeur,
   lang,
   plan,
   money,
@@ -354,6 +376,8 @@ function PaymentStep({
   onError,
 }: {
   slug: string;
+  /** Le routeur d'ou vient le client : il decide ou le ticket sera cree. */
+  routeur?: string;
   lang: Lang;
   plan: PublicPlan;
   money: Intl.NumberFormat;
@@ -383,6 +407,7 @@ function PaymentStep({
         phone,
         reference,
         holderName,
+        routerPublicId: routeur,
       }),
     onSuccess: (result) => onClaimed(result.token),
     onError: (err) =>
