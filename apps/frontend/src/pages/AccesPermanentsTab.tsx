@@ -1,9 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { hotspotTabsApi, type IpBinding } from '../api/mikrotik-tabs';
 import { devicesApi, type Device } from '../api/devices';
+import { ApiError } from '../api/client';
 import { useRouterSelection } from '../routers/RouterContext';
 import { PanneDuRouteur } from '../components/ListeDuRouteur';
-import { Badge, Card, Table, TableSkeleton } from '../components/ui';
+import { Badge, Button, Card, Table, TableSkeleton } from '../components/ui';
 
 /**
  * Ce qu'un `ip-binding` fait vraiment, et pourquoi il mérite son écran.
@@ -28,8 +30,78 @@ function clé(mac: string): string {
   return mac.trim().toUpperCase();
 }
 
+/**
+ * Mbit/s à l'écran, bits par seconde sur le fil.
+ *
+ * L'exploitant pense en mégabits ; RouterOS et la console comptent en bits.
+ * Convertir ici, une fois, plutôt que de laisser deux unités circuler dans le
+ * produit — elles finissent toujours par se croiser.
+ */
+function enBits(mbits: string): number | undefined {
+  const n = Number(mbits.replace(',', '.'));
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 1_000_000) : undefined;
+}
+
 export function AccesPermanentsTab() {
   const { currentId } = useRouterSelection();
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState({
+    macAddress: '',
+    address: '',
+    comment: '',
+    montant: '',
+    descendant: '',
+  });
+  const [compteRendu, setCompteRendu] = useState<string | null>(null);
+  const [erreur, setErreur] = useState<string | null>(null);
+
+  const rafraichir = () => {
+    queryClient.invalidateQueries({ queryKey: ['ip-bindings'] });
+    queryClient.invalidateQueries({ queryKey: ['queues'] });
+  };
+
+  const creer = useMutation({
+    mutationFn: () =>
+      hotspotTabsApi.creerContournement(
+        {
+          macAddress: form.macAddress.trim(),
+          type: 'bypassed',
+          address: form.address.trim() || undefined,
+          comment: form.comment.trim() || undefined,
+          limiteMontanteBps: enBits(form.montant),
+          limiteDescendanteBps: enBits(form.descendant),
+        },
+        currentId,
+      ),
+    onSuccess: (r) => {
+      setErreur(null);
+      setCompteRendu(
+        r.file
+          ? `${form.macAddress} passe sans ticket, limité par la file « ${r.file.name} ».`
+          : `${form.macAddress} passe sans ticket, sans limite de débit.`,
+      );
+      setForm({ macAddress: '', address: '', comment: '', montant: '', descendant: '' });
+      rafraichir();
+    },
+    onError: (e) =>
+      setErreur(e instanceof ApiError ? e.message : 'Le routeur a refusé.'),
+  });
+
+  const supprimer = useMutation({
+    mutationFn: (id: string) => hotspotTabsApi.supprimerContournement(id, currentId),
+    onSuccess: (r) => {
+      setErreur(null);
+      setCompteRendu(
+        r.fileRetiree
+          ? `Contournement retiré, ainsi que sa file « ${r.fileRetiree} ».`
+          : 'Contournement retiré.',
+      );
+      rafraichir();
+    },
+    onError: (e) =>
+      setErreur(e instanceof ApiError ? e.message : 'Le routeur a refusé.'),
+  });
+
   const requête = useQuery({
     queryKey: ['ip-bindings', currentId],
     queryFn: () => hotspotTabsApi.ipBindings(currentId),
@@ -67,6 +139,81 @@ export function AccesPermanentsTab() {
         aussi un accès qui ne s&apos;arrête jamais tout seul.
       </p>
 
+      {/* Le débit se règle ici, au même geste, et c'est le point : un appareil
+          contourné n'a pas de profil, donc aucune des limites qu'un profil
+          porte. Revenir la poser plus tard suppose de savoir qu'elle manque —
+          et rien ne le dit, l'appareil marche très bien. */}
+      <Card title="Faire passer un appareil sans ticket">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="text-xs font-medium text-slate-600">
+            Adresse MAC
+            <input
+              value={form.macAddress}
+              onChange={(e) => setForm({ ...form, macAddress: e.target.value })}
+              placeholder="AA:BB:CC:DD:EE:FF"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
+            />
+          </label>
+          <label className="text-xs font-medium text-slate-600">
+            Adresse fixe <span className="font-normal text-slate-400">(exigée pour limiter)</span>
+            <input
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              placeholder="192.168.88.50"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
+            />
+          </label>
+          <label className="text-xs font-medium text-slate-600">
+            Description
+            <input
+              value={form.comment}
+              onChange={(e) => setForm({ ...form, comment: e.target.value })}
+              placeholder="Caisse, télévision, gérant…"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="text-xs font-medium text-slate-600">
+            Débit descendant <span className="font-normal text-slate-400">Mbit/s</span>
+            <input
+              value={form.descendant}
+              onChange={(e) => setForm({ ...form, descendant: e.target.value })}
+              placeholder="4"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="text-xs font-medium text-slate-600">
+            Débit montant <span className="font-normal text-slate-400">Mbit/s</span>
+            <input
+              value={form.montant}
+              onChange={(e) => setForm({ ...form, montant: e.target.value })}
+              placeholder="1"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </label>
+          <div className="flex items-end">
+            <Button
+              disabled={!form.macAddress.trim() || creer.isPending}
+              onClick={() => creer.mutate()}
+            >
+              {creer.isPending ? 'Écriture sur le routeur…' : 'Faire passer cet appareil'}
+            </Button>
+          </div>
+        </div>
+        <p className="mt-3 max-w-3xl text-xs text-slate-500">
+          Laissez les deux débits vides pour un accès sans limite. Les deux vont ensemble :
+          RouterOS ne connaît qu&apos;un seul réglage à deux membres, qu&apos;il remplace en
+          entier — n&apos;en donner qu&apos;un effacerait l&apos;autre.
+        </p>
+        {compteRendu && (
+          <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            {compteRendu}
+          </p>
+        )}
+        {erreur && (
+          <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-900">{erreur}</p>
+        )}
+      </Card>
+
       {requête.isPending ? (
         <Card>
           <TableSkeleton columns={4} />
@@ -94,7 +241,7 @@ export function AccesPermanentsTab() {
                 Aucun appareil ne contourne le portail. Tout le monde passe par un ticket.
               </p>
             ) : (
-              <Table head={['Appareil', 'Ce qui le décrit', 'Suivi par la console', 'Serveur']}>
+              <Table head={['Appareil', 'Ce qui le décrit', 'Suivi par la console', 'Serveur', '']}>
                 {contournements.map(({ binding, appareil }) => (
                   <tr key={binding.id}>
                     <td className="px-3 py-2 font-mono text-xs font-medium">
@@ -121,6 +268,18 @@ export function AccesPermanentsTab() {
                       )}
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-500">{binding.server ?? '—'}</td>
+                    <td className="px-3 py-2 text-right">
+                      {/* Retire aussi la file d'attente. Sans cela elle
+                          survit à l'appareil et vise une adresse que le
+                          prochain bail DHCP donnera à quelqu'un d'autre. */}
+                      <Button
+                        variant="secondary"
+                        disabled={supprimer.isPending}
+                        onClick={() => supprimer.mutate(binding.id)}
+                      >
+                        Retirer
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </Table>

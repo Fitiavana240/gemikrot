@@ -15,6 +15,7 @@ import {
   createHotspotProfileSchema,
   createHotspotUserSchema,
   createIpBindingSchema,
+  createSimpleQueueSchema,
   createLimitationSchema,
   createWalledGardenEntrySchema,
   createWalledGardenIpEntrySchema,
@@ -31,6 +32,7 @@ import {
   updateHotspotUserSchema,
   updateLimitationSchema,
   updateProfileSchema,
+  updateSimpleQueueSchema,
   updateUserManagerUserSchema,
   usernameParamSchema,
   createPppSecretSchema,
@@ -42,6 +44,8 @@ import {
   CreateHotspotProfileDto,
   CreateHotspotUserDto,
   CreateIpBindingDto,
+  CreateSimpleQueueDto,
+  UpdateSimpleQueueDto,
   CreateLimitationDto,
   CreateProfileDto,
   CreateUserManagerUserDto,
@@ -1158,6 +1162,91 @@ export class RouterOSMikrotikService implements IMikrotikService {
   async getSimpleQueues() {
     const raw = await this.client.get<any[]>('/queue/simple');
     return raw.map(ToolsMapper.mapSimpleQueue);
+  }
+
+  /**
+   * Poser une file d'attente — le seul moyen de limiter un appareil contourné.
+   *
+   * Un appareil en `bypassed` ne se connecte jamais : il n'a ni compte ni
+   * profil HotSpot, donc aucune des limites que porte un profil. Sans file,
+   * il prend tout ce qu'il peut. Et c'est justement l'appareil qu'on
+   * contourne parce qu'il compte — la caisse, la télévision, le téléphone du
+   * gérant : celui dont on remarquerait le moins vite qu'il sature la ligne.
+   */
+  async createSimpleQueue(input: CreateSimpleQueueDto) {
+    const data = validate(createSimpleQueueSchema, input);
+
+    const existing = await this.getSimpleQueues();
+    const duplicate = existing.find((q) => q.name === data.name);
+    if (duplicate) {
+      throw new MikrotikConflictError(`Une file nommée « ${data.name} » existe déjà`, {
+        name: data.name,
+        queueId: duplicate.id,
+      });
+    }
+
+    this.logger.info("Création d'une file d'attente", {
+      name: data.name,
+      target: data.target,
+    });
+    const raw = await this.client.put<any>('/queue/simple', {
+      name: data.name,
+      target: data.target,
+      'max-limit': `${data.maxLimitUpload}/${data.maxLimitDownload}`,
+      comment: data.comment,
+      disabled: data.disabled,
+    });
+    return ToolsMapper.mapSimpleQueue(raw);
+  }
+
+  /**
+   * Modifier une file — jamais une file dynamique.
+   *
+   * Le HotSpot crée les siennes à l'ouverture de chaque session et les
+   * détruit à la déconnexion. Les modifier tient quelques minutes, puis le
+   * réglage disparaît : l'exploitant voit son changement pris, revient le
+   * lendemain, et conclut que la console ne retient rien.
+   */
+  async updateSimpleQueue(id: string, input: UpdateSimpleQueueDto) {
+    const data = validate(updateSimpleQueueSchema, input);
+
+    const existing = (await this.getSimpleQueues()).find((q) => q.id === id);
+    if (existing?.dynamic) {
+      throw new MikrotikConflictError(
+        `La file « ${existing.name} » est créée par le HotSpot à chaque session : ` +
+          `la modifier ne tiendrait pas. Réglez plutôt le profil du client.`,
+        { queueId: id, name: existing.name },
+      );
+    }
+
+    this.logger.info("Modification d'une file d'attente", { queueId: id });
+    const raw = await this.client.patch<any>(`/queue/simple/${encodeURIComponent(id)}`, {
+      name: data.name,
+      target: data.target,
+      // Les deux membres ensemble, ou aucun : `max-limit` est un seul champ
+      // que RouterOS remplace en entier. Le schéma l'exige déjà ; ceci
+      // garantit qu'on ne l'envoie pas à moitié construit.
+      'max-limit':
+        data.maxLimitUpload !== undefined && data.maxLimitDownload !== undefined
+          ? `${data.maxLimitUpload}/${data.maxLimitDownload}`
+          : undefined,
+      comment: data.comment,
+      disabled: data.disabled,
+    });
+    return ToolsMapper.mapSimpleQueue(raw);
+  }
+
+  async deleteSimpleQueue(id: string) {
+    const existing = (await this.getSimpleQueues()).find((q) => q.id === id);
+    if (existing?.dynamic) {
+      throw new MikrotikConflictError(
+        `La file « ${existing.name} » appartient à une session HotSpot en cours : ` +
+          `elle disparaîtra d'elle-même à la déconnexion.`,
+        { queueId: id, name: existing.name },
+      );
+    }
+    this.logger.info("Suppression d'une file d'attente", { queueId: id });
+    await this.client.delete(`/queue/simple/${encodeURIComponent(id)}`);
   }
 
   /**

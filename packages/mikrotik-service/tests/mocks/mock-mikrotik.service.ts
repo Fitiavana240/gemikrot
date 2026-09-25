@@ -36,6 +36,8 @@ import {
   CreateHotspotProfileDto,
   CreateHotspotUserDto,
   CreateIpBindingDto,
+  CreateSimpleQueueDto,
+  UpdateSimpleQueueDto,
   CreateLimitationDto,
   CreateProfileDto,
   CreateUserManagerUserDto,
@@ -854,8 +856,49 @@ export class MockMikrotikService implements IMikrotikService {
   // Vides : aucun test existant n'en depend, et un simulacre qui invente des
   // lignes ferait passer pour verifie ce qui ne l'est pas.
 
+  private queues: SimpleQueueDto[] = [];
+
   async getSimpleQueues(): Promise<SimpleQueueDto[]> {
-    return [];
+    return this.queues;
+  }
+
+  async createSimpleQueue(input: CreateSimpleQueueDto): Promise<SimpleQueueDto> {
+    const paire = (montant: number, descendant: number) => ({ montant, descendant });
+    const queue: SimpleQueueDto = {
+      id: `*${this.queues.length + 1}`,
+      name: input.name,
+      target: input.target,
+      maxLimit: paire(input.maxLimitUpload, input.maxLimitDownload),
+      limitAt: paire(0, 0),
+      rate: paire(0, 0),
+      bytes: paire(0, 0),
+      dropped: paire(0, 0),
+      dynamic: false,
+      disabled: input.disabled ?? false,
+      comment: input.comment ?? null,
+    };
+    this.queues.push(queue);
+    return queue;
+  }
+
+  async updateSimpleQueue(id: string, input: UpdateSimpleQueueDto): Promise<SimpleQueueDto> {
+    const queue = this.queues.find((q) => q.id === id);
+    if (!queue) throw new Error(`File ${id} introuvable`);
+    if (input.name !== undefined) queue.name = input.name;
+    if (input.target !== undefined) queue.target = input.target;
+    if (input.maxLimitUpload !== undefined && input.maxLimitDownload !== undefined) {
+      queue.maxLimit = {
+        montant: input.maxLimitUpload,
+        descendant: input.maxLimitDownload,
+      };
+    }
+    if (input.comment !== undefined) queue.comment = input.comment;
+    if (input.disabled !== undefined) queue.disabled = input.disabled;
+    return queue;
+  }
+
+  async deleteSimpleQueue(id: string): Promise<void> {
+    this.queues = this.queues.filter((q) => q.id !== id);
   }
 
   async getRouterLog(): Promise<RouterLogEntryDto[]> {

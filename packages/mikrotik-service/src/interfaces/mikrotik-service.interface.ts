@@ -35,6 +35,8 @@ import {
   CreateHotspotProfileDto,
   CreateHotspotUserDto,
   CreateIpBindingDto,
+  CreateSimpleQueueDto,
+  UpdateSimpleQueueDto,
   CreateLimitationDto,
   CreateProfileDto,
   CreateUserManagerUserDto,
@@ -292,6 +294,10 @@ export interface IMikrotikService {
 
   /** Files simples : c'est la que vit le debit reellement alloue a un client. */
   getSimpleQueues(): Promise<SimpleQueueDto[]>;
+  /** La seule limite possible sur un appareil contourne : il n'a pas de profil. */
+  createSimpleQueue(input: CreateSimpleQueueDto): Promise<SimpleQueueDto>;
+  updateSimpleQueue(id: string, input: UpdateSimpleQueueDto): Promise<SimpleQueueDto>;
+  deleteSimpleQueue(id: string): Promise<void>;
   /** Journal du routeur, du plus recent au plus ancien. */
   getRouterLog(limit?: number): Promise<RouterLogEntryDto[]>;
 

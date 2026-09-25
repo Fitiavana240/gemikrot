@@ -1,5 +1,5 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import type { IMikrotikService } from '@wifitati/mikrotik-service';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import type { IMikrotikService, IpBindingType } from '@wifitati/mikrotik-service';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
@@ -7,6 +7,7 @@ import { parseRouterTime } from '../routers/router-time.util.js';
 import { RouterAccessService } from '../routers/router-access.service.js';
 import type {
   CreateHotspotUserDto,
+  CreateIpBindingDto,
   CreateWalledGardenDto,
   CreateWalledGardenIpDto,
   UpdateHotspotUserDto,
@@ -85,6 +86,127 @@ export class HotspotService {
   async ipBindings(routerId?: string) {
     const mikrotik = await this.client(routerId);
     return mikrotik.getIpBindings();
+  }
+
+  /**
+   * Faire passer un appareil sans qu'il se connecte, et lui poser une limite.
+   *
+   * **Les deux ensemble, et c'est le point.** Un appareil contourné ne se
+   * connecte jamais : il n'a ni compte, ni profil HotSpot, donc aucune des
+   * limites que porte un profil. Sans file d'attente, il prend tout ce qu'il
+   * peut — et c'est justement l'appareil qu'on contourne parce qu'il compte :
+   * la caisse, la télévision, le téléphone du gérant. Celui dont on
+   * remarquerait le moins vite qu'il sature la ligne.
+   *
+   * La limite est facultative : un appareil de service n'en a pas besoin. Mais
+   * elle se pose ici, au même geste, parce que revenir la poser plus tard
+   * suppose de savoir qu'elle manque — et rien ne le dit.
+   *
+   * **La file vise l'adresse, pas la MAC** : `/queue/simple` ne connaît que
+   * les adresses. Une limite n'est donc possible que si l'appareil a une
+   * adresse fixe — d'où le refus explicite plutôt qu'une file posée sur du
+   * vide, qui ne limiterait rien sans que rien ne le signale.
+   */
+  async creerContournement(
+    dto: CreateIpBindingDto & {
+      limiteMontanteBps?: number;
+      limiteDescendanteBps?: number;
+    },
+    adminUserId?: string,
+    routerId?: string,
+  ) {
+    const { limiteMontanteBps, limiteDescendanteBps, ...binding } = dto;
+    const avecLimite = limiteMontanteBps !== undefined && limiteDescendanteBps !== undefined;
+    if (avecLimite && !binding.address) {
+      throw new BadRequestException(
+        "Une limite de débit exige une adresse fixe pour cet appareil : les files d'attente " +
+          'de RouterOS visent une adresse, pas une MAC. Renseignez l’adresse, ou laissez la ' +
+          'limite vide.',
+      );
+    }
+
+    const mikrotik = await this.client(routerId);
+    const pose = await mikrotik.createIpBinding(binding);
+
+    let file = null;
+    if (avecLimite) {
+      // Après le contournement, jamais avant : une file posée sur un
+      // contournement qui échoue limiterait un appareil qui, lui, resterait
+      // derrière le portail. Personne ne verrait le rapport.
+      file = await mikrotik.createSimpleQueue({
+        name: `GeMikrot ${binding.macAddress}`,
+        target: binding.address!,
+        maxLimitUpload: limiteMontanteBps!,
+        maxLimitDownload: limiteDescendanteBps!,
+        comment: binding.comment ?? 'Contournement GeMikrot',
+      });
+    }
+
+    await this.audit.log({
+      adminUserId,
+      routerId,
+      action: 'CREATE_IP_BINDING',
+      targetType: 'IpBinding',
+      targetId: binding.macAddress,
+      payloadDiff: {
+        type: binding.type,
+        address: binding.address ?? null,
+        comment: binding.comment ?? null,
+        limiteMontanteBps: limiteMontanteBps ?? null,
+        limiteDescendanteBps: limiteDescendanteBps ?? null,
+      },
+    });
+    return { binding: pose, file };
+  }
+
+  /** Passer un appareil de `regular` à `bypassed`, ou l'inverse. */
+  async changerTypeContournement(
+    id: string,
+    type: IpBindingType,
+    adminUserId?: string,
+    routerId?: string,
+  ) {
+    const mikrotik = await this.client(routerId);
+    const binding = await mikrotik.setIpBindingType(id, type);
+    await this.audit.log({
+      adminUserId,
+      routerId,
+      action: 'UPDATE_IP_BINDING',
+      targetType: 'IpBinding',
+      targetId: binding.macAddress || id,
+      payloadDiff: { type },
+    });
+    return binding;
+  }
+
+  /**
+   * Retirer un contournement, et la file qui l'accompagnait.
+   *
+   * Sans cela la file survit à l'appareil : elle vise une adresse que le
+   * prochain bail DHCP donnera à quelqu'un d'autre, qui héritera d'une limite
+   * que personne n'a voulue pour lui.
+   */
+  async supprimerContournement(id: string, adminUserId?: string, routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    const binding = (await mikrotik.getIpBindings()).find((b) => b.id === id);
+    if (!binding) throw new NotFoundException(`Contournement ${id} introuvable`);
+
+    await mikrotik.deleteIpBinding(id);
+
+    const file = (await mikrotik.getSimpleQueues()).find(
+      (q) => !q.dynamic && q.name === `GeMikrot ${binding.macAddress}`,
+    );
+    if (file) await mikrotik.deleteSimpleQueue(file.id);
+
+    await this.audit.log({
+      adminUserId,
+      routerId,
+      action: 'DELETE_IP_BINDING',
+      targetType: 'IpBinding',
+      targetId: binding.macAddress || id,
+      payloadDiff: { fileRetiree: file?.name ?? null },
+    });
+    return { fileRetiree: file?.name ?? null };
   }
 
   /** Les baux DHCP, pour rapprocher une adresse d'un nom d'appareil. */

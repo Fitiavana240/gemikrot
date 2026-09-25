@@ -236,3 +236,66 @@ export class UpdateHotspotProfileDto {
   @Min(0)
   macCookieTimeoutSeconds?: number | null;
 }
+
+/**
+ * Un contournement du portail, et la limite qui l'accompagne.
+ *
+ * **Les deux au même geste.** Un appareil contourné ne se connecte jamais :
+ * il n'a ni compte ni profil HotSpot, donc aucune des limites que porte un
+ * profil. Revenir poser la limite plus tard suppose de savoir qu'elle manque,
+ * et rien ne le dit — l'appareil marche très bien, il prend simplement toute
+ * la ligne.
+ */
+export class CreateIpBindingDto {
+  /** `AA:BB:CC:DD:EE:FF`, séparateurs deux-points ou tirets. */
+  @IsString()
+  @Matches(/^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/, {
+    message: 'Adresse MAC invalide (AA:BB:CC:DD:EE:FF)',
+  })
+  macAddress!: string;
+
+  @IsIn(['regular', 'bypassed', 'blocked'])
+  type!: 'regular' | 'bypassed' | 'blocked';
+
+  /**
+   * L'adresse fixe de cet appareil. Facultative pour contourner, **exigée
+   * pour limiter** : les files de RouterOS visent une adresse, pas une MAC.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  address?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  server?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  comment?: string;
+
+  /**
+   * Ce que l'appareil envoie, en bits par seconde.
+   *
+   * Les deux sens vont ensemble : `max-limit` est un seul champ à deux
+   * membres que RouterOS remplace en entier. N'en donner qu'un effacerait
+   * l'autre, et une limite descendante effacée ne se voit pas.
+   */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  limiteMontanteBps?: number;
+
+  /** Ce que l'appareil reçoit — le chiffre perçu comme « le débit ». */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  limiteDescendanteBps?: number;
+}
+
+export class ChangerTypeContournementDto {
+  @IsIn(['regular', 'bypassed', 'blocked'])
+  type!: 'regular' | 'bypassed' | 'blocked';
+}

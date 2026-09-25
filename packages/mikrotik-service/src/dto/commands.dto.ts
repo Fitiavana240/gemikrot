@@ -249,3 +249,26 @@ export interface UpdatePppSecretDto {
   remoteAddress?: string;
   comment?: string;
 }
+
+/**
+ * Une file d'attente simple — le seul moyen de limiter le débit d'un appareil
+ * **contourné**.
+ *
+ * Un appareil en `bypassed` ne se connecte jamais : il n'a ni compte, ni
+ * profil HotSpot, donc aucune des limites que porte un profil. Sans file, il
+ * prend tout ce qu'il peut — et c'est précisément l'appareil qu'on contourne
+ * parce qu'il compte : la caisse, la télévision, le téléphone du gérant.
+ */
+export interface CreateSimpleQueueDto {
+  name: string;
+  /** Adresse, plage ou interface à laquelle la file s'applique. */
+  target: string;
+  /** Ce que le client envoie, en bits par seconde. */
+  maxLimitUpload: number;
+  /** Ce que le client reçoit, en bits par seconde. */
+  maxLimitDownload: number;
+  comment?: string;
+  disabled?: boolean;
+}
+
+export type UpdateSimpleQueueDto = Partial<CreateSimpleQueueDto>;

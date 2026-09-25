@@ -19,7 +19,9 @@ import type { AuthenticatedUser } from '../auth/jwt.strategy.js';
 import { HotspotService } from './hotspot.service.js';
 import { PageConnexionService } from './page-connexion.service.js';
 import {
+  ChangerTypeContournementDto,
   CreateHotspotUserDto,
+  CreateIpBindingDto,
   CreateWalledGardenDto,
   CreateWalledGardenIpDto,
   UpdateHotspotProfileDto,
@@ -209,6 +211,46 @@ export class HotspotController {
   @Get('ip-bindings')
   ipBindings(@Query('routerId') routerId?: string) {
     return this.hotspot.ipBindings(routerId);
+  }
+
+  /**
+   * Faire passer un appareil sans ticket, et lui poser une limite.
+   *
+   * **Écrit sur le routeur.** Les deux gestes au même endroit : un appareil
+   * contourné n'a pas de profil, donc pas de limite — sans file d'attente il
+   * prend toute la ligne, et c'est l'appareil dont on le remarque le moins.
+   */
+  @Roles(...CAN_CONFIGURE)
+  @Post('ip-bindings')
+  creerContournement(
+    @Body() dto: CreateIpBindingDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('routerId') routerId?: string,
+  ) {
+    return this.hotspot.creerContournement(dto, user.id, routerId);
+  }
+
+  /** Passer un appareil de `regular` à `bypassed`, ou l'inverse. */
+  @Roles(...CAN_CONFIGURE)
+  @Patch('ip-bindings/:id')
+  changerTypeContournement(
+    @Param('id') id: string,
+    @Body() dto: ChangerTypeContournementDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('routerId') routerId?: string,
+  ) {
+    return this.hotspot.changerTypeContournement(id, dto.type, user.id, routerId);
+  }
+
+  /** Retire le contournement **et** la file d'attente qui l'accompagnait. */
+  @Roles(...CAN_CONFIGURE)
+  @Delete('ip-bindings/:id')
+  supprimerContournement(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('routerId') routerId?: string,
+  ) {
+    return this.hotspot.supprimerContournement(id, user.id, routerId);
   }
 
   /** Baux DHCP, pour rapprocher une adresse d'un nom d'appareil. */

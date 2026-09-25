@@ -251,6 +251,32 @@ export const hotspotTabsApi = {
     ),
   hosts: (routerId?: string) => api.get<HotspotHost[]>(`/hotspot/hosts${q(routerId)}`),
   ipBindings: (routerId?: string) => api.get<IpBinding[]>(`/hotspot/ip-bindings${q(routerId)}`),
+  /**
+   * Faire passer un appareil sans ticket, et lui poser une limite.
+   *
+   * **Écrit sur le routeur.** Les deux sens du plafond vont ensemble : c'est
+   * un seul champ chez RouterOS, qu'il remplace en entier.
+   */
+  creerContournement: (
+    dto: {
+      macAddress: string;
+      type: 'regular' | 'bypassed' | 'blocked';
+      address?: string;
+      comment?: string;
+      limiteMontanteBps?: number;
+      limiteDescendanteBps?: number;
+    },
+    routerId?: string,
+  ) =>
+    api.post<{ binding: IpBinding; file: { name: string } | null }>(
+      `/hotspot/ip-bindings${q(routerId)}`,
+      dto,
+    ),
+  /** Retire le contournement **et** la file d'attente qui l'accompagnait. */
+  supprimerContournement: (id: string, routerId?: string) =>
+    api.delete<{ fileRetiree: string | null }>(
+      `/hotspot/ip-bindings/${encodeURIComponent(id)}${q(routerId)}`,
+    ),
   serverProfiles: (routerId?: string) =>
     api.get<HotspotServerProfile[]>(`/hotspot/server-profiles${q(routerId)}`),
   servicePorts: (routerId?: string) =>

@@ -286,3 +286,46 @@ export const updatePppSecretSchema = z
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
     message: 'Aucune modification demandée',
   });
+
+// ---------- Files d'attente simples ----------
+
+/**
+ * Un débit, en bits par seconde.
+ *
+ * Le nombre plutôt que la forme RouterOS `2M/5M` : la lecture rend déjà des
+ * nombres, et deux unités qui ne se ressemblent pas d'un bout à l'autre du
+ * produit finissent par se croiser. La conversion en mégabits appartient à
+ * l'écran, qui est le seul endroit où l'exploitant pense en mégabits.
+ *
+ * Plafonné à 10 Gbit/s : au-delà, c'est une faute de frappe — un zéro de trop
+ * transforme une limite en absence de limite, sans que rien ne le signale.
+ */
+const debitSchema = z.number().int().positive().max(10_000_000_000);
+
+export const createSimpleQueueSchema = z.object({
+  name: z.string().min(1).max(64),
+  /** Adresse, plage ou interface à laquelle la file s'applique. */
+  target: z.string().min(1).max(128),
+  /** Ce que le client envoie. */
+  maxLimitUpload: debitSchema,
+  /** Ce que le client reçoit — le chiffre qu'il perçoit comme « le débit ». */
+  maxLimitDownload: debitSchema,
+  comment: z.string().max(255).optional(),
+  disabled: z.boolean().optional(),
+});
+
+export const updateSimpleQueueSchema = createSimpleQueueSchema
+  .partial()
+  .refine((v) => Object.values(v).some((x) => x !== undefined), {
+    message: 'Aucune modification demandée',
+  })
+  .refine(
+    (v) =>
+      (v.maxLimitUpload === undefined) === (v.maxLimitDownload === undefined),
+    {
+      // `max-limit` est un seul champ à deux membres : RouterOS le remplace
+      // en entier. N'en envoyer qu'un effacerait l'autre — et une limite
+      // descendante effacée passe inaperçue jusqu'à la facture.
+      message: 'Les deux sens du plafond se règlent ensemble',
+    },
+  );
