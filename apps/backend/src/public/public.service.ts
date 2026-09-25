@@ -56,6 +56,27 @@ export function normaliserHote(hote: string | undefined | null): string {
   return sansPort;
 }
 
+/**
+ * Cette adresse est-elle celle de la console elle-meme ?
+ *
+ * `process.env` plutot que `ConfigService` : ce service est eprouve contre la
+ * vraie base, construit a la main dans ses tests, et lui ajouter une
+ * dependance de constructeur les casserait tous pour une lecture d'une ligne.
+ * `ConfigModule` charge de toute facon le fichier dans `process.env`, et en
+ * production l'environnement vient du conteneur.
+ */
+export function estLaConsole(hote: string): boolean {
+  const base = (process.env.PUBLIC_BASE_URL ?? '').trim();
+  if (!base) return false;
+  let hoteConsole = '';
+  try {
+    hoteConsole = new URL(base).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return Boolean(hoteConsole) && normaliserHote(hote) === normaliserHote(hoteConsole);
+}
+
 export interface PublicTenantView {
   wifiName: string;
   /**
@@ -245,6 +266,28 @@ export class PublicService {
      * pas le même site, et la console elle-même en est un.
      */
     const complet = (hote ?? '').trim().toLowerCase().replace(/\/+$/, '');
+
+    /**
+     * **L'adresse de la console ne resout jamais vers un exploitant.**
+     *
+     * Sinon personne ne peut se connecter. Un visiteur anonyme sur une adresse
+     * qui designe un exploitant est renvoye vers la page de paiement -- c'est
+     * la regle, et elle est juste quand l'exploitant a son propre domaine.
+     * Quand la console et le portail partagent la meme adresse, elle ferme la
+     * porte d'entree : l'exploitant se deconnecte, et retombe sur la vitrine
+     * de ses propres clients. Constate le 25/09/2026 sur ce parc.
+     *
+     * Et cela arrive tout seul : l'adresse publique de la console est proposee
+     * comme page de paiement des qu'elle existe, parce que c'est la seule qui
+     * marche de partout. L'exploitant la choisit, et se ferme la porte sans
+     * rien avoir fait de travers.
+     *
+     * Rien n'est perdu au passage : la page de paiement reste servie a
+     * `/p/<exploitant>`, qui est exactement l'adresse que la page captive
+     * grave dans son bouton d'achat.
+     */
+    if (estLaConsole(complet)) return null;
+
     if (complet) {
       const declarations = await this.prisma.hotspotLoginPage.findMany({
         where: { portailUrl: { not: null } },
