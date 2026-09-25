@@ -426,6 +426,10 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
               fonctionne sans qu&apos;on ait à l&apos;activer. Sa validité ne démarre
               qu&apos;à la première connexion du client — un ticket invendu ne s&apos;use
               donc pas.
+              <br />
+              Sans préfixe de mot de passe, <strong>le mot de passe est le code</strong> : une
+              seule chose à recopier. En renseigner un imprime deux lignes sur le ticket, et
+              un client qui se trompe de ligne ne se connecte pas.
             </>
           }
         >
@@ -458,10 +462,52 @@ function ListTab({ scope, generator = false }: { scope?: 'um' | 'legacy'; genera
                 onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })}
               />
             </FormField>
-            <FormField label="Préfixe (optionnel)">
+            <FormField label="Préfixe de l’identifiant">
               <Input
+                placeholder="aucun"
                 value={form.prefix ?? ''}
                 onChange={(e) => setForm({ ...form, prefix: e.target.value || undefined })}
+              />
+            </FormField>
+            <FormField label="Caractères après le préfixe">
+              <Input
+                type="number"
+                min={4}
+                max={16}
+                placeholder="10"
+                value={form.codeLength ?? ''}
+                onChange={(e) =>
+                  setForm({ ...form, codeLength: e.target.value ? Number(e.target.value) : undefined })
+                }
+              />
+            </FormField>
+            {/* **Vide, le mot de passe reste le code.** C'est une decision
+                assumee du produit : le client n'a qu'une chose a recopier, et
+                aucune erreur possible entre deux lignes. On ne l'ecarte que
+                si l'exploitant le demande, en tapant un prefixe ici. */}
+            <FormField label="Préfixe du mot de passe">
+              <Input
+                placeholder="vide : le mot de passe est le code"
+                value={form.passwordPrefix ?? ''}
+                onChange={(e) =>
+                  setForm({ ...form, passwordPrefix: e.target.value || undefined })
+                }
+              />
+            </FormField>
+            <FormField label="Caractères du mot de passe">
+              <Input
+                type="number"
+                min={3}
+                max={12}
+                placeholder="4"
+                disabled={!form.passwordPrefix}
+                value={form.passwordLength ?? ''}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    passwordLength: e.target.value ? Number(e.target.value) : undefined,
+                  })
+                }
               />
             </FormField>
             <FormField label="Créer les comptes dans">

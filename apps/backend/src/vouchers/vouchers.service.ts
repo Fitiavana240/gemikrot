@@ -210,6 +210,9 @@ export class VouchersService {
             price: plan.price,
             batchId: batch.id,
             prefix: dto.prefix,
+            codeLength: dto.codeLength,
+            passwordPrefix: dto.passwordPrefix,
+            passwordLength: dto.passwordLength,
           }),
         );
       }
@@ -400,7 +403,12 @@ export class VouchersService {
       const mikrotik = await this.clients.forDefaultRouter();
       await mikrotik.createHotspotUser({
         username: voucher.code,
-        password: voucher.code,
+        // `accessPassword` d'abord, comme partout ailleurs. Le code etait
+        // pose en dur ici : un ticket imprime avec un mot de passe distinct
+        // -- ce que l'impression sait faire depuis toujours -- aurait ete
+        // **inutilisable**, le routeur attendant le code et le papier
+        // annoncant autre chose.
+        password: voucher.accessPassword ?? voucher.code,
         profileName: plan.mikrotikProfileName,
         comment: `wifitati:voucher:${voucher.code}`,
       });
@@ -773,14 +781,29 @@ export class VouchersService {
     price: Prisma.Decimal | number;
     batchId?: string;
     prefix?: string;
+    codeLength?: number;
+    passwordPrefix?: string;
+    passwordLength?: number;
   }): Promise<Voucher> {
     for (let attempt = 0; attempt < MAX_CODE_COLLISION_RETRIES; attempt += 1) {
-      const code = generateVoucherCode(10, input.prefix);
+      const code = generateVoucherCode(input.codeLength ?? 10, input.prefix);
+      /**
+       * Le mot de passe ne s'ecarte du code **que si on le demande**.
+       *
+       * `null` veut dire << le meme que le code >>, et c'est ce que lisent
+       * deja l'approvisionnement et l'impression : `accessPassword ?? code`.
+       * En poser un systematiquement donnerait deux lignes a recopier a des
+       * clients qui n'en avaient qu'une, sans que personne ne l'ait demande.
+       */
+      const accessPassword = input.passwordPrefix
+        ? generateVoucherCode(input.passwordLength ?? 4, input.passwordPrefix)
+        : null;
       try {
         return await this.prisma.scoped.voucher.create({
           data: {
             tenantId: this.tenantContext.requireTenantId(),
             code,
+            accessPassword,
             planId: input.planId,
             price: input.price,
             batchId: input.batchId,

@@ -14,7 +14,20 @@ export type CibleLot = 'USER_MANAGER' | 'HOTSPOT';
 export interface GenerateBatchInput {
   planId: string;
   quantity: number;
+  /** Le debut de l'identifiant : `H` donne `H4KP82…`. */
   prefix?: string;
+  /** Combien de caracteres apres le prefixe. Dix par defaut. */
+  codeLength?: number;
+  /**
+   * Le debut du mot de passe, quand il doit differer de l'identifiant.
+   *
+   * **Vide, le mot de passe reste le code** -- une seule chose a recopier, et
+   * aucune erreur possible entre deux lignes. Renseigne, le ticket imprime en
+   * portera deux.
+   */
+  passwordPrefix?: string;
+  /** Court a dessein : c'est la seconde ligne a recopier. Quatre par defaut. */
+  passwordLength?: number;
   routerId?: string;
   target?: CibleLot;
 }
