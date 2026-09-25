@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { hotspotTabsApi, type IpBinding } from '../api/mikrotik-tabs';
+import { hotspotTabsApi, type DhcpLease, type HotspotHost, type IpBinding } from '../api/mikrotik-tabs';
 import { devicesApi, type Device } from '../api/devices';
 import { ApiError } from '../api/client';
 import { useRouterSelection } from '../routers/RouterContext';
@@ -28,6 +28,46 @@ type Rapproché = {
 /** `C0:8A:60:AB:61:75` de deux sources ne se compare qu'en majuscules. */
 function clé(mac: string): string {
   return mac.trim().toUpperCase();
+}
+
+/**
+ * Les appareils que le routeur voit, nommes quand il sait les nommer.
+ *
+ * Deux sources : les hotes du portail donnent la MAC telle que le routeur la
+ * voit -- la seule qui vaille -- et les baux DHCP donnent le nom que
+ * l'appareil s'est declare. Sans le nom, l'exploitant choisit entre douze
+ * lignes hexadecimales identiques.
+ */
+function appareilsJoignables(
+  hotes: HotspotHost[],
+  baux: DhcpLease[],
+): { mac: string; adresse: string | null; nom: string | null }[] {
+  const nomParMac = new Map(baux.map((b) => [clé(b.macAddress), b.hostName]));
+  const adresseParMac = new Map(baux.map((b) => [clé(b.macAddress), b.address]));
+  const vus = new Map<string, { mac: string; adresse: string | null; nom: string | null }>();
+
+  for (const h of hotes) {
+    const k = clé(h.macAddress);
+    if (!k) continue;
+    vus.set(k, {
+      mac: h.macAddress,
+      // L'adresse du bail plutot que celle du portail : c'est celle que le
+      // DHCP a reservee, donc celle qui tiendra.
+      adresse: adresseParMac.get(k) ?? h.address,
+      nom: nomParMac.get(k) ?? null,
+    });
+  }
+  // Les baux seuls comptent aussi : un appareil peut avoir une adresse sans
+  // avoir encore parle au portail.
+  for (const b of baux) {
+    const k = clé(b.macAddress);
+    if (!k || vus.has(k)) continue;
+    vus.set(k, { mac: b.macAddress, adresse: b.address, nom: b.hostName });
+  }
+
+  return [...vus.values()].sort((a, b) =>
+    (a.nom ?? a.mac).localeCompare(b.nom ?? b.mac),
+  );
 }
 
 /**
@@ -110,6 +150,35 @@ export function AccesPermanentsTab() {
   });
   const appareils = useQuery({ queryKey: ['devices'], queryFn: devicesApi.list });
 
+  /**
+   * Ce que le routeur voit en ce moment, pour ne plus taper une MAC.
+   *
+   * **Une MAC recopiee a la main est fausse une fois sur deux.** Android et
+   * iOS tirent une adresse differente par reseau Wi-Fi depuis quelques
+   * annees : celle que le proprietaire lit dans les reglages de son telephone
+   * n'est pas celle que voit le routeur. Le contournement est alors pose, il
+   * ne correspond a rien, et l'appareil continue de voir le portail --
+   * << action requise >>, sans que rien n'explique pourquoi.
+   *
+   * Les baux DHCP portent en plus le **nom** de l'appareil, qui est la seule
+   * chose qu'un exploitant reconnaisse : << Galaxy-A12 >> se choisit,
+   * << 00:65:29:C4:A8:11 >> se recopie mal.
+   */
+  const hotes = useQuery({
+    queryKey: ['hotspot-hosts', currentId],
+    queryFn: () => hotspotTabsApi.hosts(currentId),
+    enabled: Boolean(currentId),
+    refetchInterval: 30_000,
+  });
+  const baux = useQuery({
+    queryKey: ['dhcp-leases', currentId],
+    queryFn: () => hotspotTabsApi.dhcpLeases(currentId),
+    enabled: Boolean(currentId),
+    refetchInterval: 30_000,
+  });
+
+  const joignables = appareilsJoignables(hotes.data ?? [], baux.data ?? []);
+
   if (requête.isError) return <PanneDuRouteur requête={requête} />;
 
   const bindings = requête.data ?? [];
@@ -145,6 +214,36 @@ export function AccesPermanentsTab() {
           et rien ne le dit, l'appareil marche très bien. */}
       <Card title="Faire passer un appareil sans ticket">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Choisir plutot que recopier. Une MAC tapee a la main est fausse
+              une fois sur deux : les telephones tirent une adresse
+              differente par reseau, et celle des reglages n'est pas celle
+              que voit le routeur. Le champ libre reste, pour un appareil
+              eteint au moment du reglage. */}
+          <label className="text-xs font-medium text-slate-600 sm:col-span-2">
+            Appareil connecté
+            <select
+              value={form.macAddress}
+              onChange={(e) => {
+                const choisi = joignables.find((a) => a.mac === e.target.value);
+                setForm({
+                  ...form,
+                  macAddress: e.target.value,
+                  address: choisi?.adresse ?? form.address,
+                  comment: form.comment || choisi?.nom || '',
+                });
+              }}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="">— choisir dans la liste, ou taper ci-dessous —</option>
+              {joignables.map((a) => (
+                <option key={a.mac} value={a.mac}>
+                  {a.nom ? `${a.nom} — ` : ''}
+                  {a.mac}
+                  {a.adresse ? ` — ${a.adresse}` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="text-xs font-medium text-slate-600">
             Adresse MAC
             <input
@@ -241,7 +340,9 @@ export function AccesPermanentsTab() {
                 Aucun appareil ne contourne le portail. Tout le monde passe par un ticket.
               </p>
             ) : (
-              <Table head={['Appareil', 'Ce qui le décrit', 'Suivi par la console', 'Serveur', '']}>
+              <Table
+                head={['Appareil', 'Ce qui le décrit', 'Appliqué', 'Suivi par la console', '']}
+              >
                 {contournements.map(({ binding, appareil }) => (
                   <tr key={binding.id}>
                     <td className="px-3 py-2 font-mono text-xs font-medium">
@@ -258,6 +359,36 @@ export function AccesPermanentsTab() {
                         <span className="text-slate-400">aucune description</span>
                       )}
                     </td>
+                    {/* **La seule question qu'on se pose devant cet ecran.**
+                        Le routeur dit lui-meme, dans sa table des hotes, s'il
+                        applique le contournement a cet appareil. Sans cette
+                        colonne, une MAC fausse -- le cas le plus frequent,
+                        les telephones en tirant une par reseau -- donne une
+                        ligne d'apparence parfaite pendant que l'appareil
+                        continue de voir le portail. On cherche alors du cote
+                        du routeur, du pare-feu, du Walled Garden : partout
+                        sauf a l'endroit ou personne ne regarde. */}
+                    <td className="px-3 py-2">
+                      {(() => {
+                        const hôte = (hotes.data ?? []).find(
+                          (h) => clé(h.macAddress) === clé(binding.macAddress),
+                        );
+                        if (!hôte) {
+                          return (
+                            <span title="Cet appareil n’a pas parlé au routeur depuis son dernier redémarrage. Allumé et connecté, il devrait apparaître ici : sinon, l’adresse MAC ne correspond à aucun appareil de ce réseau.">
+                              <Badge tone="slate">appareil jamais vu</Badge>
+                            </span>
+                          );
+                        }
+                        return hôte.bypassed ? (
+                          <Badge tone="green">oui</Badge>
+                        ) : (
+                          <span title="Le routeur voit cet appareil mais ne le laisse pas passer. Il doit se reconnecter au Wi-Fi pour que le contournement prenne effet.">
+                            <Badge tone="amber">pas encore</Badge>
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="px-3 py-2">
                       {appareil?.subscriptionId ? (
                         <Badge tone="green">abonnement suivi</Badge>
@@ -267,7 +398,6 @@ export function AccesPermanentsTab() {
                         <Badge tone="amber">inconnu de la console</Badge>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-xs text-slate-500">{binding.server ?? '—'}</td>
                     <td className="px-3 py-2 text-right">
                       {/* Retire aussi la file d'attente. Sans cela elle
                           survit à l'appareil et vise une adresse que le
