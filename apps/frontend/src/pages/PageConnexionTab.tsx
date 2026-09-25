@@ -353,9 +353,11 @@ export function PageConnexionTab() {
                           : 'border-slate-300 text-slate-600 hover:bg-slate-50'
                       }`}
                       title={
-                        a.source === 'domaine'
-                          ? 'Votre domaine — il doit pointer vers cette console'
-                          : 'Adresse de cette machine sur le réseau du portail'
+                        a.source === 'console-publique'
+                          ? 'Adresse publique de cette console — la seule qui marche depuis n’importe où'
+                          : a.source === 'domaine'
+                            ? 'Votre domaine — il doit pointer vers cette console'
+                            : 'Adresse de cette machine sur le réseau du portail'
                       }
                     >
                       {a.url}

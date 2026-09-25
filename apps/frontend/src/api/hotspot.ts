@@ -136,7 +136,7 @@ export interface LigneTarif {
 /** Une adresse que le client captif pourrait atteindre, déduite. */
 export interface AdresseCandidate {
   url: string;
-  source: 'reseau-local' | 'domaine';
+  source: 'console-publique' | 'reseau-local' | 'domaine';
   autorisee: boolean;
 }
 
