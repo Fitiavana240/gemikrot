@@ -322,7 +322,38 @@ export const hotspotTabsApi = {
     api.patch<HotspotUser>(`/hotspot/users/${encodeURIComponent(username)}${q(routerId)}`, dto),
 };
 
+/**
+ * Ce que les clients ont consomme, decoupe **a l'heure du routeur**.
+ *
+ * Le calcul se fait sur le serveur, et pas ici : les sessions portent des
+ * dates sans fuseau, a lire dans l'heure du routeur. Le navigateur ne connait
+ * que celle du poste qui l'ouvre -- decouper la journee ici ferait tomber
+ * trois heures de sessions dans la mauvaise journee, chaque nuit.
+ */
+export interface Tranche {
+  octets: number;
+  sessions: number;
+}
+
+export interface Consommation {
+  /** L'offset du routeur, pour dire d'ou vient le decoupage. */
+  fuseau: string;
+  sessionsLues: number;
+  /**
+   * Celles qui portaient une date lisible. Les autres ne sont comptees nulle
+   * part -- et la cle porte son accent, parce que c'est ainsi que le serveur
+   * l'ecrit. Un nom approchant se lirait `undefined`, sans erreur.
+   */
+  sessionsDatées: number;
+  jour: Tranche;
+  semaine: Tranche;
+  mois: Tranche;
+  parCompte: { username: string; octets: number; sessions: number }[];
+}
+
 export const umTabsApi = {
+  consommation: (routerId?: string) =>
+    api.get<Consommation>(`/user-manager/consommation${q(routerId)}`),
   routers: (routerId?: string) => api.get<UmRouter[]>(`/user-manager/routers${q(routerId)}`),
   userGroups: (routerId?: string) =>
     api.get<UmUserGroup[]>(`/user-manager/user-groups${q(routerId)}`),
