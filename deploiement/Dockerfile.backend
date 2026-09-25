@@ -82,6 +82,19 @@ COPY --from=build /app/apps/backend/package.json ./apps/backend/
 # le conteneur de migration part de cette même image.
 COPY --from=build /app/apps/backend/prisma ./apps/backend/prisma
 
+# Le gabarit de la page captive.
+#
+# **Ce n'est pas du code, donc il ne passe pas par `dist/`** — et il ne
+# partait nulle part. `PageConnexionService` le cherche à `/app/hotspot`,
+# quatre niveaux au-dessus de `dist/hotspot` : absent de l'image, publier la
+# page du portail répondait « Le modèle de page de connexion est introuvable »
+# sur un serveur où tout le reste fonctionnait. C'est la page qui porte le
+# bouton d'achat : sans elle, aucun client ne peut payer.
+#
+# La même classe de panne que les modules manquants ci-dessus : l'image se
+# construit sans un mot, et le défaut n'apparaît qu'au premier clic.
+COPY --from=build /app/hotspot ./hotspot
+
 # Jamais root. Un serveur qui n'écrit nulle part n'a aucune raison d'en avoir
 # les droits, et l'image `node` fournit déjà cet utilisateur.
 USER node

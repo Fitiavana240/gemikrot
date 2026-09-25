@@ -6,6 +6,7 @@ import {
   exigerLogoUtilisable,
   memeReseau24,
   exigerCouleurLisible,
+  estAdresseIPv4,
   hoteDe,
   PageConnexionService,
 } from './page-connexion.service.js';
@@ -58,6 +59,11 @@ function service(options: {
   reglages?: Record<string, unknown> | null;
   /** Ce que la console croit etre ses adresses. Pose, jamais lu. */
   adressesLocales?: string[];
+  /**
+   * `PUBLIC_BASE_URL`. Absente par defaut : la plupart des epreuves portent
+   * sur le montage de labo, ou la console repond sur le reseau du routeur.
+   */
+  basePublique?: string;
 }) {
   const mikrotik = {
     getHotspotServers: vi.fn(async () => options.serveurs ?? []),
@@ -78,6 +84,8 @@ function service(options: {
       ],
     ),
     writeRouterFile: vi.fn(async () => undefined),
+    createWalledGardenEntry: vi.fn(async () => ({})),
+    createWalledGardenIpEntry: vi.fn(async () => ({})),
   };
 
   const prisma: any = {
@@ -101,6 +109,7 @@ function service(options: {
     { requireTenantId: () => 't1' } as never,
     { forRouter: async () => mikrotik, forDefaultRouter: async () => mikrotik } as never,
     { log: vi.fn(async () => undefined) } as never,
+    { get: () => options.basePublique } as never,
   );
   // L'adresse de la console est **posee**, jamais lue sur la machine : la
   // lire ferait dependre la suite du bail DHCP du poste qui l'execute, et
@@ -746,5 +755,96 @@ describe('hoteDe', () => {
     expect(hoteDe('http://192.168.88.135:5173')).toBe('192.168.88.135');
     expect(hoteDe('WifiTati.NET')).toBe('wifitati.net');
     expect(hoteDe('n’importe quoi')).toBe('');
+  });
+});
+
+/**
+ * La console sur un serveur public, et non plus sur le reseau du routeur.
+ *
+ * Les adresses candidates se deduisaient des cartes reseau de la machine,
+ * gardees quand elles partageaient le /24 du portail. Sur un VPS aucune ne
+ * correspond : la liste etait vide, `adresseActuelle` valait `null`, et la
+ * reparation refusait avec << aucune adresse n'a pu etre deduite >>. Le
+ * parcours d'achat n'etait donc reparable que depuis un serveur pose a cote
+ * du routeur -- c'est-a-dire nulle part, depuis le passage sur OVH.
+ */
+describe('la console publique', () => {
+  it("fait foi sur l'adresse locale", async () => {
+    const { service: s } = service({
+      serveurs: [{ name: 'hs1', profileName: 'default', disabled: false }],
+      profils: [profil('default', 'hotspot')],
+      basePublique: 'https://gemikrot.duckdns.org/api',
+      ...OK,
+    });
+
+    const etat = await s.etat('r1');
+
+    // L'origine, sans le `/api` : le client captif va sur la page de
+    // paiement, pas sur l'API.
+    expect(etat.sante.adresseActuelle).toBe('https://gemikrot.duckdns.org');
+    expect(etat.adresses[0].source).toBe('console-publique');
+  });
+
+  it("retombe sur l'adresse locale quand aucune adresse publique n'est reglee", async () => {
+    const { service: s } = service({
+      serveurs: [{ name: 'hs1', profileName: 'default', disabled: false }],
+      profils: [profil('default', 'hotspot', { hotspotAddress: '192.168.88.1' })],
+      ...OK,
+    });
+
+    // Sans port : `etat` ne le devine pas, il lui est passe par l'ecran.
+    expect((await s.etat('r1')).sante.adresseActuelle).toBe('http://192.168.88.135');
+  });
+
+  it('autorise un nom par la table des hotes, et non par celle des adresses', async () => {
+    const { service: s, mikrotik } = service({
+      serveurs: [{ name: 'hs1', profileName: 'default', disabled: false }],
+      profils: [profil('default', 'hotspot')],
+      basePublique: 'https://gemikrot.duckdns.org/api',
+      // Rien d'autorise : la reparation doit poser l'entree elle-meme.
+      wgAdresses: [],
+      ...OK,
+    });
+
+    await s.reparer('admin-1', 'r1');
+
+    // `walled-garden ip` n'accepte que des adresses : son champ est valide
+    // comme tel, et la reparation echouait en rejetant le nom du serveur.
+    expect(mikrotik.createWalledGardenIpEntry).not.toHaveBeenCalled();
+    expect(mikrotik.createWalledGardenEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ dstHost: 'gemikrot.duckdns.org', action: 'allow' }),
+    );
+  });
+
+  it('autorise une adresse par la table des adresses', async () => {
+    const { service: s, mikrotik } = service({
+      serveurs: [{ name: 'hs1', profileName: 'default', disabled: false }],
+      profils: [profil('default', 'hotspot', { hotspotAddress: '192.168.88.1' })],
+      wgAdresses: [],
+      ...OK,
+    });
+
+    await s.reparer('admin-1', 'r1');
+
+    expect(mikrotik.createWalledGardenEntry).not.toHaveBeenCalled();
+    // Sans port : `reparer` appelle `etat` sans lui passer celui de la
+    // console, donc l'adresse deduite n'en porte pas. L'entree ouvre alors
+    // tous les ports de cette machine -- large, mais c'est un poste du
+    // reseau local, et cela vaut mieux qu'une page de paiement fermee.
+    expect(mikrotik.createWalledGardenIpEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ dstAddress: '192.168.88.135', action: 'accept' }),
+    );
+  });
+});
+
+describe('estAdresseIPv4', () => {
+  it('distingue une adresse d’un nom', () => {
+    expect(estAdresseIPv4('192.168.88.135')).toBe(true);
+    expect(estAdresseIPv4('10.88.0.2')).toBe(true);
+    expect(estAdresseIPv4('gemikrot.duckdns.org')).toBe(false);
+    expect(estAdresseIPv4('192.168.88')).toBe(false);
+    // 999 n'est pas un octet : le laisser passer enverrait un nom dans le
+    // champ d'adresse, ou RouterOS refuserait sans que la console sache.
+    expect(estAdresseIPv4('192.168.88.999')).toBe(false);
   });
 });

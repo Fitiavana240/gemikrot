@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -125,8 +126,15 @@ export interface LigneTarif {
  */
 export interface AdresseCandidate {
   url: string;
-  /** D'où elle vient, pour que le choix se fasse en connaissance de cause. */
-  source: 'reseau-local' | 'domaine';
+  /**
+   * D'où elle vient, pour que le choix se fasse en connaissance de cause.
+   *
+   * `console-publique` est l'adresse par laquelle la console répond sur
+   * Internet. **C'est la seule qui vaille quand le serveur n'est plus sur le
+   * réseau du routeur** — et c'est devenu le cas normal : la console vit sur
+   * un VPS, à des milliers de kilomètres du hAP.
+   */
+  source: 'console-publique' | 'reseau-local' | 'domaine';
   /** Le Walled Garden la laisse-t-il déjà passer ? */
   autorisee: boolean;
 }
@@ -199,7 +207,32 @@ export class PageConnexionService {
     private readonly tenantContext: TenantContextService,
     private readonly clients: MikrotikClientFactory,
     private readonly audit: AuditService,
+    private readonly config: ConfigService,
   ) {}
+
+  /**
+   * L'adresse publique de la console, déduite de `PUBLIC_BASE_URL`.
+   *
+   * `PUBLIC_BASE_URL` désigne l'API — `https://…/api` — alors que le client
+   * captif va sur la page de paiement, à la racine. On n'en garde donc que
+   * l'origine.
+   *
+   * **Sans elle, le parcours d'achat n'était réparable que depuis un serveur
+   * posé sur le réseau du routeur.** Les adresses candidates se déduisaient
+   * des cartes réseau de la machine, gardées quand elles partageaient le /24
+   * du portail : sur un VPS, aucune ne correspond, la liste est vide, et la
+   * réparation refuse avec « aucune adresse n'a pu être déduite ». L'écran
+   * disait vrai et ne menait nulle part.
+   */
+  private adressePubliqueDeLaConsole(): string | null {
+    const brut = (this.config.get<string>('PUBLIC_BASE_URL') ?? '').trim();
+    if (!brut) return null;
+    try {
+      return new URL(brut).origin;
+    } catch {
+      return null;
+    }
+  }
 
   /**
    * Les adresses IPv4 de cette machine, cartes internes exclues.
@@ -604,7 +637,13 @@ export class PageConnexionService {
       .filter((a): a is string => Boolean(a) && a !== '0.0.0.0');
 
     const port = portConsole && /^\d+$/.test(portConsole) ? `:${portConsole}` : '';
+    const publique = this.adressePubliqueDeLaConsole();
     const adresses: AdresseCandidate[] = [
+      // **En tête, parce qu'elle marche de partout.** Une adresse de réseau
+      // local ne vaut que pour un serveur posé à côté du routeur ; celle-ci
+      // reste juste quel que soit l'endroit d'où le client arrive, et elle
+      // survit au changement d'adresse du fournisseur.
+      ...(publique ? [{ url: publique, source: 'console-publique' as const }] : []),
       ...this.adressesDeLaMachine()
         .filter((ip) => reseauxPortail.some((portail) => memeReseau24(ip, portail)))
         .map((ip) => ({ url: `http://${ip}${port}`, source: 'reseau-local' as const })),
@@ -630,7 +669,18 @@ export class PageConnexionService {
      */
     const publiee = publications.find((p) => p.portailUrl) ?? null;
     const adressePubliee = publiee?.portailUrl ?? null;
-    const adresseActuelle = adresses.find((a) => a.source === 'reseau-local')?.url ?? null;
+    /**
+     * L'adresse où la console répond aujourd'hui.
+     *
+     * La publique d'abord : c'est la seule qu'un client atteint depuis
+     * n'importe où, et la seule qui existe quand le serveur n'est pas sur le
+     * réseau du routeur. La locale reste le repli, pour le montage de labo où
+     * la console tourne sur un poste du même Wi-Fi.
+     */
+    const adresseActuelle =
+      adresses.find((a) => a.source === 'console-publique')?.url ??
+      adresses.find((a) => a.source === 'reseau-local')?.url ??
+      null;
 
     const ruptures: string[] = [];
     if (cibles.length === 0) {
@@ -746,7 +796,9 @@ export class PageConnexionService {
     const cible = avant.sante.adresseActuelle;
     if (!cible) {
       throw new BadRequestException(
-        "Aucune adresse n'a pu être déduite : la console ne répond sur aucune carte réseau du réseau de ce portail. Saisissez l'adresse à la main.",
+        "Aucune adresse n'a pu être déduite : ce serveur n'a pas d'adresse publique renseignée " +
+          "(PUBLIC_BASE_URL) et ne répond sur aucune carte réseau du réseau de ce portail. " +
+          "Saisissez l'adresse à la main.",
       );
     }
 
@@ -764,14 +816,36 @@ export class PageConnexionService {
         ? await this.clients.forRouter(routerId)
         : await this.clients.forDefaultRouter();
       const u = new URL(cible);
-      await mikrotik.createWalledGardenIpEntry({
-        dstAddress: u.hostname,
-        // Le port de l'adresse, et lui seul : ouvrir toute la machine pour
-        // servir une page ouvrirait bien plus large que nécessaire.
-        dstPort: u.port || undefined,
-        action: 'accept',
-        comment: 'Page de paiement GeMikrot',
-      });
+      /**
+       * Deux tables, et le choix ne se devine pas.
+       *
+       * `walled-garden ip` attend une **adresse**, pas un nom : son champ est
+       * validé comme tel, et la réparation échouait sur un serveur public en
+       * rejetant `gemikrot.duckdns.org`. `walled-garden`, lui, filtre par nom
+       * d'hôte et couvre HTTP comme HTTPS d'après la documentation MikroTik —
+       * c'est la bonne table dès que la console porte un nom.
+       *
+       * Le nom vaut d'ailleurs mieux que l'adresse ici : un serveur derrière
+       * un nom dynamique change d'adresse sans prévenir, et une règle gravée
+       * sur l'ancienne fermerait la page de paiement sans un mot.
+       */
+      if (estAdresseIPv4(u.hostname)) {
+        await mikrotik.createWalledGardenIpEntry({
+          dstAddress: u.hostname,
+          // Le port de l'adresse, et lui seul : ouvrir toute la machine pour
+          // servir une page ouvrirait bien plus large que nécessaire.
+          dstPort: u.port || undefined,
+          action: 'accept',
+          comment: 'Page de paiement GeMikrot',
+        });
+      } else {
+        await mikrotik.createWalledGardenEntry({
+          dstHost: u.hostname,
+          dstPort: u.port || undefined,
+          action: 'allow',
+          comment: 'Page de paiement GeMikrot',
+        });
+      }
       gestes.push(`${cible} autorisée dans le Walled Garden`);
     }
 
@@ -969,6 +1043,18 @@ export function autoriseParLeWalledGarden(
   ];
 
   return { autorise: parNom || parAdresse, voisines };
+}
+
+/**
+ * Est-ce une adresse IPv4 littérale, et non un nom ?
+ *
+ * C'est ce qui décide de la table du Walled Garden : `walled-garden ip` ne
+ * prend que des adresses, `walled-garden` que des noms.
+ */
+export function estAdresseIPv4(hote: string): boolean {
+  const parties = hote.split('.');
+  if (parties.length !== 4) return false;
+  return parties.every((p) => /^\d{1,3}$/.test(p) && Number(p) <= 255);
 }
 
 /** L'hôte d'une adresse, en minuscules, sans port. `''` si illisible. */
