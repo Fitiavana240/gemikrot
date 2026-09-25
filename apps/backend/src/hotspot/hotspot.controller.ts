@@ -243,6 +243,23 @@ export class HotspotController {
   }
 
   /** Retire le contournement **et** la file d'attente qui l'accompagnait. */
+  /**
+   * Forcer le routeur a reconsiderer un appareil deja connu.
+   *
+   * **Ecrit sur le routeur** : retire son hote. Sans ce geste, un
+   * contournement pose apres l'arrivee de l'appareil ne s'applique jamais.
+   */
+  @Roles(...CAN_CONFIGURE)
+  @Post('ip-bindings/:id/appliquer')
+  @HttpCode(200)
+  appliquerContournement(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('routerId') routerId?: string,
+  ) {
+    return this.hotspot.appliquerContournement(id, user.id, routerId);
+  }
+
   @Roles(...CAN_CONFIGURE)
   @Delete('ip-bindings/:id')
   supprimerContournement(

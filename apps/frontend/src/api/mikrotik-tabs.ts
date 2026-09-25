@@ -272,6 +272,17 @@ export const hotspotTabsApi = {
       `/hotspot/ip-bindings${q(routerId)}`,
       dto,
     ),
+  /**
+   * Force le routeur a reconsiderer un appareil deja connu.
+   *
+   * RouterOS decide du sort d'un appareil a son arrivee et garde sa decision :
+   * un contournement pose apres coup ne s'applique jamais tout seul.
+   */
+  appliquerContournement: (id: string, routerId?: string) =>
+    api.post<{ deja: boolean; message: string }>(
+      `/hotspot/ip-bindings/${encodeURIComponent(id)}/appliquer${q(routerId)}`,
+      {},
+    ),
   /** Retire le contournement **et** la file d'attente qui l'accompagnait. */
   supprimerContournement: (id: string, routerId?: string) =>
     api.delete<{ fileRetiree: string | null }>(

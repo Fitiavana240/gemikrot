@@ -159,6 +159,64 @@ export class HotspotService {
     return { binding: pose, file };
   }
 
+  /**
+   * Forcer le routeur à reconsidérer un appareil.
+   *
+   * **Un contournement posé ne s'applique pas à un appareil déjà connu.**
+   * RouterOS décide de son sort à son arrivée et garde sa décision tant qu'il
+   * est là. Un appareil qui parlait au portail avant qu'on ajoute son
+   * contournement continue donc de voir la page de connexion — le
+   * contournement existe, il est simplement arrivé trop tard. L'écran le dit
+   * désormais (« pas encore ») ; ceci le règle.
+   *
+   * **On ne retire que l'hôte d'un appareil réellement contourné.** Retirer
+   * celui d'un client authentifié fermerait sa session, et il se retrouverait
+   * devant la page de connexion sans avoir rien demandé. Un appareil
+   * contourné, lui, revient aussitôt — et contourné cette fois.
+   */
+  async appliquerContournement(id: string, adminUserId?: string, routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    const binding = (await mikrotik.getIpBindings()).find((b) => b.id === id);
+    if (!binding) throw new NotFoundException(`Contournement ${id} introuvable`);
+    if (binding.type !== 'bypassed' || binding.disabled) {
+      throw new BadRequestException(
+        `« ${binding.macAddress} » n'est pas un contournement actif : il n'y a rien à appliquer.`,
+      );
+    }
+
+    const mac = binding.macAddress.toUpperCase();
+    const hote = (await mikrotik.getHotspotHosts()).find(
+      (h) => h.macAddress.toUpperCase() === mac,
+    );
+    if (!hote) {
+      throw new BadRequestException(
+        `Le routeur n'a jamais vu « ${binding.macAddress} ». Cette adresse MAC n'est celle ` +
+          `d'aucun appareil de ce réseau — les téléphones en tirent une différente par réseau ` +
+          `Wi-Fi, et celle des réglages n'est pas celle que voit le routeur. Choisissez ` +
+          `l'appareil dans la liste plutôt que de recopier son adresse.`,
+      );
+    }
+    if (hote.bypassed) {
+      return { deja: true, message: `« ${binding.macAddress} » passe déjà sans ticket.` };
+    }
+
+    await mikrotik.removeHotspotHost(hote.id);
+    await this.audit.log({
+      adminUserId,
+      routerId,
+      action: 'APPLY_IP_BINDING',
+      targetType: 'IpBinding',
+      targetId: binding.macAddress,
+      payloadDiff: { hoteRetire: hote.id },
+    });
+    return {
+      deja: false,
+      message:
+        `Le routeur va reconsidérer « ${binding.macAddress} » au prochain paquet. ` +
+        `Comptez quelques secondes, puis rafraîchissez.`,
+    };
+  }
+
   /** Passer un appareil de `regular` à `bypassed`, ou l'inverse. */
   async changerTypeContournement(
     id: string,

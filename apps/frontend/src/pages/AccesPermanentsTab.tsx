@@ -127,6 +127,25 @@ export function AccesPermanentsTab() {
       setErreur(e instanceof ApiError ? e.message : 'Le routeur a refusé.'),
   });
 
+  /**
+   * Faire reconsiderer un appareil que le routeur voit deja.
+   *
+   * RouterOS decide du sort d'un appareil a son arrivee et garde sa decision :
+   * un contournement pose apres coup ne s'applique jamais tout seul. Le
+   * bouton ne s'offre donc que sur << pas encore >>, ou il est la reponse --
+   * ailleurs il n'aurait rien a corriger.
+   */
+  const appliquer = useMutation({
+    mutationFn: (id: string) => hotspotTabsApi.appliquerContournement(id, currentId),
+    onSuccess: (r) => {
+      setErreur(null);
+      setCompteRendu(r.message);
+      rafraichir();
+    },
+    onError: (e) =>
+      setErreur(e instanceof ApiError ? e.message : 'Le routeur a refusé.'),
+  });
+
   const supprimer = useMutation({
     mutationFn: (id: string) => hotspotTabsApi.supprimerContournement(id, currentId),
     onSuccess: (r) => {
@@ -380,12 +399,21 @@ export function AccesPermanentsTab() {
                             </span>
                           );
                         }
-                        return hôte.bypassed ? (
-                          <Badge tone="green">oui</Badge>
-                        ) : (
-                          <span title="Le routeur voit cet appareil mais ne le laisse pas passer. Il doit se reconnecter au Wi-Fi pour que le contournement prenne effet.">
-                            <Badge tone="amber">pas encore</Badge>
-                          </span>
+                        if (hôte.bypassed) return <Badge tone="green">oui</Badge>;
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span title="Le routeur voit cet appareil, mais il le connaissait avant que son contournement existe — et il garde sa décision tant que l’appareil est là.">
+                              <Badge tone="amber">pas encore</Badge>
+                            </span>
+                            <button
+                              type="button"
+                              disabled={appliquer.isPending}
+                              onClick={() => appliquer.mutate(binding.id)}
+                              className="text-xs font-medium text-sky-700 underline-offset-2 hover:underline disabled:opacity-50"
+                            >
+                              Appliquer
+                            </button>
+                          </div>
                         );
                       })()}
                     </td>
@@ -441,6 +469,19 @@ export function AccesPermanentsTab() {
               </Table>
             </Card>
           )}
+
+          <div className="max-w-3xl rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+            <strong>Ce que dit la colonne « Appliqué ».</strong> Le routeur décide du sort
+            d&apos;un appareil <em>à son arrivée</em>, et garde sa décision tant qu&apos;il est
+            là. Un contournement posé après coup ne s&apos;applique donc pas tout seul —
+            d&apos;où « pas encore », et le bouton <em>Appliquer</em> qui le règle.
+            <br />
+            <strong>« Appareil jamais vu »</strong> veut dire que cette adresse MAC
+            n&apos;est celle d&apos;aucun appareil de ce réseau. C&apos;est le cas le plus
+            fréquent : les téléphones tirent une adresse différente par réseau Wi-Fi, et celle
+            des réglages n&apos;est pas celle que voit le routeur. Choisissez l&apos;appareil
+            dans la liste plutôt que de recopier son adresse.
+          </div>
 
           <p className="max-w-3xl text-xs text-slate-500">
             Cette liste vient du routeur, et non des baux DHCP : un appareil éteint y figure

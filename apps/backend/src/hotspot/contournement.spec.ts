@@ -21,8 +21,12 @@ import { HotspotService } from './hotspot.service.js';
  *    quelqu'un d'autre, qui héritera d'une limite que personne n'a voulue.
  */
 
-function service(options: { bindings?: unknown[]; queues?: unknown[] } = {}) {
+function service(
+  options: { bindings?: unknown[]; queues?: unknown[]; hotes?: unknown[] } = {},
+) {
   const mikrotik = {
+    getHotspotHosts: vi.fn(async () => options.hotes ?? []),
+    removeHotspotHost: vi.fn(async () => undefined),
     createIpBinding: vi.fn(async (b: Record<string, unknown>) => ({ id: '*1', ...b })),
     createSimpleQueue: vi.fn(async (q: Record<string, unknown>) => ({ id: '*9', ...q })),
     deleteIpBinding: vi.fn(async () => undefined),
@@ -129,5 +133,73 @@ describe('le contournement du portail', () => {
     await s.supprimerContournement('*1', 'admin-1', 'r1');
 
     expect(mikrotik.deleteSimpleQueue).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Un contournement pose ne s'applique pas a un appareil deja connu.
+ *
+ * RouterOS decide du sort d'un appareil **a son arrivee** et garde sa
+ * decision tant qu'il est la. Un appareil qui parlait au portail avant qu'on
+ * ajoute son contournement continue donc de voir la page de connexion : le
+ * contournement existe, il est simplement arrive trop tard.
+ *
+ * Constate le 25/09/2026 -- << Test PC >>, vu par le routeur, contournement
+ * en place, et l'ecran du client affichant encore << action requise >>.
+ */
+describe("l'application d'un contournement", () => {
+  const HOTE = { id: '*a1', macAddress: MAC, bypassed: false };
+
+  it("retire l'hote pour que le routeur repose la question", async () => {
+    const { service: s, mikrotik } = service({
+      bindings: [{ id: '*1', macAddress: MAC, type: 'bypassed', disabled: false }],
+      hotes: [HOTE],
+    });
+
+    const r = await s.appliquerContournement('*1', 'admin-1', 'r1');
+
+    expect(mikrotik.removeHotspotHost).toHaveBeenCalledWith('*a1');
+    expect(r.deja).toBe(false);
+  });
+
+  it('ne touche a rien quand le contournement passe deja', async () => {
+    const { service: s, mikrotik } = service({
+      bindings: [{ id: '*1', macAddress: MAC, type: 'bypassed', disabled: false }],
+      hotes: [{ ...HOTE, bypassed: true }],
+    });
+
+    const r = await s.appliquerContournement('*1', 'admin-1', 'r1');
+
+    expect(mikrotik.removeHotspotHost).not.toHaveBeenCalled();
+    expect(r.deja).toBe(true);
+  });
+
+  it("dit que la MAC n'est celle d'aucun appareil, plutot que d'echouer", async () => {
+    const { service: s, mikrotik } = service({
+      bindings: [{ id: '*1', macAddress: MAC, type: 'bypassed', disabled: false }],
+      hotes: [],
+    });
+
+    // Le cas le plus frequent : les telephones tirent une adresse differente
+    // par reseau Wi-Fi, et celle des reglages n'est pas celle que voit le
+    // routeur. Le message doit le dire, sinon on cherche ailleurs.
+    await expect(s.appliquerContournement('*1', 'admin-1', 'r1')).rejects.toThrow(
+      /jamais vu/,
+    );
+    expect(mikrotik.removeHotspotHost).not.toHaveBeenCalled();
+  });
+
+  it("refuse sur une ligne qui n'est pas un contournement actif", async () => {
+    const { service: s, mikrotik } = service({
+      // Retirer l'hote d'un client authentifie fermerait sa session, et il se
+      // retrouverait devant la page de connexion sans avoir rien demande.
+      bindings: [{ id: '*1', macAddress: MAC, type: 'regular', disabled: false }],
+      hotes: [HOTE],
+    });
+
+    await expect(s.appliquerContournement('*1', 'admin-1', 'r1')).rejects.toThrow(
+      /pas un contournement actif/,
+    );
+    expect(mikrotik.removeHotspotHost).not.toHaveBeenCalled();
   });
 });

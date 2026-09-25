@@ -133,6 +133,14 @@ export interface IMikrotikService {
 
   getHotspotActiveUsers(): Promise<HotspotActiveUserDto[]>;
   getHotspotHosts(): Promise<HotspotHostDto[]>;
+  /**
+   * Retire un hote, pour que le routeur reconsidere son cas.
+   *
+   * Un contournement pose ne s'applique pas a un appareil deja connu :
+   * RouterOS decide a l'arrivee et garde sa decision. Retirer la ligne force
+   * la question a etre reposee, et l'appareil revient contourne.
+   */
+  removeHotspotHost(id: string): Promise<void>;
   getHotspotUsers(): Promise<HotspotUserDto[]>;
   getHotspotProfiles(): Promise<HotspotProfileDto[]>;
   disconnectHotspotUser(input: DisconnectHotspotUserDto): Promise<void>;

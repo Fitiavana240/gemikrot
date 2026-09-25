@@ -229,6 +229,27 @@ export class RouterOSMikrotikService implements IMikrotikService {
     return raw.map(HotspotMapper.mapHotspotHost);
   }
 
+  /**
+   * Retirer un hôte, pour que le routeur reconsidère son cas.
+   *
+   * **Un contournement posé ne s'applique pas à un appareil déjà connu.**
+   * RouterOS décide du sort d'un appareil à son arrivée, et garde sa décision
+   * dans cette table tant qu'il est là. Un appareil qui parlait au portail
+   * avant qu'on ajoute son contournement continue donc de voir la page de
+   * connexion — le contournement existe, il est juste arrivé trop tard.
+   *
+   * Retirer la ligne force le routeur à reprendre la question au paquet
+   * suivant. L'appareil revient aussitôt, contourné cette fois.
+   *
+   * Constaté sur ce parc le 25/09/2026 : un appareil vu par le routeur,
+   * contournement en place, et l'écran du client affichant encore
+   * « action requise ».
+   */
+  async removeHotspotHost(id: string) {
+    this.logger.info('Retrait d’un hôte HotSpot', { hostId: id });
+    await this.client.delete(`/ip/hotspot/host/${encodeURIComponent(id)}`);
+  }
+
   async getHotspotUsers() {
     const raw = await this.client.get<any[]>('/ip/hotspot/user');
     return raw.map(HotspotMapper.mapHotspotUser);

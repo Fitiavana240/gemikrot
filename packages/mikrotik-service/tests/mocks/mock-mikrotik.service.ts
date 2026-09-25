@@ -181,8 +181,14 @@ export class MockMikrotikService implements IMikrotikService {
     return [...this.activeHotspotUsers];
   }
 
+  private hotspotHosts: HotspotHostDto[] = [];
+
   async getHotspotHosts(): Promise<HotspotHostDto[]> {
-    return [];
+    return [...this.hotspotHosts];
+  }
+
+  async removeHotspotHost(id: string): Promise<void> {
+    this.hotspotHosts = this.hotspotHosts.filter((h) => h.id !== id);
   }
 
   async getHotspotUsers(): Promise<HotspotUserDto[]> {
