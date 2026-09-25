@@ -223,7 +223,10 @@ Description=Réassemble wg0.conf et applique les pairs sans couper le tunnel
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'cat /etc/wireguard/interface.conf /etc/wireguard/pairs.conf > /etc/wireguard/wg0.conf && wg syncconf wg0 <(wg-quick strip wg0)'
+# **bash et non sh.** La substitution de processus `<(...)` n'existe pas dans
+# `dash`, qui est le `/bin/sh` d'Ubuntu : le service echouait sans bruit, la
+# console ecrivait bien les pairs, et le tunnel ne les voyait jamais.
+ExecStart=/bin/bash -c 'cat /etc/wireguard/interface.conf /etc/wireguard/pairs.conf > /etc/wireguard/wg0.conf && wg syncconf wg0 <(wg-quick strip wg0)'
 FIN
 systemctl daemon-reload
 systemctl enable --now gemikrot-tunnel.path >/dev/null 2>&1
@@ -278,6 +281,26 @@ docker compose --env-file "$REGLAGES" -f deploiement/docker-compose.prod.yml \
 # On attend 404 : le jeton est invente, donc inconnu. C'est la preuve que la
 # requete a bien atteint le serveur.
 echo
+# Les pairs, appliques puis constates.
+#
+# Le serveur vient de les ecrire dans `pairs.conf` a son demarrage. On demande
+# leur application, puis **on regarde l'interface** -- ecrire un fichier et
+# charger un pair sont deux choses, et la console ne peut voir que la premiere.
+echo
+echo "── Pairs du tunnel"
+systemctl start gemikrot-tunnel.service 2>/dev/null || true
+sleep 2
+PAIRS_FICHIER=$(grep -c '^\[Peer\]' /etc/wireguard/pairs.conf 2>/dev/null || echo 0)
+PAIRS_CHARGES=$(wg show wg0 peers 2>/dev/null | grep -c . || echo 0)
+if [ "$PAIRS_FICHIER" -eq 0 ]; then
+  echo "   Aucun routeur raccordé pour l'instant."
+elif [ "$PAIRS_CHARGES" -ge "$PAIRS_FICHIER" ]; then
+  echo "   $PAIRS_CHARGES pair(s) chargé(s) dans le tunnel."
+else
+  echo "   ⚠ $PAIRS_FICHIER pair(s) dans le fichier, $PAIRS_CHARGES chargé(s)."
+  echo "     Le tunnel ne les a pas pris. Voir : journalctl -u gemikrot-tunnel.service"
+fi
+
 echo "── Vérification du chemin de rappel"
 CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
   "https://$DOMAINE_PUBLIC/api/router-enrollments/callback/verification" \
