@@ -319,7 +319,23 @@ function OffersStep({
             </div>
           </button>
         ))}
-        {plans.length === 0 && <p className="text-sm text-slate-500">—</p>}
+        {/* Un tiret tenait lieu de réponse : le client voyait la page
+            s'afficher, une section « Choisissez votre forfait » vide, et
+            aucune indication de ce qu'il devait faire. Il conclut que le
+            réseau est en panne, ou que son téléphone l'est — et il s'en va
+            sans jamais le signaler.
+
+            Le cas n'a rien d'exceptionnel : il suffit qu'aucune offre à
+            ticket ne soit active, ce qui arrive à toute nouvelle
+            installation, et après toute remise à zéro de la base. Le cas
+            voisin — aucun numéro Mobile Money — avait sa phrase depuis le
+            début ; celui-ci ne l'avait pas. */}
+        {plans.length === 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="font-medium text-amber-900">{t.noOfferTitle}</p>
+            <p className="mt-1 text-sm text-amber-800">{t.noOfferBody}</p>
+          </div>
+        )}
       </div>
     </div>
   );

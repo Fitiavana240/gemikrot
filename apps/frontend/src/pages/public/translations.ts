@@ -9,6 +9,9 @@ export const TRANSLATIONS = {
   fr: {
     langName: 'Français',
     chooseOffer: 'Choisissez votre forfait',
+    noOfferTitle: 'Aucun forfait n’est en vente pour le moment',
+    noOfferBody:
+      'Ce réseau n’a aucun forfait à proposer en ligne en ce moment. Ce n’est pas une panne de votre téléphone : adressez-vous au vendeur pour obtenir un ticket.',
     validity: 'Valable',
     devices: 'appareil(s)',
     payTitle: 'Payez par Mobile Money',
@@ -61,6 +64,9 @@ export const TRANSLATIONS = {
   mg: {
     langName: 'Malagasy',
     chooseOffer: 'Safidio ny tolotra',
+    noOfferTitle: 'Tsy misy tolotra amidy amin’izao fotoana izao',
+    noOfferBody:
+      'Tsy misy tolotra azo vidina an-tserasera eto amin’ity tambajotra ity amin’izao. Tsy simba ny finday anao : manatona ny mpivarotra hahazoana tapakila.',
     validity: 'Mandaitra',
     devices: 'fitaovana',
     payTitle: 'Aloa amin\'ny Mobile Money',
