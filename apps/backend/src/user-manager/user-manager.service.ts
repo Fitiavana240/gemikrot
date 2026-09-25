@@ -10,6 +10,7 @@ import { RouterAccessService } from '../routers/router-access.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { MikrotikClientFactory } from '../routers/mikrotik-client.factory.js';
 import { parseRouterTime } from '../routers/router-time.util.js';
+import { agrégerConsommation } from './consommation.util.js';
 import type {
   AssignProfileDto,
   AttachLimitationDto,
@@ -236,6 +237,25 @@ export class UserManagerService {
   async sessions(username?: string, routerId?: string) {
     const mikrotik = await this.client(routerId);
     return mikrotik.getUserManagerSessions(username);
+  }
+
+  /**
+   * Ce que les clients ont consomme, par jour, par semaine, par mois.
+   *
+   * **Calcule ici et non dans le navigateur**, pour une raison qui n'est pas
+   * de commodite : les sessions portent des dates sans fuseau, a lire dans
+   * l'heure du routeur. Le hAP de Toliara tourne en `+03:00` et le serveur en
+   * UTC -- decouper la journee cote navigateur ferait tomber trois heures de
+   * sessions dans la mauvaise journee, chaque nuit. L'offset se lit sur le
+   * routeur, jamais suppose.
+   */
+  async consommation(routerId?: string) {
+    const mikrotik = await this.client(routerId);
+    const [{ gmtOffset }, sessions] = await Promise.all([
+      mikrotik.getClock(),
+      mikrotik.getUserManagerSessions(),
+    ]);
+    return agrégerConsommation(sessions, gmtOffset);
   }
 
   /**

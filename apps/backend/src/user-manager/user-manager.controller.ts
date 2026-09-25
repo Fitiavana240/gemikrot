@@ -46,6 +46,12 @@ export class UserManagerController {
     return this.userManager.attributes(routerId);
   }
 
+  /** Consommation par tranche, decoupee dans le fuseau du routeur. */
+  @Get('consommation')
+  consommation(@Query('routerId') routerId?: string) {
+    return this.userManager.consommation(routerId);
+  }
+
   @Get('sessions')
   sessions(@Query('username') username?: string, @Query('routerId') routerId?: string) {
     return this.userManager.sessions(username, routerId);
