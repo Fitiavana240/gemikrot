@@ -6,6 +6,7 @@ import { telephoneAffiche } from '../api/customers';
 import { useCurrency } from '../api/money';
 import { REACHABILITY_LABEL, routersApi } from '../api/routers';
 import { useRouterSelection } from '../routers/RouterContext';
+import { Section } from '../components/Section';
 import { mikrotikApi } from '../api/mikrotik';
 import { hotspotApi } from '../api/hotspot';
 import { tenantsApi } from '../api/tenants';
@@ -14,7 +15,7 @@ import { Stat, Gauge } from '../components/Stat';
 import {
   Badge,
   Button,
-  Card,
+  
   EmptyState,
   ErrorNote,
   Field,
@@ -329,8 +330,12 @@ export function DashboardPage() {
         />
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card title="Routeur">
+      <div className="space-y-3">
+        <Section
+          id="tdb.routeur"
+          titre="Routeur"
+          indice={current ? REACHABILITY_LABEL[current.health.state].label : "aucun"}
+        >
           {!current ? (
             <p className="text-sm text-slate-500">Aucun routeur sélectionné.</p>
           ) : (
@@ -371,9 +376,13 @@ export function DashboardPage() {
               )}
             </>
           )}
-        </Card>
+        </Section>
 
-        <Card title="Tickets">
+        <Section
+          id="tdb.tickets"
+          titre="Tickets"
+          compte={d.vouchersByStatus.reduce((n, v) => n + v._count._all, 0)}
+        >
           {d.vouchersByStatus.length === 0 ? (
             <EmptyState
               title="Aucun ticket"
@@ -394,7 +403,7 @@ export function DashboardPage() {
               ))}
             </ul>
           )}
-        </Card>
+        </Section>
 
         <Occupation />
       </div>
@@ -402,8 +411,8 @@ export function DashboardPage() {
       {/* Les deux listes « derniers… » côte à côte. « Derniers paiements »
           était la quatrième carte d'une grille de trois : elle tombait seule
           sur sa ligne, les deux tiers de l'écran vides à côté d'elle. */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Derniers paiements">
+      <div className="space-y-3">
+        <Section id="tdb.paiements" titre="Derniers paiements" indice="les 10 plus récents">
           {d.recentPayments.length === 0 ? (
             <p className="text-sm text-slate-400">Aucun paiement enregistré.</p>
           ) : (
@@ -421,9 +430,9 @@ export function DashboardPage() {
               ))}
             </ul>
           )}
-        </Card>
+        </Section>
 
-        <Card title="Derniers clients">
+        <Section id="tdb.clients" titre="Derniers clients" indice="les 10 plus récents">
         {d.recentCustomers.length === 0 ? (
           <p className="text-sm text-slate-400">Aucun client enregistré.</p>
         ) : (
@@ -446,7 +455,7 @@ export function DashboardPage() {
             ))}
           </ul>
         )}
-        </Card>
+        </Section>
       </div>
     </div>
   );
