@@ -9,6 +9,6 @@ import { PageConnexionService } from './page-connexion.service.js';
   imports: [AuditModule, VouchersModule],
   controllers: [HotspotController],
   providers: [HotspotService, PageConnexionService],
-  exports: [HotspotService],
+  exports: [HotspotService, PageConnexionService],
 })
 export class HotspotModule {}

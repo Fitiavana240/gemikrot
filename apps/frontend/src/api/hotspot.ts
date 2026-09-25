@@ -223,6 +223,16 @@ export const hotspotApi = {
       `/hotspot/page-connexion/reparer${routerId ? `?routerId=${routerId}` : ''}`,
       {},
     ),
+  /**
+   * Le même travail, en script à coller dans WinBox.
+   *
+   * N'écrit rien : c'est le routeur qui agira, et il ira chercher la page
+   * lui-même. Le chemin de repli quand « Publier » ne passe pas.
+   */
+  scriptPageConnexion: (routerId?: string) =>
+    api.get<{ script: string; adresse: string }>(
+      `/hotspot/page-connexion/script${routerId ? `?routerId=${routerId}` : ''}`,
+    ),
   /** Écrit la page sur chaque dossier réellement servi par le routeur. */
   publierPageConnexion: (routerId?: string) =>
     api.post<{ ecrits: { chemin: string; octets: number }[] }>(

@@ -154,6 +154,24 @@ export function PageConnexionTab() {
     onError: (e) => setErreur(e instanceof ApiError ? e.message : 'Le routeur a refusé.'),
   });
 
+  /**
+   * Le script à coller, quand « Publier » ne passe pas.
+   *
+   * Il ne touche à rien : la console rend un texte, c'est le routeur qui
+   * agira. Deux lignes utiles — ouvrir l'adresse de paiement dans le Walled
+   * Garden, et faire chercher la page par le routeur lui-même.
+   */
+  const [script, setScript] = useState<{ script: string; adresse: string } | null>(null);
+  const preparerScript = useMutation({
+    mutationFn: () => hotspotApi.scriptPageConnexion(currentId),
+    onSuccess: (r) => {
+      setErreur(null);
+      setScript(r);
+    },
+    onError: (e) =>
+      setErreur(e instanceof ApiError ? e.message : 'Le script n’a pas pu être préparé.'),
+  });
+
   const publier = useMutation({
     mutationFn: () => hotspotApi.publierPageConnexion(currentId),
     onSuccess: (r) => {
@@ -651,6 +669,55 @@ export function PageConnexionTab() {
             la page de paiement.
           </li>
         </ol>
+        {/* Le troisième chemin, et le plus court : une ligne collée, et le
+            routeur va chercher la page tout seul. Glisser le fichier suppose
+            de le télécharger, d'ouvrir la liste des fichiers, de viser le bon
+            dossier — quatre gestes où se tromper. */}
+        <div className="mt-4 rounded-lg border border-slate-200 bg-white p-3">
+          <p className="text-sm font-medium text-slate-700">
+            Plus court : un script à coller dans le terminal WinBox
+          </p>
+          <p className="mt-1 max-w-3xl text-xs text-slate-600">
+            Deux lignes utiles. La première autorise votre page de paiement dans le Walled
+            Garden — sans elle, le bouton d’achat mène à un écran blanc. La seconde fait{' '}
+            <strong>chercher la page par le routeur lui-même</strong>, ce qui évite de coller
+            dix kilo-octets de HTML dans un terminal.
+          </p>
+          <div className="mt-2">
+            <Button
+              variant="secondary"
+              disabled={preparerScript.isPending}
+              onClick={() => preparerScript.mutate()}
+            >
+              {preparerScript.isPending ? 'Préparation…' : 'Préparer un script à coller'}
+            </Button>
+          </div>
+          {script && (
+            <>
+              <pre className="mt-3 max-h-80 overflow-auto rounded bg-slate-900 p-3 text-xs text-slate-100">
+                {script.script}
+              </pre>
+              <div className="mt-2 flex gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => navigator.clipboard.writeText(script.script)}
+                >
+                  Copier
+                </Button>
+                <Button variant="secondary" onClick={() => setScript(null)}>
+                  J’ai terminé
+                </Button>
+              </div>
+              <p className="mt-2 max-w-3xl text-xs text-slate-500">
+                Le routeur ira chercher la page à{' '}
+                <code className="rounded bg-slate-100 px-1 font-mono">{script.adresse}</code>.
+                Cette adresse doit rester joignable au moment où vous collez le script — mais
+                pas après : la page est écrite sur le routeur, elle y reste.
+              </p>
+            </>
+          )}
+        </div>
+
         <p className="mt-3 max-w-3xl text-xs text-slate-500">
           Ce chemin donne le même résultat que « Publier sur le routeur ». Il existe parce que
           la console ne peut pas toujours atteindre le routeur — c’est le cas tant qu’il n’y a

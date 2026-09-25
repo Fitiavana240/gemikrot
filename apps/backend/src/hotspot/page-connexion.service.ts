@@ -865,6 +865,88 @@ export class PageConnexionService {
   }
 
   /**
+   * Le même travail, mais en script à coller dans Winbox.
+   *
+   * `publier` écrit par l'API : c'est mieux, et c'est le chemin normal. Mais
+   * il suppose que la console atteigne le routeur à cet instant, que le
+   * compte applicatif ait les droits d'écriture de fichier, et que le tunnel
+   * tienne le temps du transfert. Quand l'un des trois manque, l'exploitant
+   * se retrouve devant un bouton qui refuse sans qu'il puisse rien y faire.
+   *
+   * Le script, lui, ne dépend de rien de tout cela — c'est le routeur qui
+   * agit. C'est la forme qui a fini par raccorder le tunnel après deux jours,
+   * et elle mérite d'exister ici aussi.
+   *
+   * **Le routeur va chercher la page lui-même**, au lieu qu'elle soit écrite
+   * dans le script : le gabarit fait dix kilo-octets, et le coller dans un
+   * terminal RouterOS en échappant chaque guillemet est le genre de chose qui
+   * échoue une fois sur deux, au milieu, sans rien dire. Une ligne de
+   * `/tool/fetch` remplace tout cela — et la page reste à jour d'un simple
+   * rappel du script.
+   */
+  async script(routerId?: string): Promise<{ script: string; adresse: string }> {
+    const tenantId = this.tenantContext.requireTenantId();
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { slug: true },
+    });
+    if (!tenant) throw new NotFoundException('Exploitant introuvable');
+
+    const base = this.adressePubliqueDeLaConsole();
+    if (!base) {
+      throw new BadRequestException(
+        "Ce serveur n'a pas d'adresse publique renseignée (PUBLIC_BASE_URL) : le routeur " +
+          "ne saurait pas où aller chercher la page.",
+      );
+    }
+
+    const etat = await this.etat(routerId);
+    if (etat.cibles.length === 0) {
+      throw new BadRequestException(
+        "Aucun serveur HotSpot actif sur ce routeur : il n'y a aucun dossier où écrire la page.",
+      );
+    }
+
+    const hote = hoteDe(base);
+    const pageUrl = `${base}/api/public/${tenant.slug}/page-captive`;
+
+    const lignes = [
+      '# ============================================================',
+      '#  GeMikrot - poser la page de connexion et ouvrir le paiement',
+      '#',
+      '#  A coller dans le terminal Winbox. Rejouable : chaque ligne',
+      "#  retire ce qu'elle a pose avant de le reposer.",
+      '# ============================================================',
+      '',
+      '# 1. Laisser vos clients atteindre la page de paiement.',
+      '#',
+      "#    Sans cette ligne, le bouton d'achat mene a un ecran blanc : un",
+      '#    client non connecte ne sort pas du portail captif, et la page de',
+      '#    paiement est justement dehors.',
+      `:do { /ip/hotspot/walled-garden/remove [find comment="GeMikrot - paiement"] } on-error={}`,
+      `/ip/hotspot/walled-garden/add dst-host=${hote} action=allow comment="GeMikrot - paiement"`,
+      '',
+      '# 2. La page elle-meme.',
+      '#',
+      '#    **Ces lignes en dernier, et rien apres.** `/tool/fetch` bloque le',
+      '#    terminal le temps du transfert et **avale les lignes collees a sa',
+      '#    suite**, qui reapparaissent tronquees en erreur de syntaxe. On',
+      "#    cherche alors un defaut de script la ou il n'y en a pas.",
+      '#',
+      '#    Si vous lisez << status: failed >>, ce routeur ne joint pas le',
+      '#    serveur : verifiez que la ligne 1 est bien passee, et que le',
+      '#    routeur a un acces Internet.',
+      ...etat.cibles.map(
+        (c) => `/tool/fetch url="${pageUrl}" dst-path="${c.chemin}"`,
+      ),
+      '',
+      ':put "Page posee. Vos clients voient desormais vos tarifs et le bouton de paiement."',
+    ];
+
+    return { script: lignes.join('\n'), adresse: pageUrl };
+  }
+
+  /**
    * Écrit la page sur chaque dossier réellement servi.
    *
    * Le geste ne se défait pas : RouterOS ne garde aucune version précédente

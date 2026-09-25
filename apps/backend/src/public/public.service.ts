@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { PaymentStatus, PlanKind, PlanStatus, TenantStatus, VoucherTarget } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PageConnexionService } from '../hotspot/page-connexion.service.js';
 import { identifiantDepuisNom, identifiantUtilisable } from './identifiant.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import { CourrielService } from '../courriel/courriel.service.js';
@@ -125,7 +126,37 @@ export class PublicService {
      * une raison qui ne le regarde pas.
      */
     private readonly courriel?: CourrielService,
+    /**
+     * Facultatif pour la meme raison que le courriel : ce service est eprouve
+     * contre la vraie base, construit a la main dans ses tests, et servir la
+     * page captive n'est pas une condition pour declarer un paiement.
+     */
+    private readonly pageConnexion?: PageConnexionService,
   ) {}
+
+  /**
+   * La page de connexion du portail, servie au routeur lui-meme.
+   *
+   * Le routeur va la chercher par `/tool/fetch` et l'ecrit dans son dossier
+   * HotSpot. C'est le chemin de repli quand la console ne peut pas l'ecrire
+   * par l'API -- et c'est aussi le plus simple : une ligne de script au lieu
+   * de dix kilo-octets de HTML a coller dans un terminal.
+   *
+   * Publique, et elle peut l'etre : c'est exactement la page que voit
+   * n'importe quel client du reseau avant de se connecter. Elle ne porte que
+   * la marque de l'exploitant, ses tarifs et l'adresse de sa page de
+   * paiement -- rien qu'un passant du quartier ne puisse deja lire.
+   */
+  async pageCaptive(slug: string): Promise<string> {
+    const tenant = await this.requireActiveTenant(slug);
+    if (!this.pageConnexion) {
+      throw new NotFoundException('Page de connexion indisponible sur ce serveur');
+    }
+    return this.tenantContext.runAsTenant(tenant.id, async () => {
+      const { contenu } = await this.pageConnexion!.apercu();
+      return contenu;
+    });
+  }
 
   /**
    * Prévient les administrateurs qu'un client attend son code.

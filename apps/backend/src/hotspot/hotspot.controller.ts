@@ -122,6 +122,17 @@ export class HotspotController {
    * aussi morte qu'une page non republiee.
    */
   @Roles(AdminRole.SUPER_ADMIN, AdminRole.ADMIN)
+  /**
+   * Le script a coller, quand l'ecriture par l'API ne passe pas.
+   *
+   * `publier` reste le chemin normal. Celui-ci ne depend ni du tunnel, ni des
+   * droits du compte applicatif : c'est le routeur qui agit.
+   */
+  @Get('page-connexion/script')
+  scriptPageConnexion(@Query('routerId') routerId?: string) {
+    return this.pageConnexion.script(routerId);
+  }
+
   @Post('page-connexion/reparer')
   reparerPageConnexion(
     @CurrentUser() user: AuthenticatedUser,

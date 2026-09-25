@@ -848,3 +848,75 @@ describe('estAdresseIPv4', () => {
     expect(estAdresseIPv4('192.168.88.999')).toBe(false);
   });
 });
+
+/**
+ * Le script a coller, quand l'ecriture par l'API ne passe pas.
+ *
+ * Les epreuves portent sur la **forme** du script, et c'est la que ce projet
+ * a le plus perdu : un `join` mal ecrit avait emis tout un bloc sur une seule
+ * ligne commencant par `#`, que RouterOS avait lu comme un commentaire. La
+ * commande n'avait jamais tourne, sans un mot, et l'epreuve d'alors regardait
+ * si le texte contenait la commande -- ce qui etait vrai, a l'interieur du
+ * commentaire.
+ *
+ * On regarde donc les lignes, une par une.
+ */
+describe('le script de la page captive', () => {
+  const avecScript = () =>
+    service({
+      serveurs: [{ name: 'hs1', profileName: 'default', disabled: false }],
+      profils: [profil('default', 'hotspot')],
+      basePublique: 'https://gemikrot.duckdns.org/api',
+      ...OK,
+    });
+
+  it('ouvre le nom du serveur dans le Walled Garden, en debut de ligne', async () => {
+    const { service: s } = avecScript();
+
+    const { script } = await s.script('r1');
+    const lignes = script.split('\n');
+
+    expect(lignes).toContain(
+      '/ip/hotspot/walled-garden/add dst-host=gemikrot.duckdns.org action=allow comment="GeMikrot - paiement"',
+    );
+  });
+
+  it('fait chercher la page par le routeur, dans le dossier vraiment servi', async () => {
+    const { service: s } = avecScript();
+
+    const { script, adresse } = await s.script('r1');
+    const lignes = script.split('\n');
+
+    expect(adresse).toBe(
+      'https://gemikrot.duckdns.org/api/public/zone-wifi-tati/page-captive',
+    );
+    expect(lignes).toContain(
+      `/tool/fetch url="${adresse}" dst-path="hotspot/login.html"`,
+    );
+  });
+
+  it('ne met rien apres le fetch, qui avale ce qui le suit', async () => {
+    const { service: s } = avecScript();
+
+    const lignes = (await s.script('r1')).script.split('\n');
+    const dernierFetch = lignes.reduce(
+      (n, l, i) => (l.startsWith('/tool/fetch') ? i : n),
+      -1,
+    );
+    const apres = lignes.slice(dernierFetch + 1).filter((l) => l.trim() !== '');
+
+    // Seul un `:put` peut suivre : il ne fait qu'ecrire a l'ecran. Toute
+    // commande posee la serait avalee par le transfert en cours.
+    expect(apres.every((l) => l.startsWith(':put') || l.startsWith('#'))).toBe(true);
+  });
+
+  it("refuse quand le serveur n'a pas d'adresse publique", async () => {
+    const { service: s } = service({
+      serveurs: [{ name: 'hs1', profileName: 'default', disabled: false }],
+      profils: [profil('default', 'hotspot')],
+      ...OK,
+    });
+
+    await expect(s.script('r1')).rejects.toThrow(/adresse publique/);
+  });
+});

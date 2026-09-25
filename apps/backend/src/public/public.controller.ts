@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { Public } from '../auth/public.decorator.js';
 import { PublicService } from './public.service.js';
@@ -64,6 +64,33 @@ export class PublicController {
   )
   getTenant(@Param('slug') slug: string) {
     return this.publicService.getTenantView(slug);
+  }
+
+  /**
+   * La page de connexion du portail, telle que le routeur doit l'ecrire.
+   *
+   * C'est **le routeur** qui appelle cette adresse, par `/tool/fetch`, et qui
+   * depose le resultat dans son dossier HotSpot. Rien d'autre ne la lit.
+   *
+   * `text/html` et non du JSON : ce que `fetch` recupere est ecrit tel quel
+   * dans le fichier, octet pour octet.
+   */
+  @Get(':slug/page-captive')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  @UseGuards(
+    new RateLimitGuard([
+      {
+        // Un routeur pose sa page une fois, pas cent. Large tout de meme :
+        // un parc entier peut se reconfigurer le meme jour.
+        key: (req) => `page:${req.ip}`,
+        limit: 30,
+        windowMs: 3_600_000,
+        message: 'Trop de requêtes.',
+      },
+    ]),
+  )
+  pageCaptive(@Param('slug') slug: string) {
+    return this.publicService.pageCaptive(slug);
   }
 
   @Post(':slug/claim')
