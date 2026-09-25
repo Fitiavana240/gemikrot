@@ -207,6 +207,7 @@ export class MockMikrotikService implements IMikrotikService {
       id: this.nextId(),
       username: input.username,
       profile: input.profileName,
+      macAddress: input.macAddress ?? null,
       disabled: false,
       comment: input.comment ?? null,
       server: input.server ?? null,

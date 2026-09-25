@@ -51,6 +51,19 @@ export interface HotspotUserDto {
   limitBytesOut: number | null;
   /** Plafond des deux sens confondus, distinct de leur somme. */
   limitBytesTotal: number | null;
+  /**
+   * L'appareil auquel ce compte est lie, s'il l'est.
+   *
+   * **C'est la seule facon d'avoir a la fois l'automatisme et l'echeance.**
+   * Un contournement (`ip-binding bypassed`) fait passer l'appareil avant le
+   * portail : il n'ouvre aucune session, donc rien ne le limite dans le temps
+   * et rien ne l'arrete jamais. Un compte lie a une MAC, lui, ouvre une vraie
+   * session -- le client ne voit pas plus de page de connexion, mais le
+   * profil s'applique et l'echeance existe.
+   *
+   * Vide pour un ticket ordinaire, qui n'appartient a aucun appareil.
+   */
+  macAddress: string | null;
 }
 
 /** Type d'une entrée `/ip/hotspot/ip-binding`. */

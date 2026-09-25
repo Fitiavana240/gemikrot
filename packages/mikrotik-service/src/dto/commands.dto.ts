@@ -104,7 +104,7 @@ export interface DisconnectHotspotUserDto {
 // tarifaires et contournements d'appareils. User Manager reste disponible via
 // les DTOs ci-dessus pour une bascule ultérieure.
 
-export interface CreateHotspotUserDto {
+export interface CreateHotspotUserDto extends AvecMacDto {
   username: string;
   password: string;
   profileName: string;
@@ -130,7 +130,7 @@ export interface CreateHotspotUserDto {
   limitBytesTotal?: number | null;
 }
 
-export interface UpdateHotspotUserDto {
+export interface UpdateHotspotUserDto extends AvecMacDto {
   username: string;
   profileName?: string;
   password?: string;
@@ -188,6 +188,11 @@ export interface UpdateHotspotProfileDto {
    */
   addMacCookie?: boolean;
   macCookieTimeoutSeconds?: number | null;
+}
+
+/** Lier un compte a un appareil : la session s'ouvre seule, l'echeance tient. */
+export interface AvecMacDto {
+  macAddress?: string | null;
 }
 
 export interface CreateIpBindingDto {

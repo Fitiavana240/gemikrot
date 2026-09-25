@@ -161,11 +161,23 @@ export const createHotspotUserSchema = z.object({
   limitBytesIn: z.number().int().positive().nullish(),
   limitBytesOut: z.number().int().positive().nullish(),
   limitBytesTotal: z.number().int().positive().nullish(),
+  /**
+   * Lier ce compte a un appareil, pour qu'il se connecte seul.
+   *
+   * Avec `login-by=mac` sur le profil du serveur, RouterOS ouvre la session
+   * de lui-meme des que cette MAC apparait : le client ne voit aucune page.
+   * C'est le meme confort qu'un contournement, mais **c'est une session** --
+   * donc le profil s'applique, et l'echeance aussi. Un contournement, lui,
+   * n'ouvre rien et ne s'arrete jamais.
+   */
+  macAddress: macAddressSchema.nullish(),
 });
 
 export const updateHotspotUserSchema = z.object({
   username: hotspotUsernameParamSchema,
   profileName: z.string().min(1).max(64).optional(),
+  /** `null` delie l'appareil ; `undefined` n'y touche pas. */
+  macAddress: macAddressSchema.nullish(),
   password: z.string().min(1).max(128).optional(),
   comment: z.string().max(255).optional(),
   server: z.string().max(64).optional(),

@@ -58,6 +58,9 @@ export function mapHotspotUser(raw: any): HotspotUserDto {
     limitBytesIn: raw?.['limit-bytes-in'] != null ? Number(raw['limit-bytes-in']) : null,
     limitBytesTotal: raw?.['limit-bytes-total'] != null ? Number(raw['limit-bytes-total']) : null,
     limitBytesOut: raw?.['limit-bytes-out'] != null ? Number(raw['limit-bytes-out']) : null,
+    // Vide sur un ticket ordinaire : RouterOS rend alors une chaine vide, et
+    // non l'absence du champ.
+    macAddress: raw?.['mac-address'] || null,
   };
 }
 

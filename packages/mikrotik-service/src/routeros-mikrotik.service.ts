@@ -276,6 +276,9 @@ export class RouterOSMikrotikService implements IMikrotikService {
       ...(data.limitBytesIn != null ? { 'limit-bytes-in': data.limitBytesIn } : {}),
       ...(data.limitBytesOut != null ? { 'limit-bytes-out': data.limitBytesOut } : {}),
       ...(data.limitBytesTotal != null ? { 'limit-bytes-total': data.limitBytesTotal } : {}),
+      // Omis plutôt que posé vide : un `mac-address` vide sur un ticket
+      // ordinaire n'a pas de sens, et RouterOS le garde tel quel.
+      ...(data.macAddress ? { 'mac-address': data.macAddress } : {}),
     });
     return HotspotMapper.mapHotspotUser(raw);
   }
@@ -303,6 +306,9 @@ export class RouterOSMikrotikService implements IMikrotikService {
     if (data.limitBytesTotal !== undefined) {
       payload['limit-bytes-total'] = data.limitBytesTotal ?? 0;
     }
+    // Même convention : `null` délie l'appareil, et RouterOS exprime cela par
+    // une chaîne vide sur ce champ-là — pas par zéro.
+    if (data.macAddress !== undefined) payload['mac-address'] = data.macAddress ?? '';
 
     this.logger.info('Mise à jour compte HotSpot', { username: data.username });
     const raw = await this.client.patch<any>(`/ip/hotspot/user/${target.id}`, payload);

@@ -101,6 +101,25 @@ export class CreateHotspotUserDto {
   comment?: string;
 
   /**
+   * Lier ce compte a un appareil : la session s'ouvre seule.
+   *
+   * **C'est la seule facon d'avoir l'automatisme du contournement ET une
+   * echeance.** Un contournement fait passer l'appareil avant le portail : il
+   * n'ouvre aucune session, donc aucune limite de temps ne s'applique et rien
+   * ne l'arrete jamais. Un compte lie a une MAC ouvre une vraie session -- le
+   * client ne voit pas plus de page de connexion, mais le profil s'applique,
+   * et le compte expire.
+   *
+   * Exige `login-by=mac` sur le profil du serveur HotSpot.
+   */
+  @IsOptional()
+  @IsString()
+  @Matches(/^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/, {
+    message: 'Adresse MAC invalide (AA:BB:CC:DD:EE:FF)',
+  })
+  macAddress?: string;
+
+  /**
    * `limit-uptime` côté RouterOS. 400 des 646 comptes du parc en portent un
    * — `2h` pour un ticket à 500 Ar.
    */
