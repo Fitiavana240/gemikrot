@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
 import { BoutonColonnes, useColonnes } from './Colonnes';
 
@@ -118,6 +118,51 @@ export function Badge({ tone, children }: { tone: 'green' | 'amber' | 'slate' | 
   );
 }
 
+/**
+ * Une table qui déborde doit le dire.
+ *
+ * `overflow-x-auto` fait défiler, et c'est tout : sur un téléphone, les
+ * colonnes qui sortent de l'écran n'existent pas pour qui les regarde. On ne
+ * fait pas défiler ce qu'on ne soupçonne pas — on conclut que la colonne
+ * manque. Les tables de cette console vont jusqu'à neuf colonnes.
+ *
+ * Un dégradé au bord dit « ça continue », et disparaît quand on est au bout.
+ * C'est la seule façon honnête de le signaler sans ajouter de texte à une
+ * table déjà dense.
+ *
+ * Réévalué au redimensionnement **et** au changement de contenu : une table
+ * qui passe de trois à quarante lignes change de largeur de colonnes, et un
+ * débordement peut apparaître sans que la fenêtre ait bougé.
+ */
+function useDébordement<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [bords, setBords] = useState({ gauche: false, droite: false });
+
+  const mesurer = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    // Deux pixels de tolérance : les navigateurs rendent des largeurs
+    // fractionnaires, et un écart d'un demi-pixel allumerait le dégradé sur
+    // une table qui tient parfaitement.
+    const reste = el.scrollWidth - el.clientWidth - el.scrollLeft;
+    setBords({ gauche: el.scrollLeft > 2, droite: reste > 2 });
+  }, []);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    mesurer();
+    const observateur = new ResizeObserver(mesurer);
+    observateur.observe(el);
+    // Le contenu, et non le seul conteneur : c'est lui qui décide de la
+    // largeur des colonnes.
+    if (el.firstElementChild) observateur.observe(el.firstElementChild);
+    return () => observateur.disconnect();
+  }, [mesurer]);
+
+  return { ref, bords, mesurer };
+}
+
 /** En deçà, tout tient à l'écran : proposer de masquer n'apporte rien. */
 const COLONNES_AVANT_SELECTEUR = 5;
 
@@ -152,6 +197,7 @@ export function Table({
   // savent pas viser sans échappement.
   const id = `t${useId().replace(/:/g, '')}`;
   const offert = colonnes !== false && head.length >= COLONNES_AVANT_SELECTEUR;
+  const { ref, bords, mesurer } = useDébordement<HTMLDivElement>();
 
   return (
     <div className="space-y-1">
@@ -165,34 +211,71 @@ export function Table({
           />
         </div>
       )}
-      <div id={id} className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-        {masquées.size > 0 && (
-          <style>
-            {[...masquées]
-              .map(
-                (rang) =>
-                  `#${id} th:nth-child(${rang + 1}),#${id} td:nth-child(${rang + 1}){display:none}`,
-              )
-              .join('')}
-          </style>
-        )}
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50">
-            <tr>
-              {head.map((h, rang) => (
-                // Deux colonnes d'actions sans titre cohabitent sur certains
-                // écrans : le libellé seul ne fait pas une clé.
-                <th
-                  key={`${h}-${rang}`}
-                  className="px-3 py-2 text-left font-medium text-slate-500"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">{children}</tbody>
-        </table>
+      {/* Hors de la zone qui défile : l'observateur de débordement y suit la
+          largeur du premier enfant, et un `<style>` n'en a aucune — il
+          prendrait la place de la table et le dégradé ne s'allumerait plus
+          dès qu'une colonne est masquée, c'est-à-dire au moment où la largeur
+          change le plus. Les sélecteurs visent `#id`, ils marchent d'où qu'ils
+          soient écrits. */}
+      {masquées.size > 0 && (
+        <style>
+          {[...masquées]
+            .map(
+              (rang) =>
+                `#${id} th:nth-child(${rang + 1}),#${id} td:nth-child(${rang + 1}){display:none}`,
+            )
+            .join('')}
+        </style>
+      )}
+      <div className="relative">
+        {/* `pointer-events-none` : le dégradé recouvre la dernière colonne,
+            et sans cela il avalerait le clic sur le bouton qui s'y trouve —
+            c'est justement la colonne d'actions. */}
+        <div
+          aria-hidden
+          className={`pointer-events-none absolute inset-y-px left-px z-10 w-8 rounded-l-lg bg-gradient-to-r from-white to-transparent transition-opacity duration-200 ${
+            bords.gauche ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+        <div
+          aria-hidden
+          className={`pointer-events-none absolute inset-y-px right-px z-10 w-8 rounded-r-lg bg-gradient-to-l from-white to-transparent transition-opacity duration-200 ${
+            bords.droite ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+        {/*
+          `tabIndex` sur une zone qui défile : sans lui, un clavier seul ne
+          peut pas atteindre les colonnes de droite. Le navigateur ne rend pas
+          focalisable un conteneur à débordement, et la souris n'est pas le
+          seul moyen d'entrer ici.
+        */}
+        <div
+          id={id}
+          ref={ref}
+          onScroll={mesurer}
+          tabIndex={0}
+          role="region"
+          aria-label="Tableau, défilement horizontal"
+          className="overflow-x-auto rounded-lg border border-slate-200 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
+        >
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                {head.map((h, rang) => (
+                  // Deux colonnes d'actions sans titre cohabitent sur certains
+                  // écrans : le libellé seul ne fait pas une clé.
+                  <th
+                    key={`${h}-${rang}`}
+                    className="px-3 py-2 text-left font-medium text-slate-500"
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">{children}</tbody>
+            </table>
+        </div>
       </div>
     </div>
   );
