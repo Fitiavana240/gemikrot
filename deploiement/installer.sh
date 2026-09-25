@@ -250,6 +250,37 @@ fi
 echo
 echo "── 6/6 · La plateforme"
 cd "$RACINE"
+
+# Une sauvegarde, avant que les migrations touchent quoi que ce soit.
+#
+# Le conteneur de migration doit reussir avant que le serveur demarre : une
+# migration fautive ne se contente donc pas d'echouer, **elle laisse la
+# plateforme eteinte**. Et si elle a commence a ecrire avant d'echouer, la
+# base reste a moitie faite.
+#
+# Cette protection ne doit pas dependre du fait qu'on y pense au bon moment,
+# un soir de deploiement. Elle est prise ici, toujours, avant tout le reste.
+#
+# Tentee sans condition : `docker compose ps` ne repond pas de la meme facon
+# d'une version a l'autre, et faire dependre une sauvegarde d'un test de
+# version est exactement le genre de finesse qui lache le jour ou elle sert.
+# Un echec veut dire qu'il n'y avait rien a sauvegarder -- premiere
+# installation, ou base arretee -- et se dit sans alarmer.
+PG_UTILISATEUR=$(grep '^POSTGRES_USER=' "$REGLAGES" | cut -d= -f2)
+PG_BASE=$(grep '^POSTGRES_DB=' "$REGLAGES" | cut -d= -f2)
+mkdir -p /var/backups/gemikrot
+SAUVEGARDE="/var/backups/gemikrot/avant-$(date +%Y%m%d-%H%M%S).sql"
+if docker compose --env-file "$REGLAGES" -f deploiement/docker-compose.prod.yml exec -T postgres pg_dump -U "$PG_UTILISATEUR" "$PG_BASE" > "$SAUVEGARDE" 2>/dev/null && [ -s "$SAUVEGARDE" ]; then
+  chmod 600 "$SAUVEGARDE"
+  echo "   Sauvegarde prise : $SAUVEGARDE ($(du -h "$SAUVEGARDE" | cut -f1))"
+  # Les cinq dernieres suffisent : au-dela, c'est la sauvegarde hors site qui
+  # doit repondre, pas un disque de VPS qui se remplit en silence.
+  ls -1t /var/backups/gemikrot/avant-*.sql 2>/dev/null | tail -n +6 | xargs -r rm --
+else
+  rm -f "$SAUVEGARDE"
+  echo "   Aucune base a sauvegarder (premiere installation, ou base arretee)."
+fi
+
 docker compose --env-file "$REGLAGES" -f deploiement/docker-compose.prod.yml up -d --build
 if [ "${RECREER:-non}" = oui ]; then
   echo "   Redémarrage du serveur pour qu'il lise la nouvelle adresse…"
