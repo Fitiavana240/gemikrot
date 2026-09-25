@@ -283,6 +283,21 @@ export const hotspotTabsApi = {
       `/hotspot/ip-bindings/${encodeURIComponent(id)}/appliquer${q(routerId)}`,
       {},
     ),
+  /**
+   * Changer ce que le routeur fait de cet appareil.
+   *
+   * Trois etats, et ils ne s'opposent pas deux a deux : `bypassed` passe sans
+   * ticket, `blocked` n'obtient rien meme avec un ticket valide, et `regular`
+   * passe par le portail **comme tout le monde**. Debloquer n'est donc pas une
+   * seule action -- rendre son acces gratuit a quelqu'un qu'on vient de
+   * bloquer n'est pas la meme decision que le remettre a la file.
+   */
+  changerTypeContournement: (
+    id: string,
+    type: 'regular' | 'bypassed' | 'blocked',
+    routerId?: string,
+  ) =>
+    api.patch<IpBinding>(`/hotspot/ip-bindings/${encodeURIComponent(id)}${q(routerId)}`, { type }),
   /** Retire le contournement **et** la file d'attente qui l'accompagnait. */
   supprimerContournement: (id: string, routerId?: string) =>
     api.delete<{ fileRetiree: string | null }>(

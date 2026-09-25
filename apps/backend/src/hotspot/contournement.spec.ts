@@ -203,3 +203,35 @@ describe("l'application d'un contournement", () => {
     expect(mikrotik.removeHotspotHost).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Trois etats, et ils ne s'opposent pas deux a deux.
+ *
+ * `bypassed` passe sans ticket, `blocked` n'obtient rien meme avec un ticket
+ * valide, `regular` passe par le portail comme tout le monde. << Debloquer >>
+ * n'est donc pas une seule action : rendre son acces gratuit a quelqu'un
+ * qu'on vient de bloquer n'est pas la meme decision que le remettre a la file.
+ */
+describe('le changement de type', () => {
+  it('bloque un appareil qui passait sans ticket', async () => {
+    const { service: s, mikrotik } = service({
+      bindings: [{ id: '*1', macAddress: MAC, type: 'bypassed', disabled: false }],
+    });
+
+    await s.changerTypeContournement('*1', 'blocked', 'admin-1', 'r1');
+
+    expect(mikrotik.setIpBindingType).toHaveBeenCalledWith('*1', 'blocked');
+  });
+
+  it('remet au portail, sans rendre l’accès libre au passage', async () => {
+    const { service: s, mikrotik } = service({
+      bindings: [{ id: '*1', macAddress: MAC, type: 'blocked', disabled: false }],
+    });
+
+    await s.changerTypeContournement('*1', 'regular', 'admin-1', 'r1');
+
+    // Le piege : un seul bouton << Debloquer >> choisirait, et choisirait le
+    // plus genereux des deux. Le service ne decide rien -- il applique.
+    expect(mikrotik.setIpBindingType).toHaveBeenCalledWith('*1', 'regular');
+  });
+});

@@ -146,6 +146,36 @@ export function AccesPermanentsTab() {
       setErreur(e instanceof ApiError ? e.message : 'Le routeur a refusé.'),
   });
 
+  /**
+   * Changer ce que le routeur fait de cet appareil.
+   *
+   * **Trois etats, et ils ne s'opposent pas deux a deux.** `bypassed` passe
+   * sans ticket, `blocked` n'obtient rien meme avec un ticket valide, et
+   * `regular` passe par le portail comme tout le monde. Debloquer n'est donc
+   * pas une seule action : rendre son acces gratuit a quelqu'un qu'on vient
+   * de bloquer n'est pas la meme decision que le remettre a la file.
+   *
+   * D'ou deux boutons plutot qu'un << Retablir >> qui choisirait a la place
+   * de l'exploitant -- et choisirait le plus genereux des deux.
+   */
+  const changerType = useMutation({
+    mutationFn: ({ id, type }: { id: string; type: 'regular' | 'bypassed' | 'blocked' }) =>
+      hotspotTabsApi.changerTypeContournement(id, type, currentId),
+    onSuccess: (b) => {
+      setErreur(null);
+      setCompteRendu(
+        b.type === 'blocked'
+          ? `« ${b.macAddress} » est bloqué : il n’obtiendra rien, même avec un ticket valide.`
+          : b.type === 'bypassed'
+            ? `« ${b.macAddress} » passe de nouveau sans ticket.`
+            : `« ${b.macAddress} » repasse par le portail, comme tout le monde.`,
+      );
+      rafraichir();
+    },
+    onError: (e) =>
+      setErreur(e instanceof ApiError ? e.message : 'Le routeur a refusé.'),
+  });
+
   const supprimer = useMutation({
     mutationFn: (id: string) => hotspotTabsApi.supprimerContournement(id, currentId),
     onSuccess: (r) => {
@@ -430,13 +460,26 @@ export function AccesPermanentsTab() {
                       {/* Retire aussi la file d'attente. Sans cela elle
                           survit à l'appareil et vise une adresse que le
                           prochain bail DHCP donnera à quelqu'un d'autre. */}
-                      <Button
-                        variant="secondary"
-                        disabled={supprimer.isPending}
-                        onClick={() => supprimer.mutate(binding.id)}
-                      >
-                        Retirer
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        {/* Bloquer plutot que retirer : retirer rend
+                            l'appareil ordinaire -- il repayera un ticket et
+                            reviendra. Bloquer l'arrete au routeur, ce qui
+                            est ce qu'on veut d'un appareil qui abuse. */}
+                        <Button
+                          variant="secondary"
+                          disabled={changerType.isPending}
+                          onClick={() => changerType.mutate({ id: binding.id, type: 'blocked' })}
+                        >
+                          Bloquer
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          disabled={supprimer.isPending}
+                          onClick={() => supprimer.mutate(binding.id)}
+                        >
+                          Retirer
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -450,7 +493,7 @@ export function AccesPermanentsTab() {
                 Ceux-là sont arrêtés au routeur : même avec un ticket valide, ils
                 n&apos;obtiendront rien.
               </p>
-              <Table head={['Appareil', 'Ce qui le décrit', 'État']}>
+              <Table head={['Appareil', 'Ce qui le décrit', 'État', '']} colonnes={false}>
                 {bloqués.map(({ binding }) => (
                   <tr key={binding.id}>
                     <td className="px-3 py-2 font-mono text-xs font-medium">
@@ -464,6 +507,30 @@ export function AccesPermanentsTab() {
                         {binding.disabled ? 'règle désactivée' : 'bloqué'}
                       </Badge>
                     </td>
+                    {/* **Deux sorties, et non une.** Cette table n'en offrait
+                        aucune : un appareil bloqué depuis la console ne
+                        pouvait être débloqué que depuis WinBox. Et un seul
+                        bouton « Débloquer » devrait choisir entre rendre
+                        l'accès gratuit et remettre à la file — il choisirait
+                        le plus généreux, et personne ne le saurait. */}
+                    <td className="whitespace-nowrap px-3 py-2 text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="secondary"
+                          disabled={changerType.isPending}
+                          onClick={() => changerType.mutate({ id: binding.id, type: 'regular' })}
+                        >
+                          Remettre au portail
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          disabled={changerType.isPending}
+                          onClick={() => changerType.mutate({ id: binding.id, type: 'bypassed' })}
+                        >
+                          Rendre l’accès libre
+                        </Button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </Table>
@@ -475,6 +542,12 @@ export function AccesPermanentsTab() {
             d&apos;un appareil <em>à son arrivée</em>, et garde sa décision tant qu&apos;il est
             là. Un contournement posé après coup ne s&apos;applique donc pas tout seul —
             d&apos;où « pas encore », et le bouton <em>Appliquer</em> qui le règle.
+            <br />
+            <strong>Trois états, et non deux.</strong> <em>Passe sans ticket</em> —
+            l&apos;appareil ne voit jamais le portail. <em>Bloqué</em> — il n&apos;obtient
+            rien, même avec un ticket valide. <em>Au portail</em> — il paie comme tout le
+            monde, et il disparaît alors de cet écran, qui ne liste que les exceptions.
+            Débloquer, c&apos;est choisir entre les deux derniers.
             <br />
             <strong>« Appareil jamais vu »</strong> veut dire que cette adresse MAC
             n&apos;est celle d&apos;aucun appareil de ce réseau. C&apos;est le cas le plus
