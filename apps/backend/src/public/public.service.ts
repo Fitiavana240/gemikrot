@@ -68,13 +68,35 @@ export function normaliserHote(hote: string | undefined | null): string {
 export function estLaConsole(hote: string): boolean {
   const base = (process.env.PUBLIC_BASE_URL ?? '').trim();
   if (!base) return false;
-  let hoteConsole = '';
+
+  let console_: URL;
   try {
-    hoteConsole = new URL(base).hostname.toLowerCase();
+    console_ = new URL(base);
   } catch {
     return false;
   }
-  return Boolean(hoteConsole) && normaliserHote(hote) === normaliserHote(hoteConsole);
+
+  // **Surtout pas `normaliserHote` ici.** Il efface les adresses IP a
+  // dessein -- le portail captif sert la console par son adresse, et elle
+  // doit rester la console. S'en servir pour comparer rendait donc *toutes*
+  // les IP egales entre elles : un portail declare sur `192.168.88.135`
+  // devenait la console parce qu'elle repond sur `192.168.88.23`.
+  const separer = (brut: string) => {
+    const propre = brut.trim().toLowerCase().replace(/\/+$/, '');
+    const m = /^(.*?)(?::(\d+))?$/.exec(propre);
+    return { hote: m?.[1] ?? propre, port: m?.[2] ?? '' };
+  };
+
+  const a = separer(hote);
+  const b = { hote: console_.hostname.toLowerCase(), port: console_.port };
+  if (!a.hote || a.hote !== b.hote) return false;
+
+  // Le port ne departage que si les deux le portent : l'en-tete `Host` d'une
+  // requete en https l'omet, et `PUBLIC_BASE_URL` l'omet aussi. Deux services
+  // sur la meme machine, eux, ne sont pas le meme site -- c'est le cas du
+  // labo, ou la console repond sur 3000 et la page de paiement sur 5173.
+  if (a.port && b.port && a.port !== b.port) return false;
+  return true;
 }
 
 export interface PublicTenantView {

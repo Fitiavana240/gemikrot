@@ -40,6 +40,25 @@ describe("l'adresse de la console", () => {
     expect(estLaConsole('autre.duckdns.org')).toBe(false);
   });
 
+  it('ne confond pas deux adresses IP differentes', () => {
+    // Le piege : `normaliserHote` efface les adresses IP a dessein, et s'en
+    // servir pour comparer rendait *toutes* les IP egales entre elles. Un
+    // portail declare sur une machine devenait la console parce qu'elle
+    // repond sur une autre. Attrape par une epreuve existante, pas par moi.
+    process.env.PUBLIC_BASE_URL = 'http://192.168.88.23:3000';
+
+    expect(estLaConsole('192.168.88.135:5173')).toBe(false);
+    expect(estLaConsole('192.168.88.23:3000')).toBe(true);
+  });
+
+  it('distingue deux services sur la meme machine', () => {
+    process.env.PUBLIC_BASE_URL = 'http://192.168.88.23:3000';
+
+    // La console sur 3000, la page de paiement sur 5173 : meme machine,
+    // sites differents.
+    expect(estLaConsole('192.168.88.23:5173')).toBe(false);
+  });
+
   it('ne bloque rien quand le serveur n’a pas d’adresse publique', () => {
     delete process.env.PUBLIC_BASE_URL;
 
