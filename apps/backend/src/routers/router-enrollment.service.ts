@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'node:crypto';
@@ -130,7 +131,7 @@ export interface EtatServeurTunnel {
 }
 
 @Injectable()
-export class RouterEnrollmentService {
+export class RouterEnrollmentService implements OnModuleInit {
   private readonly logger = new Logger(RouterEnrollmentService.name);
 
   constructor(
@@ -140,6 +141,54 @@ export class RouterEnrollmentService {
     private readonly tenantContext: TenantContextService,
     private readonly config: ConfigService,
   ) {}
+
+  /**
+   * Reecrit tous les pairs connus dans le fichier du tunnel, au demarrage.
+   *
+   * Un pair peut manquer pour des raisons qui n'ont rien a voir avec le
+   * routeur : droits insuffisants au moment du raccordement, fichier restaure
+   * d'une sauvegarde, serveur reinstalle. Le routeur, lui, continue d'appeler
+   * -- on l'a vu emettre pres de trois kilo-octets sans recevoir un seul en
+   * retour, pendant que le serveur ignorait sa cle.
+   *
+   * Rien ne reparait cela sans un geste humain : retrouver un bouton, ou
+   * recoller un script. Le serveur sait pourtant tout ce qu'il faut. Il le
+   * fait donc de lui-meme, et un redemarrage suffit a remettre le parc
+   * d'aplomb.
+   *
+   * N'ecrase rien d'utile : chaque pair remplace celui qui porte la meme cle
+   * ou la meme adresse, et laisse les autres en place.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      // Hors cloisonnement : le fichier du tunnel est commun a tout le parc,
+      // et ce travail tourne au demarrage, sans exploitant dans le contexte.
+      const routeurs = await this.prisma.router.findMany({
+        where: { tunnelPublicKey: { not: null }, tunnelAddress: { not: null } },
+        select: { label: true, tunnelPublicKey: true, tunnelAddress: true },
+      });
+      if (routeurs.length === 0) return;
+
+      let ecrits = 0;
+      for (const r of routeurs) {
+        const pose = await this.wireguard.addPeer(
+          { publicKey: r.tunnelPublicKey!, tunnelAddress: r.tunnelAddress! },
+          r.label,
+        );
+        if (pose.applied || pose.ecritDansLeFichier) ecrits += 1;
+      }
+      this.logger.log(
+        `Pairs du tunnel reecrits au demarrage : ${ecrits}/${routeurs.length}.` +
+          (ecrits < routeurs.length
+            ? " Les manquants n'ont pas pu etre ecrits : verifiez les droits sur le fichier du tunnel."
+            : ''),
+      );
+    } catch (erreur) {
+      // Un echec ici ne doit pas empecher le serveur de demarrer : la console
+      // reste utile meme si le tunnel attend.
+      this.logger.error(`Pairs du tunnel non reecrits au demarrage : ${String(erreur)}`);
+    }
+  }
 
   /**
    * Prépare un enrôlement et rend le script à coller.
