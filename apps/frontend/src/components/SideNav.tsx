@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import type { AdminRole } from '../api/types';
 import { groupeDe, navPourRole } from './nav';
-import { IconeChevron } from './icones';
+import { IconeCadenas, IconeChevron } from './icones';
 
 const MÉMOIRE = 'gemikrot_menus_replies';
 
@@ -30,6 +30,14 @@ function lireRepliés(): string[] {
  * Un groupe replié qui contient la page courante reste ouvert malgré tout —
  * masquer l'endroit où l'on est serait pire que de désobéir au repli.
  */
+/** Qui peut ouvrir cette entree, dit en francais plutot qu'en constantes. */
+function roleQuiPeut(roles: AdminRole[] | undefined): string {
+  if (!roles) return 'tout compte connecté';
+  if (roles.includes('ADMIN')) return "l'exploitant";
+  if (roles.includes('SUPER_ADMIN')) return "l'administrateur de la plateforme";
+  return 'un autre rôle';
+}
+
 export function SideNav({ role }: { role: AdminRole | undefined }) {
   const { pathname } = useLocation();
   const [repliés, setRepliés] = useState<string[]>(lireRepliés);
@@ -76,7 +84,24 @@ export function SideNav({ role }: { role: AdminRole | undefined }) {
 
             {ouvert && (
               <div className="mt-1 space-y-0.5">
-                {groupe.items.map((item) => (
+                {groupe.items.map((item) =>
+                  /* **Une entree verrouillee n'est pas un lien.** Un `NavLink`
+                     grise se clique quand meme au clavier, et mene a un
+                     refus du serveur -- exactement ce qu'on voulait eviter en
+                     les cachant autrefois. Ici, rien a cliquer : seulement
+                     une ligne qui dit que la chose existe et a qui elle
+                     appartient. */
+                  item.verrouillé ? (
+                    <div
+                      key={item.to}
+                      title={`Réservé à ${roleQuiPeut(item.roles)}. Demandez-le à votre exploitant.`}
+                      className="flex cursor-not-allowed items-center gap-2.5 border-l-2 border-transparent py-1.5 pl-3 pr-2 text-sm text-slate-400"
+                    >
+                      <item.icone className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      <IconeCadenas className="h-3.5 w-3.5 shrink-0" />
+                    </div>
+                  ) : (
                   <NavLink
                     key={item.to}
                     to={item.to}
@@ -99,7 +124,8 @@ export function SideNav({ role }: { role: AdminRole | undefined }) {
                     <item.icone className="h-4 w-4 shrink-0" />
                     <span className="truncate">{item.label}</span>
                   </NavLink>
-                ))}
+                  ),
+                )}
               </div>
             )}
           </div>

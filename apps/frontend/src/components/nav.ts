@@ -187,10 +187,65 @@ export const NAV_GROUPS: NavGroup[] = [
  * Retire ce que le rôle n'a pas le droit de voir, puis les groupes devenus
  * vides. Offrir un bouton qui répondra 403 est pire que ne rien offrir.
  */
-export function navPourRole(role: AdminRole | undefined): NavGroup[] {
+/** Une entree telle que le menu l'affiche : ouverte, ou fermee a clef. */
+export interface NavItemAffiché extends NavItem {
+  /** Visible, mais refusee a ce role. Le menu y met un cadenas. */
+  verrouillé: boolean;
+}
+
+export interface NavGroupAffiché extends Omit<NavGroup, 'items'> {
+  items: NavItemAffiché[];
+}
+
+/**
+ * Cette entree appartient-elle au monde de cet utilisateur ?
+ *
+ * **Verrouiller et cacher ne disent pas la meme chose**, et c'est la seule
+ * distinction qui compte ici.
+ *
+ * Un vendeur a qui l'on cache << Offres >> ne sait pas que la console sait
+ * regler des offres : il croit le produit plus pauvre qu'il n'est, et ne
+ * demande rien. Un cadenas lui dit que la chose existe et qu'elle appartient
+ * a son exploitant -- il sait alors a qui s'adresser.
+ *
+ * Mais << Exploitants >> ou << Supervision >> n'appartiennent a aucun
+ * exploitant : ce sont les ecrans de la plateforme. Y mettre un cadenas
+ * reviendrait a annoncer a chaque client l'existence d'une console au-dessus
+ * de la sienne, et le detail de ce qu'elle voit. Ceux-la restent caches.
+ *
+ * De meme << Mon abonnement >> pour un SUPER_ADMIN : il n'appartient a aucun
+ * exploitant et n'a donc pas d'echeance. Ce n'est pas un refus, c'est une
+ * question qui ne se pose pas.
+ */
+function appartientAuMonde(item: NavItem, role: AdminRole | undefined): boolean {
+  if (!item.roles || !role) return true;
+  const plateforme = item.roles.length === 1 && item.roles[0] === 'SUPER_ADMIN';
+  if (plateforme) return role === 'SUPER_ADMIN';
+  if (role === 'SUPER_ADMIN') return item.roles.includes('SUPER_ADMIN');
+  return true;
+}
+
+/**
+ * Le menu d'un role : ce qu'il ouvre, et ce qu'il voit sans pouvoir l'ouvrir.
+ *
+ * Les entrees refusees etaient **retirees** du menu. C'etait defendable --
+ * offrir un bouton qui repondra 403 fait douter d'avoir mal fait. Mais cela
+ * privait le vendeur de savoir ce que la console fait, et l'exploitant de
+ * voir ce qu'il a delegue. Le cadenas dit les deux d'un coup : la chose
+ * existe, elle n'est pas pour vous.
+ *
+ * La garde de route, elle, ne change pas : `rolesRequis` lit la meme
+ * declaration et refuse toujours. Le cadenas n'ouvre rien.
+ */
+export function navPourRole(role: AdminRole | undefined): NavGroupAffiché[] {
   return NAV_GROUPS.map((groupe) => ({
     ...groupe,
-    items: groupe.items.filter((item) => !item.roles || (role && item.roles.includes(role))),
+    items: groupe.items
+      .filter((item) => appartientAuMonde(item, role))
+      .map((item) => ({
+        ...item,
+        verrouillé: Boolean(item.roles) && !(role && item.roles!.includes(role)),
+      })),
   })).filter((groupe) => groupe.items.length > 0);
 }
 

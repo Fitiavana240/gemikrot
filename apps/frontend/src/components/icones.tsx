@@ -229,6 +229,20 @@ export const IconeImmeuble: Icône = (p) => (
 );
 
 /**
+ * Le cadenas d'une entree que le role n'autorise pas.
+ *
+ * Ferme, et non entrouvert : la nuance ne se voit pas a 14 px, et un cadenas
+ * a moitie ouvert dirait le contraire de ce qu'il signale.
+ */
+export const IconeCadenas: Icône = (p) => (
+  <Icone {...p}>
+    <rect x="4.5" y="10.5" width="15" height="9.5" rx="2" />
+    <path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7" />
+    <path d="M12 14.4v2" />
+  </Icone>
+);
+
+/**
  * Le chevron des groupes repliables.
  *
  * Il remplace un `›` : un guillemet simple tenait lieu d'icône, et se dessine
