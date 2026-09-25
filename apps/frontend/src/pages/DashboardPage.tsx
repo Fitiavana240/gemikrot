@@ -8,7 +8,11 @@ import { REACHABILITY_LABEL, routersApi } from '../api/routers';
 import { useRouterSelection } from '../routers/RouterContext';
 import { Section } from '../components/Section';
 import { TicketsDuRouteur } from '../components/TicketsDuRouteur';
-import { ConsommationDuRouteur } from '../components/ConsommationDuRouteur';
+import {
+  ConsommationDuRouteur,
+  PointsDAcces,
+  TicketsDuJour,
+} from '../components/ConsommationDuRouteur';
 import { mikrotikApi } from '../api/mikrotik';
 import { hotspotApi } from '../api/hotspot';
 import { tenantsApi } from '../api/tenants';
@@ -415,7 +419,9 @@ export function DashboardPage() {
           sur sa ligne, les deux tiers de l'écran vides à côté d'elle. */}
       <div className="space-y-3">
         <TicketsDuRouteur />
+        <TicketsDuJour />
         <ConsommationDuRouteur />
+        <PointsDAcces />
         <Section id="tdb.paiements" titre="Derniers paiements" indice="les 10 plus récents">
           {d.recentPayments.length === 0 ? (
             <p className="text-sm text-slate-400">Aucun paiement enregistré.</p>

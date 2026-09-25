@@ -57,9 +57,16 @@ function Tranche({
   );
 }
 
-export function ConsommationDuRouteur() {
+/**
+ * Une seule lecture pour les trois sections.
+ *
+ * React Query reconnaît la même clé : ouvrir les trois n'appelle le routeur
+ * qu'une fois. C'est ce qui permet de découper l'écran en trois questions
+ * sans en payer le prix trois fois.
+ */
+function useConsommation() {
   const { currentId } = useRouterSelection();
-  const requête = useQuery({
+  return useQuery({
     queryKey: ['um-consommation', currentId],
     queryFn: () => umTabsApi.consommation(currentId),
     enabled: Boolean(currentId),
@@ -68,7 +75,10 @@ export function ConsommationDuRouteur() {
     staleTime: 5 * 60_000,
     retry: false,
   });
+}
 
+export function ConsommationDuRouteur() {
+  const requête = useConsommation();
   const d = requête.data;
 
   return (
@@ -122,6 +132,102 @@ export function ConsommationDuRouteur() {
               {d.parCompte.length - 15} compte(s) de plus, plus bas dans le classement.
             </p>
           )}
+        </>
+      )}
+    </Section>
+  );
+}
+
+/**
+ * Les tickets qui ont servi aujourd'hui, et d'où.
+ *
+ * Une ligne par compte, jamais par session : la question est « qui s'est
+ * connecté aujourd'hui », pas « combien de fois ».
+ */
+export function TicketsDuJour() {
+  const requête = useConsommation();
+  const d = requête.data;
+
+  return (
+    <Section
+      id="tdb.tickets-du-jour"
+      titre="Tickets utilisés aujourd’hui"
+      compte={d ? d.comptesDuJour.length : undefined}
+      indice={d ? `heure du routeur ${d.fuseau}` : undefined}
+    >
+      {requête.isPending ? (
+        <TableSkeleton columns={3} rows={3} />
+      ) : requête.isError ? (
+        <PanneDuRouteur requête={requête} />
+      ) : !d || d.comptesDuJour.length === 0 ? (
+        <EmptyState
+          title="Aucun ticket n’a servi aujourd’hui."
+          hint="La journée se compte à l’heure du routeur, pas à celle de ce poste."
+        />
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {d.comptesDuJour.slice(0, 30).map((c) => (
+            <li key={c.username} className="flex items-baseline justify-between gap-3 py-1.5">
+              <span className="min-w-0">
+                <span className="font-mono text-xs text-slate-900">{c.username}</span>
+                {/* Le point d'acces a cote du nom : c'est la seule
+                    << localisation >> qu'un reseau connaisse. Ni GPS, ni
+                    adresse -- la borne qui a relaye la session. */}
+                {c.point && <span className="ml-2 text-xs text-slate-500">{c.point}</span>}
+              </span>
+              <span className="shrink-0 text-xs tabular-nums text-slate-500">
+                {octets(c.octets)} · {c.sessions} session{c.sessions > 1 ? 's' : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
+/**
+ * D'où vient la consommation — par point d'accès.
+ *
+ * **C'est toute la localisation qu'un réseau connaît.** Il n'y a ni position
+ * géographique ni adresse là-dedans : seulement l'équipement qui a relayé la
+ * session, et l'appareil que RADIUS a vu. Sur un parc à un seul routeur,
+ * tout le monde partage la même ligne et elle n'apprend rien ; dès qu'il y en
+ * a deux, elle dit de quel côté du quartier vient la charge.
+ */
+export function PointsDAcces() {
+  const requête = useConsommation();
+  const d = requête.data;
+
+  return (
+    <Section
+      id="tdb.points-acces"
+      titre="Points d’accès"
+      compte={d ? d.parPointDAccès.length : undefined}
+      indice="d’où vient la consommation, sur le mois"
+    >
+      {requête.isPending ? (
+        <TableSkeleton columns={3} rows={2} />
+      ) : requête.isError ? (
+        <PanneDuRouteur requête={requête} />
+      ) : !d || d.parPointDAccès.length === 0 ? (
+        <EmptyState title="Aucune session à rattacher à un point d’accès." />
+      ) : (
+        <>
+          <ul className="divide-y divide-slate-100">
+            {d.parPointDAccès.map((p) => (
+              <li key={p.point} className="flex items-baseline justify-between gap-3 py-1.5">
+                <span className="font-mono text-xs text-slate-900">{p.point}</span>
+                <span className="shrink-0 text-xs tabular-nums text-slate-500">
+                  {octets(p.octets)} · {p.comptes} compte{p.comptes > 1 ? 's' : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 max-w-2xl text-xs text-slate-500">
+            C&apos;est la seule localisation qu&apos;un réseau connaisse : l&apos;équipement qui
+            a relayé la session. Ni position géographique, ni adresse.
+          </p>
         </>
       )}
     </Section>

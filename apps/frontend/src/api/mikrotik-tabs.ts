@@ -349,6 +349,18 @@ export interface Consommation {
   semaine: Tranche;
   mois: Tranche;
   parCompte: { username: string; octets: number; sessions: number }[];
+  /** Les tickets qui ont servi aujourd'hui. Une ligne par compte. */
+  comptesDuJour: {
+    username: string;
+    octets: number;
+    sessions: number;
+    /** Le dernier point d'acces emprunte, quand le routeur le dit. */
+    point: string | null;
+    /** Le dernier appareil vu, tel que RADIUS l'a note. */
+    appareil: string | null;
+  }[];
+  /** Par point d'acces, sur le mois : d'ou vient la consommation. */
+  parPointDAccès: { point: string; octets: number; sessions: number; comptes: number }[];
 }
 
 export const umTabsApi = {

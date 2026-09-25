@@ -21,6 +21,18 @@ export interface SessionÀCompter {
   startTime: string;
   bytesIn: number;
   bytesOut: number;
+  /**
+   * Par quel équipement le client est passé — `nas-ip-address`.
+   *
+   * **C'est toute la localisation qu'un réseau connaît.** Il n'y a ni GPS ni
+   * adresse postale là-dedans : seulement le point d'accès qui a relayé la
+   * session. Sur un parc à un seul routeur, tout le monde a la même valeur et
+   * la ligne n'apprend rien ; dès qu'il y en a deux, elle dit de quel côté du
+   * quartier vient la consommation.
+   */
+  nasIpAddress?: string | null;
+  /** L'appareil du client — sa MAC, telle que RADIUS l'a vue. */
+  callingStationId?: string | null;
 }
 
 export interface Tranche {
@@ -39,6 +51,23 @@ export interface Consommation {
   mois: Tranche;
   /** Du plus gros consommateur au plus petit, sur le mois. */
   parCompte: { username: string; octets: number; sessions: number }[];
+  /**
+   * Les tickets qui ont servi **aujourd'hui**.
+   *
+   * Un compte, une ligne, quel que soit son nombre de sessions : la question
+   * est « qui s'est connecté aujourd'hui », pas « combien de fois ».
+   */
+  comptesDuJour: {
+    username: string;
+    octets: number;
+    sessions: number;
+    /** Le dernier point d'accès emprunté, quand le routeur le dit. */
+    point: string | null;
+    /** Le dernier appareil vu, tel que RADIUS l'a note. */
+    appareil: string | null;
+  }[];
+  /** Par point d'accès, sur le mois : d'où vient la consommation. */
+  parPointDAccès: { point: string; octets: number; sessions: number; comptes: number }[];
 }
 
 /** Minuit du jour en cours, dans le fuseau du routeur, en instant absolu. */
@@ -104,6 +133,11 @@ export function agrégerConsommation(
   const semaine: Tranche = { octets: 0, sessions: 0 };
   const mois: Tranche = { octets: 0, sessions: 0 };
   const parCompte = new Map<string, { octets: number; sessions: number }>();
+  const duJour = new Map<
+    string,
+    { octets: number; sessions: number; point: string | null; appareil: string | null }
+  >();
+  const parPoint = new Map<string, { octets: number; sessions: number; comptes: Set<string> }>();
 
   let datées = 0;
   for (const s of sessions) {
@@ -127,8 +161,36 @@ export function agrégerConsommation(
       cumul.sessions += 1;
       parCompte.set(s.username, cumul);
     }
+    if (début >= débutMois) {
+      // Le point d'accès se compte sur le mois, comme les comptes : sur une
+      // seule journée, un parc calme rendrait une ligne ou deux.
+      const point = (s.nasIpAddress ?? '').trim() || 'inconnu';
+      const cumul = parPoint.get(point) ?? { octets: 0, sessions: 0, comptes: new Set<string>() };
+      cumul.octets += octets;
+      cumul.sessions += 1;
+      cumul.comptes.add(s.username);
+      parPoint.set(point, cumul);
+    }
     if (début >= débutSemaine) ajouter(semaine);
-    if (début >= débutJour) ajouter(jour);
+    if (début >= débutJour) {
+      ajouter(jour);
+      // **Une ligne par compte, pas par session.** La question est « qui
+      // s'est connecté aujourd'hui », pas « combien de fois ».
+      const vu = duJour.get(s.username) ?? {
+        octets: 0,
+        sessions: 0,
+        point: null,
+        appareil: null,
+      };
+      vu.octets += octets;
+      vu.sessions += 1;
+      // Le dernier vu l'emporte : les sessions arrivent du routeur dans
+      // l'ordre où il les range, et la dernière est la plus utile — c'est là
+      // que le client se trouve maintenant.
+      vu.point = (s.nasIpAddress ?? '').trim() || vu.point;
+      vu.appareil = (s.callingStationId ?? '').trim() || vu.appareil;
+      duJour.set(s.username, vu);
+    }
   }
 
   return {
@@ -140,6 +202,17 @@ export function agrégerConsommation(
     mois,
     parCompte: [...parCompte.entries()]
       .map(([username, v]) => ({ username, ...v }))
+      .sort((a, b) => b.octets - a.octets),
+    comptesDuJour: [...duJour.entries()]
+      .map(([username, v]) => ({ username, ...v }))
+      .sort((a, b) => b.octets - a.octets),
+    parPointDAccès: [...parPoint.entries()]
+      .map(([point, v]) => ({
+        point,
+        octets: v.octets,
+        sessions: v.sessions,
+        comptes: v.comptes.size,
+      }))
       .sort((a, b) => b.octets - a.octets),
   };
 }

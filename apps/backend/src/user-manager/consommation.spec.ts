@@ -128,3 +128,89 @@ describe('la consommation par tranche', () => {
     expect(enUtc.jour.sessions).toBe(0);
   });
 });
+
+/**
+ * Qui s'est connecte aujourd'hui, et par quel point d'acces.
+ *
+ * << La localisation d'utilisateurs >> : un reseau ne connait ni GPS ni
+ * adresse postale. Il connait le point d'acces qui a relaye la session, et
+ * l'appareil que RADIUS a vu. C'est tout, et le dire ainsi vaut mieux que de
+ * laisser croire a autre chose.
+ */
+describe('les tickets du jour et leur point d’accès', () => {
+  it('rend une ligne par compte, pas par session', () => {
+    const r = agrégerConsommation(
+      [
+        { ...session('2026-09-26 08:00:00', 100, 'H001'), nasIpAddress: '192.168.88.1' },
+        { ...session('2026-09-26 15:00:00', 400, 'H001'), nasIpAddress: '192.168.88.1' },
+        { ...session('2026-09-26 09:00:00', 50, 'H002'), nasIpAddress: '192.168.88.1' },
+      ],
+      TOLIARA,
+      MAINTENANT,
+    );
+
+    expect(r.comptesDuJour).toHaveLength(2);
+    expect(r.comptesDuJour[0]).toMatchObject({ username: 'H001', octets: 500, sessions: 2 });
+  });
+
+  it('garde le dernier point vu, et non le premier', () => {
+    // Un client qui change de borne dans la journee se trouve a la derniere,
+    // pas a celle ou il a commence.
+    const r = agrégerConsommation(
+      [
+        { ...session('2026-09-26 08:00:00', 10, 'H001'), nasIpAddress: '192.168.88.1' },
+        { ...session('2026-09-26 15:00:00', 10, 'H001'), nasIpAddress: '192.168.88.2' },
+      ],
+      TOLIARA,
+      MAINTENANT,
+    );
+
+    expect(r.comptesDuJour[0].point).toBe('192.168.88.2');
+  });
+
+  it('n’inclut pas la veille dans les comptes du jour', () => {
+    const r = agrégerConsommation(
+      [{ ...session('2026-09-25 20:00:00', 10, 'H009'), nasIpAddress: '192.168.88.1' }],
+      TOLIARA,
+      MAINTENANT,
+    );
+
+    expect(r.comptesDuJour).toHaveLength(0);
+    expect(r.parPointDAccès).toHaveLength(1);
+  });
+
+  it('compte les comptes distincts par point d’accès, sur le mois', () => {
+    const r = agrégerConsommation(
+      [
+        { ...session('2026-09-10 08:00:00', 100, 'A'), nasIpAddress: '10.0.0.1' },
+        { ...session('2026-09-11 08:00:00', 100, 'A'), nasIpAddress: '10.0.0.1' },
+        { ...session('2026-09-12 08:00:00', 100, 'B'), nasIpAddress: '10.0.0.1' },
+        { ...session('2026-09-12 08:00:00', 900, 'C'), nasIpAddress: '10.0.0.2' },
+      ],
+      TOLIARA,
+      MAINTENANT,
+    );
+
+    expect(r.parPointDAccès[0]).toEqual({
+      point: '10.0.0.2',
+      octets: 900,
+      sessions: 1,
+      comptes: 1,
+    });
+    // Deux comptes distincts sur trois sessions : A compte une fois.
+    expect(r.parPointDAccès[1]).toEqual({
+      point: '10.0.0.1',
+      octets: 300,
+      sessions: 3,
+      comptes: 2,
+    });
+  });
+
+  it('range sous « inconnu » ce que le routeur ne nomme pas', () => {
+    // Plutot que de laisser une ligne vide, qu'on prendrait pour un defaut
+    // d'affichage.
+    const r = agrégerConsommation([session('2026-09-26 08:00:00', 10)], TOLIARA, MAINTENANT);
+
+    expect(r.parPointDAccès[0].point).toBe('inconnu');
+  });
+});
