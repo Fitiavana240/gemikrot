@@ -295,10 +295,8 @@ export class RoutersService {
       ecrit: true,
       message:
         `Pair réécrit pour ${routeur.tunnelAddress}. ` +
-        `Sur un serveur, il s'applique tout seul en quelques secondes ; ` +
-        `c'est ensuite le routeur qui appelle, et le tunnel monte de lui-même. ` +
-        `Sur un poste Windows, rechargez le tunnel dans l'application WireGuard : ` +
-        `elle garde sa propre copie du fichier depuis l'import.`,
+        `Le serveur l'applique tout seul en quelques secondes ; ` +
+        `c'est ensuite le routeur qui appelle, et le tunnel monte de lui-même.`,
     };
   }
 

@@ -15,17 +15,23 @@ import { Badge, Button, Card, Table } from './ui';
  *
  * Ce panneau-ci ne touche pas au routeur. Il lit la fiche et le fichier du
  * tunnel, et répond à la seule question qui compte quand plus rien ne passe :
- * **le serveur sait-il seulement où appeler ce routeur ?**
+ * **le serveur reconnaît-il seulement ce routeur quand il appelle ?**
  *
- * Les trois causes, dans l'ordre où elles bloquent :
+ * Les deux causes, dans l'ordre où elles bloquent :
  *
- * 1. Le routeur n'a pas de nom public — le serveur ne sait pas où frapper.
- * 2. Le fichier du tunnel n'est pas indiqué au serveur.
- * 3. Le pair n'y figure pas.
+ * 1. Le fichier du tunnel n'est pas indiqué au serveur.
+ * 2. Le pair n'y figure pas.
  *
  * Une seule est affichée, la première : les empiler ferait relire le même
- * diagnostic trois fois, et c'est de toute façon la seule sur laquelle on
+ * diagnostic deux fois, et c'est de toute façon la seule sur laquelle on
  * peut agir tout de suite.
+ *
+ * **Il y en avait une troisième, en tête : « le routeur n'a pas de nom
+ * public ».** Elle datait du montage inverse, où le serveur appelait les
+ * routeurs. Depuis que c'est le routeur qui appelle, son nom public ne sert
+ * plus à rien — et l'écran continuait de le réclamer en orange, ce qui
+ * envoyait chercher exactement au mauvais endroit sur un raccordement qui
+ * marchait. Vu le 25/09/2026, tunnel monté et routeur joignable.
  */
 
 /** « il y a 3 min », plutôt qu'un horodatage à soustraire de tête. */
@@ -78,24 +84,17 @@ export function EtatDuTunnel() {
   return (
     <Card title="Accès à distance">
       <p className="mb-3 text-sm text-slate-600">
-        C'est <strong>ce serveur qui appelle vos routeurs</strong>, à un nom que MikroTik leur
-        donne. Ce tableau se lit sans les joindre : il dit si le serveur sait où appeler, pas si
-        l'appel aboutit.
+        Ce sont <strong>vos routeurs qui appellent ce serveur</strong> — le seul sens qui
+        fonctionne derrière le NAT d'un opérateur. Ce tableau se lit sans les joindre : il dit si
+        le serveur les reconnaîtra quand ils appellent, pas si l'appel a eu lieu.
       </p>
 
-      <Table head={['Routeur', 'Appelé à', 'Pair posé', 'Dernier signe de vie', '']}>
+      <Table head={['Routeur', 'Pair posé', 'Dernier signe de vie', '']}>
         {d.routeurs.map((r) => (
           <tr key={r.routerId} className="align-top">
             <td className="px-3 py-2 font-medium">
               {r.label}
               <div className="font-mono text-xs font-normal text-slate-400">{r.tunnelAddress}</div>
-            </td>
-            <td className="px-3 py-2">
-              {r.pointDAppel ? (
-                <span className="font-mono text-xs">{r.pointDAppel}</span>
-              ) : (
-                <Badge tone="amber">aucun nom public</Badge>
-              )}
             </td>
             <td className="px-3 py-2">
               <Badge tone={r.pairEcrit ? 'green' : 'red'}>{r.pairEcrit ? 'oui' : 'non'}</Badge>
@@ -177,11 +176,10 @@ export function EtatDuTunnel() {
           {joignables.length === d.routeurs.length
             ? 'Tout est en place côté serveur.'
             : `${joignables.length} routeur(s) en place côté serveur.`}{' '}
-          Si l'un d'eux reste injoignable, c'est que le tunnel qui tourne ne connaît pas encore son
-          pair : <strong>l'application WireGuard garde sa propre copie</strong> du fichier depuis
-          l'import et ne le relit pas d'elle-même. Supprimez le tunnel, réimportez{' '}
-          <code className="rounded bg-slate-200 px-1 text-xs">{d.fichier || 'wg0.conf'}</code>,
-          activez.
+          Le serveur applique{' '}
+          <code className="rounded bg-slate-200 px-1 text-xs">{d.fichier || 'pairs.conf'}</code> dès
+          qu'il change ; comptez quelques secondes, puis c'est le routeur qui rappelle et le tunnel
+          monte de lui-même.
         </p>
       )}
     </Card>

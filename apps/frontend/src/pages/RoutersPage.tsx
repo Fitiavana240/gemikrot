@@ -514,16 +514,26 @@ export function RoutersPage() {
         </Card>
       )}
 
-      <Table head={['Nom', 'Hôte', 'Port', 'TLS épinglé', 'Joignabilité', '']}>
+      <Table head={['Nom', 'Hôte', 'Port', 'Certificat', 'Joignabilité', '']}>
         {routers.data?.map((router) => (
           <tr key={router.id}>
             <td className="px-3 py-2">{router.label}</td>
             <td className="px-3 py-2 font-mono text-xs">{router.host}</td>
             <td className="px-3 py-2">{router.restPort}</td>
+            {/* Pas d'orange ici. Un routeur RouterOS présente toujours un
+                certificat auto-signé : ne pas l'épingler est l'état normal,
+                pas un défaut à réparer. Ce qui authentifie le routeur alors,
+                c'est le tunnel — ses clés sont nées sur le routeur et ne
+                l'ont jamais quitté. L'orange faisait chercher un problème
+                là où il n'y en avait pas. */}
             <td className="px-3 py-2">
-              <Badge tone={router.tlsFingerprint ? 'green' : 'amber'}>
-                {router.tlsFingerprint ? 'Oui' : 'Non'}
-              </Badge>
+              {router.tlsFingerprint ? (
+                <Badge tone="green">épinglé</Badge>
+              ) : (
+                <span title="Le certificat du routeur est auto-signé, comme sur tout RouterOS. C'est le tunnel qui authentifie ce routeur.">
+                  <Badge tone="slate">par le tunnel</Badge>
+                </span>
+              )}
             </td>
             <td className="px-3 py-2">
               <div>
