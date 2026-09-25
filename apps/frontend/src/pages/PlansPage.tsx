@@ -250,12 +250,43 @@ export function PlansPage() {
           </div>
         )}
 
+      {/* Le compte, avant le detail. C'est la question qu'on se pose en
+          arrivant ici quand la page de paiement parait vide, et il fallait
+          jusqu'ici compter les lignes a la main -- sans meme savoir sur quel
+          critere. */}
+      {plans && plans.length > 0 && (
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+          {(() => {
+            const enLigne = plans.filter((p) => p.status === 'ACTIVE' && p.kind === 'TICKET');
+            if (enLigne.length === 0) {
+              return (
+                <>
+                  <strong>Aucune de vos {plans.length} offres n’est vendable en ligne.</strong>{' '}
+                  Vos clients voient une page de paiement vide. Seules les offres{' '}
+                  <em>à ticket</em> et actives y figurent : un abonnement se renouvelle sur un
+                  abonné existant, il ne se vend pas à un inconnu.
+                </>
+              );
+            }
+            return (
+              <>
+                <strong>
+                  {enLigne.length} offre{enLigne.length > 1 ? 's' : ''} sur {plans.length}
+                </strong>{' '}
+                {enLigne.length > 1 ? 'apparaissent' : 'apparaît'} sur votre page de paiement :{' '}
+                {enLigne.map((p) => p.name).join(', ')}. Les autres se vendent au comptoir.
+              </>
+            );
+          })()}
+        </div>
+      )}
+
       {offres.isPending ? (
         <TableSkeleton columns={4} />
       ) : offres.isError ? (
         <PanneDeLecture requête={offres} quoi="les offres" />
       ) : (
-        <Table head={['Nom', 'Prix', 'Validité', 'Profil RouterOS', 'Statut', '']}>
+        <Table head={['Nom', 'Prix', 'Validité', 'Profil RouterOS', 'En vente en ligne', 'Statut', '']}>
           {plans?.map((plan) => (
             <tr key={plan.id}>
               <td className="px-3 py-2">{plan.name}</td>
@@ -269,6 +300,26 @@ export function PlansPage() {
                 {plan.mikrotikProfileName}
                 {nomsProfils && !nomsProfils.has(plan.mikrotikProfileName) && (
                   <Badge tone="red">absent du routeur</Badge>
+                )}
+              </td>
+              {/* **La regle la plus couteuse du produit, et elle vivait dans
+                  une seule ligne du serveur.** La page de paiement ne montre
+                  que les offres a ticket : un abonnement se renouvelle sur un
+                  abonne existant, un ticket se vend a un inconnu. Rien ne le
+                  disait ici -- l'exploitant voyait sept offres dans sa console
+                  et une seule chez ses clients, sans rien pour expliquer
+                  l'ecart, et concluait que la page etait cassee. */}
+              <td className="px-3 py-2">
+                {plan.status !== 'ACTIVE' ? (
+                  <span title="Une offre archivée ne se vend nulle part, ni en ligne ni au comptoir.">
+                    <Badge tone="slate">non — archivée</Badge>
+                  </span>
+                ) : plan.kind === 'TICKET' ? (
+                  <Badge tone="green">oui</Badge>
+                ) : (
+                  <span title="Un abonnement se renouvelle sur un abonné existant ; la page de paiement s’adresse à des inconnus. Il se vend au comptoir, ou se renouvelle depuis la fiche de l’abonné.">
+                    <Badge tone="slate">non — abonnement</Badge>
+                  </span>
                 )}
               </td>
               <td className="px-3 py-2">

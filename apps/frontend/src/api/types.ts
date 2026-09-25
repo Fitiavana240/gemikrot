@@ -5,6 +5,16 @@
 export type AdminRole = 'SUPER_ADMIN' | 'ADMIN' | 'OPERATOR' | 'VIEWER';
 export type StartsWhen = 'FIRST_AUTH' | 'ASSIGNED';
 export type PlanStatus = 'ACTIVE' | 'ARCHIVED';
+/**
+ * Ce que l'offre est, et **si elle peut se vendre en ligne**.
+ *
+ * La page de paiement ne montre que les offres a ticket : un abonnement se
+ * renouvelle sur un abonne existant, un ticket se vend a un inconnu. La regle
+ * vivait dans une seule ligne du serveur et n'apparaissait sur aucun ecran --
+ * un exploitant voyait sept offres dans sa console et une seule chez ses
+ * clients, sans rien pour expliquer l'ecart.
+ */
+export type PlanKind = 'TICKET' | 'SUBSCRIPTION';
 export type CustomerStatus = 'ACTIVE' | 'DISABLED';
 export type VoucherStatus = 'CREATED' | 'SOLD' | 'ACTIVE' | 'EXPIRED' | 'DISABLED' | 'CANCELLED';
 export type PaymentMethod = 'CASH' | 'ORANGE_MONEY' | 'MVOLA' | 'AIRTEL_MONEY' | 'OTHER';
@@ -48,6 +58,7 @@ export interface Plan {
    */
   umProfileName: string | null;
   status: PlanStatus;
+  kind: PlanKind;
   createdAt: string;
 }
 
