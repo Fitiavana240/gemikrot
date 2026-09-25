@@ -34,7 +34,6 @@ function fabrique(contexte: { tenantId: string | null; isSuperAdmin: boolean; pr
   return new MikrotikClientFactory(
     prisma,
     { decrypt: () => ({ username: 'gemikrot-api', password: 'x' }) } as never,
-    { get: () => 'true' } as never,
     { get: () => ({ state: 'INCONNU' }), reset: vi.fn() } as never,
     { get: () => contexte } as never,
   );

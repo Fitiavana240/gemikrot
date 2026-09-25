@@ -1,5 +1,4 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Router } from '@prisma/client';
 import {
   ConsoleLogger,
@@ -31,7 +30,6 @@ export class MikrotikClientFactory {
   constructor(
     private readonly prisma: PrismaService,
     private readonly credentials: RouterCredentialsService,
-    private readonly config: ConfigService,
     private readonly health: RouterHealthService,
     private readonly tenantContext: TenantContextService,
   ) {}
@@ -152,11 +150,30 @@ export class MikrotikClientFactory {
         username,
         password,
         tlsFingerprint: router.tlsFingerprint ?? undefined,
-        // Sans empreinte épinglée, le certificat auto-signé du routeur ne peut
-        // pas être validé par une autorité : on l'accepte explicitement.
-        rejectUnauthorized: router.tlsFingerprint
-          ? true
-          : this.config.get<string>('MIKROTIK_TLS_REJECT_UNAUTHORIZED', 'true') !== 'false',
+        // **Un routeur RouterOS présente toujours un certificat auto-signé.**
+        //
+        // Aucune autorité publique ne signe le certificat d'un hAP — c'est le
+        // script d'enrôlement qui le fabrique, avec sa propre autorité. La
+        // validation stricte de chaîne ne peut donc *jamais* réussir, ni en
+        // lab ni à travers le tunnel. Ce n'était pas un réglage à choisir :
+        // c'était un défaut.
+        //
+        // `MIKROTIK_TLS_REJECT_UNAUTHORIZED` valait `true` en production, et
+        // l'enrôlement par script ne rapporte aucune empreinte : le client
+        // exigeait donc une chaîne valide et **la poignée de main TLS était
+        // refusée avant le premier octet de REST**. La console n'avait qu'un
+        // mot pour le dire — « injoignable » — le même que pour un routeur
+        // éteint. Pendant ce temps le tunnel était monté, `ping` répondait à
+        // 209 ms, et `curl -k` depuis le conteneur lui-même rendait un 401 :
+        // tout était en place sauf ceci. Deux jours cherchés dans le réseau.
+        //
+        // Ce qui fait foi, c'est l'empreinte quand on la connaît : le client
+        // accepte alors le certificat auto-signé mais vérifie qu'il est bien
+        // *celui-là*, ce qui vaut mieux que la chaîne. Sans empreinte, c'est
+        // le tunnel qui authentifie — ses clés, générées par le routeur et
+        // qui ne le quittent pas, valent mieux qu'un certificat que personne
+        // ne contresigne.
+        rejectUnauthorized: Boolean(router.tlsFingerprint),
       },
       `mikrotik:${router.label}`,
     );
